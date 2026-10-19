@@ -1,0 +1,120 @@
+.slide-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  isolation: isolate;
+  container-type: inline-size;
+}
+
+.slide-frame.framed {
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent), var(--shadow-1);
+}
+
+.slide-canvas {
+  position: absolute;
+  inset: 0 auto auto 0;
+  transform-origin: 0 0;
+}
+
+.box {
+  position: absolute;
+  transition: opacity 260ms var(--ease-out), transform 320ms var(--ease-out);
+}
+
+.box-text {
+  display: flex;
+  flex-direction: column;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-kerning: normal;
+}
+
+.box-text > span {
+  display: block;
+}
+
+.box-image {
+  overflow: hidden;
+}
+
+.box-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+
+.box.is-hidden {
+  opacity: 0 !important;
+  transform: translateY(14px);
+  pointer-events: none;
+}
+
+.box.is-answer.is-hidden {
+  transform: scale(0.98);
+}
+
+.box.is-editable {
+  cursor: text;
+}
+
+.box.is-editable:hover {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--focus) 45%, transparent);
+  border-radius: 8px;
+}
+
+.box.is-active {
+  box-shadow: 0 0 0 5px var(--focus) !important;
+  border-radius: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .box {
+    transition: none;
+  }
+}
+
+.box-chart {
+  overflow: visible;
+}
+
+.chart-svg {
+  display: block;
+  overflow: visible;
+  user-select: none;
+}
+
+.chart-svg text {
+  font-kerning: normal;
+}
+
+.table-view {
+  position: absolute;
+  inset: 0;
+}
+
+.table-fill,
+.table-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+}
+
+.table-line {
+  height: 2px;
+}
+
+.table-cell {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+}
+
+.table-cell > span {
+  display: block;
+}

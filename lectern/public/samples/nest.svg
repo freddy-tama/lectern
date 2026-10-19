@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1200" width="1600" height="1200" role="img" aria-label="A bird nest with three eggs in the fork of a tree, with a robin bringing a worm">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#CBE5F0"/>
+      <stop offset="1" stop-color="#F6F1DD"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="1200" fill="url(#sky)"/>
+  <circle cx="1330" cy="250" r="64" fill="#F6CB5E"/>
+  <g fill="#FFFFFF"><circle cx="300" cy="320" r="38"/><circle cx="355" cy="298" r="52"/><circle cx="415" cy="322" r="38"/><rect x="262" y="322" width="190" height="40" rx="20"/></g>
+  <!-- hill -->
+  <path d="M0 1010 Q420 940 800 990 T1600 970 V1200 H0Z" fill="#B3D1A3"/>
+  <!-- canopy -->
+  <g fill="#7FAE87">
+    <circle cx="560" cy="430" r="170"/><circle cx="700" cy="330" r="200"/><circle cx="880" cy="320" r="210"/><circle cx="1030" cy="430" r="180"/><circle cx="800" cy="500" r="190"/>
+  </g>
+  <g fill="#98C396"><circle cx="680" cy="300" r="120"/><circle cx="930" cy="330" r="110"/><circle cx="790" cy="440" r="110"/></g>
+  <g fill="#6B9C77"><circle cx="520" cy="500" r="80"/><circle cx="1070" cy="500" r="84"/></g>
+  <!-- trunk and branches -->
+  <g fill="none" stroke="#7C5B3D" stroke-linecap="round">
+    
+    <path d="M800 840 C760 780 650 740 580 700" stroke-width="40"/>
+    <path d="M800 840 C850 780 960 740 1060 690" stroke-width="40"/>
+    <path d="M1060 690 C1100 660 1140 650 1200 640" stroke-width="26"/>
+  </g>
+  <path d="M728 1100 Q762 950 748 790 L852 790 Q838 950 874 1100Z" fill="#7C5B3D"/>
+  <path d="M742 1000 q-10 -70 4 -140 M850 1010 q12 -60 -6 -130" fill="none" stroke="#6A4C32" stroke-width="7" stroke-linecap="round"/>
+  <path d="M0 1050 Q420 1000 800 1040 T1600 1020 V1200 H0Z" fill="#A3C592"/>
+  <g fill="#8DBB8F"><ellipse cx="590" cy="690" rx="56" ry="30" transform="rotate(-20 590 690)"/><ellipse cx="1190" cy="630" rx="50" ry="28" transform="rotate(14 1190 630)"/></g>
+  <!-- nest back -->
+  <ellipse cx="800" cy="720" rx="200" ry="62" fill="#8A6540"/>
+  <!-- eggs -->
+  <g fill="#BFE0EA" stroke="#9CC6D3" stroke-width="3">
+    <ellipse cx="730" cy="700" rx="40" ry="52" transform="rotate(-12 730 700)"/>
+    <ellipse cx="805" cy="690" rx="42" ry="54"/>
+    <ellipse cx="880" cy="702" rx="40" ry="52" transform="rotate(14 880 702)"/>
+  </g>
+  <g fill="#8FB8C6"><circle cx="716" cy="690" r="4"/><circle cx="744" cy="712" r="3"/><circle cx="800" cy="672" r="4"/><circle cx="822" cy="702" r="3"/><circle cx="870" cy="690" r="4"/><circle cx="892" cy="714" r="3"/></g>
+  <!-- nest front bowl -->
+  <path d="M600 724 A200 100 0 0 0 1000 724 Q800 690 600 724Z" fill="#C49A62"/>
+  <path d="M606 730 A196 96 0 0 0 994 730" fill="none" stroke="#A27B49" stroke-width="8" stroke-linecap="round"/>
+  <g fill="none" stroke="#9B7444" stroke-width="6" stroke-linecap="round">
+    <path d="M650 770 q40 24 90 22 M760 800 q60 8 110 -6 M860 790 q50 -8 90 -36 M640 745 q30 8 60 8 M900 748 q30 4 60 -6"/>
+  </g>
+  <!-- robin on the branch, facing the nest -->
+  <g transform="translate(1180 580)">
+    <path d="M60 30 L128 52 L58 56Z" fill="#8C5A3B"/>
+    <ellipse cx="0" cy="22" rx="68" ry="50" fill="#A8704A"/>
+    <path d="M-60 34 Q-30 82 20 70 Q-4 30 -34 -2Z" fill="#E58C5A"/>
+    <circle cx="-48" cy="-22" r="34" fill="#A8704A"/>
+    <path d="M-78 -26 L-108 -14 L-78 -4Z" fill="#E7A94A"/>
+    <circle cx="-56" cy="-28" r="5" fill="#3F322B"/>
+    <path d="M-104 -14 q-8 22 10 32 q14 12 2 30" fill="none" stroke="#E58F96" stroke-width="9" stroke-linecap="round"/>
+    <path d="M-12 70 l-6 22 M12 70 l-4 22" stroke="#6D5A4B" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <!-- tiny flying bird -->
+  <path d="M1080 230 q22 -26 44 0 q22 -26 44 0" fill="none" stroke="#6F7E92" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

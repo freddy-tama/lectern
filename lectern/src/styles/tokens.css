@@ -1,0 +1,139 @@
+/* Design tokens for the app chrome. Slides use their own theme colours. */
+
+:root {
+  color-scheme: light;
+  --bg: #f7f6f3;
+  --panel: #ffffff;
+  --sunk: #efede8;
+  --raised: #ffffff;
+  --ink: #1c1b19;
+  --ink-2: #57534c;
+  --ink-3: #8a857c;
+  --line: #e6e3dc;
+  --line-strong: #d4d0c6;
+  --brand: #e0562c;
+  --brand-soft: #fbe7df;
+  --brand-ink: #ffffff;
+  --primary: #1c1b19;
+  --primary-ink: #ffffff;
+  --primary-hover: #34322e;
+  --focus: #2f6feb;
+  --good: #2f7d4f;
+  --good-soft: #e3f1e8;
+  --warn: #a8670d;
+  --warn-soft: #fbf0dc;
+  --danger: #c2412d;
+  --danger-soft: #fbe4df;
+  --scrim: rgb(20 19 17 / 0.42);
+  --shadow-1: 0 1px 2px rgb(28 27 25 / 0.06), 0 1px 1px rgb(28 27 25 / 0.04);
+  --shadow-2: 0 2px 6px rgb(28 27 25 / 0.06), 0 8px 24px rgb(28 27 25 / 0.07);
+  --shadow-3: 0 12px 40px rgb(28 27 25 / 0.16), 0 2px 8px rgb(28 27 25 / 0.08);
+
+  --c-coral: #d9542b;
+  --c-amber: #c98a12;
+  --c-olive: #5f7f2f;
+  --c-teal: #1b7f79;
+  --c-sky: #2a7bbd;
+  --c-indigo: #4c56c9;
+  --c-plum: #87479f;
+  --c-slate: #5b6676;
+
+  --font-ui: 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', Fraunces, Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --t-fast: 120ms;
+  --t-med: 220ms;
+
+  --sidebar-w: 248px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg: #141413;
+    --panel: #1c1c1a;
+    --sunk: #101010;
+    --raised: #242422;
+    --ink: #edebe6;
+    --ink-2: #b5b1a8;
+    --ink-3: #87837a;
+    --line: #2c2b28;
+    --line-strong: #3b3a36;
+    --brand: #f07048;
+    --brand-soft: #3a2119;
+    --primary: #edebe6;
+    --primary-ink: #141413;
+    --primary-hover: #ffffff;
+    --focus: #6b9cff;
+    --good: #6cc48d;
+    --good-soft: #17301f;
+    --warn: #e0a54a;
+    --warn-soft: #33270f;
+    --danger: #f07a63;
+    --danger-soft: #3a1a14;
+    --scrim: rgb(0 0 0 / 0.6);
+    --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow-2: 0 2px 6px rgb(0 0 0 / 0.35), 0 8px 24px rgb(0 0 0 / 0.35);
+    --shadow-3: 0 12px 40px rgb(0 0 0 / 0.55);
+    --c-coral: #f07a55;
+    --c-amber: #e8b04a;
+    --c-olive: #9cc063;
+    --c-teal: #4cc0b8;
+    --c-sky: #63aee8;
+    --c-indigo: #8e96f0;
+    --c-plum: #c78ddb;
+    --c-slate: #9aa6b6;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #141413;
+  --panel: #1c1c1a;
+  --sunk: #101010;
+  --raised: #242422;
+  --ink: #edebe6;
+  --ink-2: #b5b1a8;
+  --ink-3: #87837a;
+  --line: #2c2b28;
+  --line-strong: #3b3a36;
+  --brand: #f07048;
+  --brand-soft: #3a2119;
+  --primary: #edebe6;
+  --primary-ink: #141413;
+  --primary-hover: #ffffff;
+  --focus: #6b9cff;
+  --good: #6cc48d;
+  --good-soft: #17301f;
+  --warn: #e0a54a;
+  --warn-soft: #33270f;
+  --danger: #f07a63;
+  --danger-soft: #3a1a14;
+  --scrim: rgb(0 0 0 / 0.6);
+  --shadow-1: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-2: 0 2px 6px rgb(0 0 0 / 0.35), 0 8px 24px rgb(0 0 0 / 0.35);
+  --shadow-3: 0 12px 40px rgb(0 0 0 / 0.55);
+  --c-coral: #f07a55;
+  --c-amber: #e8b04a;
+  --c-olive: #9cc063;
+  --c-teal: #4cc0b8;
+  --c-sky: #63aee8;
+  --c-indigo: #8e96f0;
+  --c-plum: #c78ddb;
+  --c-slate: #9aa6b6;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-fast: 0ms;
+    --t-med: 0ms;
+  }
+}

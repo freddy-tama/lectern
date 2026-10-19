@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1200" width="1600" height="1200" role="img" aria-label="Cross-section of a rabbit burrow with tunnels, a nursery and a food store">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#CFE7F1"/>
+      <stop offset="1" stop-color="#F3F5E4"/>
+    </linearGradient>
+    <g id="rabbit">
+      <ellipse cx="-66" cy="-4" rx="22" ry="21" fill="#FFF8EC"/>
+      <ellipse cx="0" cy="0" rx="74" ry="50" fill="#EBDCC4"/>
+      <ellipse cx="38" cy="40" rx="22" ry="11" fill="#E2D0B4"/>
+      <ellipse cx="52" cy="-84" rx="12" ry="40" fill="#EBDCC4" transform="rotate(-10 52 -84)"/>
+      <ellipse cx="52" cy="-84" rx="6" ry="30" fill="#E8B4AC" transform="rotate(-10 52 -84)"/>
+      <ellipse cx="82" cy="-80" rx="12" ry="38" fill="#EBDCC4" transform="rotate(14 82 -80)"/>
+      <ellipse cx="82" cy="-80" rx="6" ry="28" fill="#E8B4AC" transform="rotate(14 82 -80)"/>
+      <circle cx="68" cy="-34" r="34" fill="#F3E7D2"/>
+      <circle cx="80" cy="-42" r="5" fill="#4B3B33"/>
+      <circle cx="99" cy="-28" r="5" fill="#E39B94"/>
+    </g>
+  </defs>
+  <rect width="1600" height="400" fill="url(#sky)"/>
+  <circle cx="1320" cy="240" r="62" fill="#F6CB5E"/>
+  <g fill="#FFFFFF"><circle cx="460" cy="230" r="34"/><circle cx="510" cy="210" r="46"/><circle cx="565" cy="232" r="34"/><rect x="428" y="230" width="170" height="36" rx="18"/></g>
+  <!-- soil -->
+  <rect y="360" width="1600" height="840" fill="#C9A075"/>
+  <path d="M0 700 Q300 670 640 710 T1280 690 T1600 710 V920 Q1300 900 960 930 T0 920Z" fill="#BC9066"/>
+  <path d="M0 920 Q300 900 640 935 T1280 915 T1600 935 V1200 H0Z" fill="#AC8159"/>
+  <g fill="#9F7650"><ellipse cx="250" cy="520" rx="26" ry="16"/><ellipse cx="1380" cy="580" rx="30" ry="18"/><ellipse cx="300" cy="1010" rx="34" ry="20"/><ellipse cx="1300" cy="1040" rx="28" ry="16"/><ellipse cx="760" cy="1050" rx="22" ry="13"/></g>
+  <g fill="#D9B88F"><ellipse cx="220" cy="780" rx="18" ry="11"/><ellipse cx="1420" cy="820" rx="20" ry="12"/><ellipse cx="1200" cy="960" rx="16" ry="10"/></g>
+  <!-- roots -->
+  <g fill="none" stroke="#8A6544" stroke-width="5" stroke-linecap="round">
+    <path d="M300 372 q-12 40 8 74 q10 20 -4 44"/><path d="M780 372 q16 36 -2 70"/><path d="M1300 372 q-14 44 6 80 q8 18 -2 36"/>
+  </g>
+  <!-- grass -->
+  <path d="M0 340 Q400 322 800 342 T1600 336 V380 H0Z" fill="#8DBB7A"/>
+  <path d="M0 372 Q400 358 800 376 T1600 370 V384 H0Z" fill="#79A869"/>
+  <!-- tunnels -->
+  <g fill="none" stroke="#7A5535" stroke-width="72" stroke-linejoin="round">
+    <path d="M420 356 L420 520 C420 600 500 650 640 658 L900 690"/>
+    <path d="M1160 356 L1160 520 C1160 590 1120 620 1070 650"/>
+    <path d="M640 658 C600 740 560 780 540 830"/>
+  </g>
+  <ellipse cx="420" cy="357" rx="36" ry="14" fill="#7A5535"/>
+  <ellipse cx="1160" cy="357" rx="36" ry="14" fill="#7A5535"/>
+  <!-- chambers -->
+  <ellipse cx="1010" cy="740" rx="210" ry="130" fill="#7A5535"/>
+  <ellipse cx="530" cy="870" rx="150" ry="90" fill="#7A5535"/>
+  <!-- nursery nest of fur and grass -->
+  <ellipse cx="1010" cy="810" rx="150" ry="52" fill="#E3C98F"/>
+  <path d="M880 806 q20 -14 40 0 M960 822 q20 -14 40 0 M1040 808 q20 -14 40 0 M1100 824 q16 -12 32 0" fill="none" stroke="#C9AB6E" stroke-width="5" stroke-linecap="round"/>
+  <use href="#rabbit" transform="translate(1060 745) scale(0.72)"/>
+  <use href="#rabbit" transform="translate(920 790) scale(0.36)"/>
+  <use href="#rabbit" transform="translate(985 800) scale(0.32)"/>
+  <!-- food store: a carrot and some greens -->
+  <g transform="translate(500 905) rotate(-20)">
+    <path d="M0 0 L22 -92 L44 0Z" fill="#E98A4B"/>
+    <path d="M22 -92 q-16 -22 -34 -26 M22 -92 q2 -30 -4 -48 M22 -92 q16 -22 36 -28" fill="none" stroke="#6FA25F" stroke-width="8" stroke-linecap="round"/>
+  </g>
+  <g fill="#7FAE69"><ellipse cx="590" cy="905" rx="34" ry="14"/><ellipse cx="615" cy="885" rx="26" ry="12"/></g>
+  <!-- rabbit on the surface -->
+  <use href="#rabbit" transform="translate(790 300) scale(0.9)"/>
+  <!-- grass tufts -->
+  <g fill="none" stroke="#6E9C5E" stroke-width="6" stroke-linecap="round">
+    <path d="M250 346 l-8 -26 M262 346 l2 -30 M274 346 l10 -24"/><path d="M1000 348 l-8 -24 M1012 348 l2 -28 M1024 348 l10 -22"/><path d="M1420 346 l-8 -26 M1432 346 l2 -30"/>
+  </g>
+</svg>
