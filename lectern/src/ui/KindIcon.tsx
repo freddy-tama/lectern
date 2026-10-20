@@ -1,4 +1,5 @@
 import {
+  Clapperboard, Dices, Gamepad2, Globe, LayoutDashboard, QrCode, Timer,
   BookOpen, Bookmark, ChartColumn, ChartLine, ChartNoAxesColumn, ChartPie, CircleHelp, ClipboardList, Code, Columns2, Copyright, DoorOpen,
   FileText, Filter, GalleryHorizontal, Grid2x2, Image, Images, Languages, LayoutGrid, List, ListChecks, ListOrdered, type LucideIcon,
   Megaphone, MessageSquareText, Milestone, Presentation, Puzzle, Quote, RefreshCw, Square, Table, Type, Users, Waypoints,
@@ -40,6 +41,13 @@ const ICONS: Record<string, LucideIcon> = {
   waypoints: Waypoints,
   code: Code,
   copyright: Copyright,
+  clapperboard: Clapperboard,
+  globe: Globe,
+  'qr-code': QrCode,
+  'gamepad-2': Gamepad2,
+  timer: Timer,
+  dices: Dices,
+  'layout-dashboard': LayoutDashboard,
 };
 
 /** Icons are referenced by name so the core and mods stay free of React. */

@@ -13,10 +13,12 @@ It runs in the browser and saves to the browser (IndexedDB). There's no account 
 | **Schedule** | Week, month and agenda views of lessons and dated notes. Drag to reschedule, click an empty slot to add a lesson or note, and export everything to your calendar app (.ics). |
 | **Notes** | Plans, reflections after class ("How did it go?"), reminders and ideas, with checklists, tags and pins. Link a note to a course, lesson, deck or a single slide; it then shows up there, in the presenter view and on the schedule. Press N anywhere to jot one down. |
 | **Recordings** | Record a class with the microphone, or drop in a recording (mp3, m4a, wav, webm, ogg, or a video). It's transcribed on your device, so the audio never leaves the browser. The transcript follows the audio as it plays: click any line to jump there, search it, edit it, and export it as text or subtitles (SRT, VTT). Link a recording to its lesson, save the transcript or a passage as a note, and, with AI set up, turn it into class notes (summary, key points, a to-do list, quiz questions) and a quiz deck. |
-| **Studio** | 23 slide types laid out for you on a 16:9 canvas. **Open:** title, section, agenda. **Explain:** points, compare, quote, key term, steps, timeline, statement, code. **Data:** big numbers, charts (column, bar, line, pie, doughnut), tables. **Pictures and diagrams:** image, gallery, people, diagram (cycle, funnel, 2×2). **Engage:** question or poll, quick recall. **Close:** takeaways, closing, credits. Click any text on the slide to edit it. Undo, redo and autosave work everywhere. |
+| **Studio** | 30 slide types laid out for you on a 16:9 canvas. **Open:** title, section, agenda. **Explain:** points, compare, quote, key term, steps, timeline, statement, code, cards. **Data:** big numbers, charts (column, bar, line, pie, doughnut), tables. **Pictures and diagrams:** image, gallery, people, diagram (cycle, funnel, 2×2). **Media:** video, web page. **Engage:** question or poll, quick recall, QR code, activity, timer, random picker. **Close:** takeaways, closing, credits. Click any text on the slide to type straight onto it: Enter adds the next point, Backspace in an empty one removes it, Tab moves to the next text. Drop or paste a picture, a video, a video link or SVG code onto the slide to place it. The side panel shows the main fields first, with switches and rarely used settings folded under **More options**; the key notes and the whole panel fold away for a larger slide. Undo, redo and autosave work everywhere. |
 | **Pictures** | **Find a picture** on any image field searches Openverse and Wikimedia Commons (and Pexels, with a key) for pictures you may reuse, starting from the slide's heading. Results are ranked by size, shape and licence, and logos and icons are left out. You can also paste a link, upload, or make one with AI when the server has an image model. Every picture is kept in the browser with its source, author and licence. **Export ▸ Picture credits** lists them all, copies them, and adds or updates a credits slide; credits also go in the PowerPoint speaker notes and the handout. ★ a picture to have it offered first for similar searches, and a search result you hide or remove isn't suggested again for that search. |
 | **Purpose** | Each deck is a Lesson, Talk, Pitch or Report. The purpose sets the wording of the key notes and review mode, the presenter's cue ideas and how AI drafts the deck. Classroom wording only appears on lessons. |
-| **Looks** | Six built-in looks, plus your own: colours, heading and body fonts, corner style, a logo and footer text, with a live preview. Three audience sizes (young learners, teens, adults) set type size and how many words a slide can hold. |
+| **Video and the web** | A YouTube or Vimeo link, a video file or a stored upload plays on the slide, from a start time you choose, with autoplay, mute and loop. A web page slide shows a live site: Google Slides, Docs, Sheets and Forms, Figma, GeoGebra, CodePen, Loom, Canva and Miro links are converted to their embed address, and an Open button and an optional QR code cover sites that refuse to be framed. |
+| **Activities** | Describe a game, quiz, sorting task, flashcards or simulation and AI writes it as a small web page that runs on the slide, in the deck's colours and fonts. Build it again, ask for a change ("make the timer longer"), or paste your own HTML. Timer and Random picker slides are ready-made activities that need no AI. A QR code slide turns any link or short text into a big code to scan. **Draw** on any image field asks AI for an SVG drawing (a diagram, an icon, a labelled sketch), or takes SVG you paste. |
+| **Looks** | **Auto style** picks the look from what the deck is for and who it's for, takes its accent from the main colour of your pictures, and chooses each slide's layout from its content and its neighbours: a picture with no text goes full screen, picture slides alternate sides, four cards make a grid, shares of a whole become a doughnut chart. Picking a layout by hand pins it. Or choose from six built-in looks, plus your own: colours, heading and body fonts, corner style, a logo and footer text, with a live preview. Three audience sizes (young learners, teens, adults) set type size and how many words a slide can hold. |
 | **Key notes** | On every slide: a script, takeaways, a likely question with its answer, cues ("Pause", "Show the number") and the minutes the slide should take. |
 | **Present** | An audience view with click-to-reveal steps, plus a presenter view (timer, pace, next slide, notes) and a teleprompter (auto-scroll at your speaking pace, mirroring). Every window stays in sync. |
 | **Share to phones** | Two QR codes. **Your phone** becomes a teleprompter and remote: script, next slide, timer and big buttons that move the slides on the computer. **Everyone else** follows the slides live, answers question slides as a poll (results show on your screen and phone), and can keep the deck or save it as PowerPoint. Your script never leaves your devices. Phones keep the deck, so it still opens with no connection. |
@@ -24,7 +26,7 @@ It runs in the browser and saves to the browser (IndexedDB). There's no account 
 | **Hand out a copy** | For rooms where live sharing won't connect. A QR code carries the quiz, or a text-only copy of the slides, inside the link itself, and each phone runs it alone and marks its own answers. Phones can save it as a file for later. **Export ▸ Web page** makes the whole deck one view-only .html file (your reveals, no notes) that opens offline in any browser. |
 | **Study / Review** | Read each slide with its takeaways and explanation, answer the question, flip flashcards, or read a one-page summary. Progress is saved. |
 | **Start a deck** | From an outline (pasted, or a Markdown, Word or PowerPoint file), with AI, blank, or from a mod's starter. |
-| **Export** | PowerPoint with on-click animations or one slide per step (for Google Slides and Keynote). Charts and tables export as real PowerPoint charts and tables you can edit. Also a view-only web page (one .html file that works offline), a key-notes handout to print or save as PDF, and a deck file you can open again. |
+| **Export** | PowerPoint with on-click animations or one slide per step (for Google Slides and Keynote). Charts and tables export as real PowerPoint charts and tables you can edit. YouTube videos go in as online videos that play in PowerPoint, and stored videos as video files. Web pages and activities become a card with a link and a QR code; timers show their time. Also a view-only web page (one .html file that works offline), a key-notes handout to print or save as PDF, and a deck file you can open again. |
 
 ### Presenting keys
 
@@ -117,7 +119,7 @@ See [docs/mods.md](docs/mods.md) to write your own.
 
 | Variable | What it does |
 |---|---|
-| `ANTHROPIC_API_KEY` | Turns on "With AI" drafting and AI class notes from recordings. Without it, both explain that they aren't set up, and everything else works, transcription included. |
+| `ANTHROPIC_API_KEY` | Turns on "With AI" drafting, AI class notes from recordings, AI activities and AI drawings. Without it, each explains that it isn't set up, and everything else works, transcription included. |
 | `LECTERN_MODEL` | The model that drafts decks and writes class notes. Default `claude-opus-5-5`. |
 | `LECTERN_ACCESS_CODE` | People must enter this code before AI drafting, AI pictures or class notes run, so a public site doesn't spend your credit for strangers. Picture search works without it. |
 | `OPENAI_API_KEY` | Turns on **Make with AI** in the picture finder, with OpenAI's `gpt-image-1-mini`. Claude doesn't make pictures, so this is a second provider. Without an image key the tab is hidden. |
@@ -135,6 +137,10 @@ For local AI drafting, put the same variables in `.env.local`. The dev server se
 ### How AI drafting works
 
 [`api/draft-deck.ts`](api/draft-deck.ts) sends the topic, the audience and any material you paste to Claude. It asks for a structured-output JSON schema built from the slide types installed in that build, mods included. The reply is streamed, so long decks don't time out. Server-side refusal fallback (`fallbacks: "default"`) is on: if the model declines a request, the API retries it on Anthropic's recommended fallback model. The returned deck goes through the same path as an outline, so key notes are filled in and timed the same way.
+
+### How activities run
+
+[`api/make-code.ts`](api/make-code.ts) asks Claude for one self-contained HTML page (or, for drawings, one SVG), with the deck's colours, fonts and audience in the request. The page is stored on the slide and runs in a sandboxed frame with no access to the app, its storage or the network: the frame's sandbox allows only scripts and pointer lock, and a Content-Security-Policy added at the top of the page blocks every request, so an activity can't load anything or send anything anywhere. Pasted HTML runs under the same rules. SVG drawings are cleaned before they're stored: scripts, event handlers, embedded HTML and outside references are removed.
 
 ### How pictures are found and kept
 
@@ -162,6 +168,7 @@ src/
     deck/          deck and key-notes types, outline parser, drafting, word counts
     transcribe/    transcript segments, search, SRT/VTT/text export, audio sectioning
     engine/        box layout on a 1920×1080 canvas, text measuring, themes
+    media/         video links, page embeds, QR codes, SVG cleaning, built-in activities
     kinds/         the slide-type contract, layout kit and the core types
     pictures/      picture credits, licences and search ranking
     export/        PowerPoint export (pptxgenjs)
@@ -175,7 +182,7 @@ plugins/           mods, each a folder with an index.ts
 tests/             vitest: seed data, PowerPoint export, mods
 ```
 
-A slide is a list of positioned boxes (text, shapes, images). The same layout draws the slide in the browser and writes it to PowerPoint, so what you see is what you export. Text is measured and fitted to its box, and the studio warns when a slide holds more than its audience should read.
+A slide is a list of positioned boxes (text, shapes, images, charts, tables, videos and embedded pages). The same layout draws the slide in the browser and writes it to PowerPoint, so what you see is what you export. Text is measured and fitted to its box, and the studio warns when a slide holds more than its audience should read.
 
 ## Next
 

@@ -107,6 +107,7 @@ const timeline: SlideKindDefinition<C> = {
 const statement: SlideKindDefinition<C> = {
   kind: 'statement', label: 'Statement', description: 'One big message, with a small label above and a supporting line below.', icon: 'megaphone', group: 'Explain',
   variants: [{ id: 'plain', label: 'Plain' }, { id: 'bold', label: 'Bold colour' }],
+  autoVariant: (_c, auto) => (auto.previous === 'bold' ? 'plain' : 'bold'),
   fields: [
     { key: 'kicker', label: 'Label above', type: 'text', placeholder: 'Our mission', help: 'Optional. A few words in small capitals.' },
     { key: 'statement', label: 'Message', type: 'textarea', rows: 3, help: 'Shorter is stronger. One sentence works best.' },
@@ -175,6 +176,7 @@ function galleryCells(n: number, strip: boolean, a: Cell, gap: number, capH: num
 const gallery: SlideKindDefinition<C> = {
   kind: 'gallery', label: 'Gallery', description: 'Two to four images with optional captions, as a grid or a strip.', icon: 'images', group: 'Visual',
   variants: [{ id: 'grid', label: 'Grid' }, { id: 'strip', label: 'Strip' }],
+  autoVariant: (c) => (items(c, 'images', 4).length === 2 ? 'strip' : 'grid'),
   fields: [
     { key: 'title', label: 'Title', type: 'text', help: 'Optional.' },
     { key: 'images', label: 'Images', type: 'objects', itemLabel: 'Image', max: 4, min: 2, help: 'Two to four images.', fields: [
@@ -330,6 +332,8 @@ const people: SlideKindDefinition<C> = {
 const diagram: SlideKindDefinition<C> = {
   kind: 'diagram', label: 'Diagram', description: 'A cycle, a funnel or a 2 by 2 matrix built from your own labels.', icon: 'refresh-cw', group: 'Visual',
   variants: [{ id: 'cycle', label: 'Cycle' }, { id: 'funnel', label: 'Funnel' }, { id: 'matrix', label: '2 by 2 matrix' }],
+  // Four items with both axes named are a matrix; otherwise the presenter's choice stands.
+  autoVariant: (c) => (items(c, 'items', 6).length === 4 && read.str(c, 'xAxis').trim() && read.str(c, 'yAxis').trim() ? 'matrix' : undefined),
   fields: [
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
     { key: 'items', label: 'Items', type: 'objects', itemLabel: 'Item', max: 6, min: 2, help: 'A cycle takes three to six. A funnel reads top to bottom. A matrix uses the first four, top left to bottom right.', fields: [

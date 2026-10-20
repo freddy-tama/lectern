@@ -10,6 +10,7 @@ import { getTheme } from '../../core/engine/themes';
 import { deckPictures, pictureLine, slidesLabel } from '../../core/pictures/credits';
 import type { QuizPack, SlidesPack } from '../../core/share/pack';
 import { db } from '../../data/db';
+import { mediaDataUrl } from '../../data/repo';
 import { pictureCredits } from '../pictures/store';
 
 export function escapeHtml(s: string): string {
@@ -194,6 +195,7 @@ function full(){if(document.fullscreenElement)document.exitFullscreen();else if(
 addEventListener('resize',fit);document.addEventListener('fullscreenchange',fit);
 addEventListener('keydown',function(e){
   if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(e.target&&e.target.closest&&e.target.closest('.is-live'))return;
   var k=e.key;
   if(k==='ArrowRight'||k==='ArrowDown'||k==='PageDown'||k===' '||k==='Enter'){e.preventDefault();next()}
   else if(k==='ArrowLeft'||k==='ArrowUp'||k==='PageUp'||k==='Backspace'){e.preventDefault();prev()}
@@ -201,7 +203,7 @@ addEventListener('keydown',function(e){
   else if(k==='f'||k==='F')full();
 });
 var stage=document.getElementById('stage'),x0=null,y0=0;
-stage.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('.page-credits'))return;if(e.clientX<innerWidth/3)prev();else next()});
+stage.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('.page-credits, .is-live'))return;if(e.clientX<innerWidth/3)prev();else next()});
 stage.addEventListener('touchstart',function(e){x0=e.touches[0].clientX;y0=e.touches[0].clientY},{passive:true});
 stage.addEventListener('touchend',function(e){if(x0===null)return;var dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;x0=null;if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy)){e.preventDefault();if(dx<0)next();else prev()}});
 document.getElementById('prev').onclick=prev;document.getElementById('next').onclick=next;document.getElementById('full').onclick=full;
@@ -219,6 +221,9 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 /** Turns every image into a data: URL so the page needs nothing else. */
+/** Largest stored video put inside the web page copy. */
+const PAGE_VIDEO_MAX = 40 * 1024 * 1024;
+
 async function inlineImage(src: string): Promise<string> {
   try {
     if (src.startsWith('data:')) return src;
@@ -302,9 +307,14 @@ export async function deckHtml(deck: Deck): Promise<string> {
     const layout = layoutSlide(visible[n]!, {
       theme, audience: deck.audience, mode: 'show', slideNumber: n + 1, slideCount: visible.length, deckTitle: deck.title,
     });
-    const boxes: Box[] = await Promise.all(layout.boxes.map(async (b) => (b.type === 'image' ? { ...b, src: await inlineImage(b.src) } : b)));
+    const boxes: Box[] = await Promise.all(layout.boxes.map(async (b): Promise<Box> => {
+      if (b.type === 'image') return { ...b, src: await inlineImage(b.src) };
+      // Stored videos go inside the page up to a size; bigger ones show a still.
+      if (b.type === 'video' && b.src.startsWith('asset:')) return { ...b, src: (await mediaDataUrl(b.src, PAGE_VIDEO_MAX)) ?? '' };
+      return b;
+    }));
     const markup = renderToStaticMarkup(createElement(Fragment, null, ...boxes.map((box) => createElement(BoxView, {
-      key: box.id, box, theme, state: 'shown', editable: false, active: false,
+      key: box.id, box, theme, state: 'shown', editable: false, active: false, live: true,
     }))));
     sections.push(`<section class="page-slide" data-steps="${layout.steps}" aria-label="Slide ${n + 1}"${n ? ' hidden' : ''} style="background:${escapeHtml(layout.background)}"><div class="slide-canvas" style="width:${CANVAS_W}px;height:${CANVAS_H}px">${markup}</div></section>`);
   }

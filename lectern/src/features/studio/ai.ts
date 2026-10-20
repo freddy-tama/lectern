@@ -1,5 +1,6 @@
 import type { Audience, DeckPurpose } from '../../core/deck/types';
 import { allKinds } from '../../core/kinds/registry';
+import type { FieldSpec } from '../../core/kinds/types';
 import type { DeckDraft } from '../../core/plugins/api';
 import { draftingHints } from '../../core/plugins/registry';
 import type { Density } from '../../data/profile';
@@ -46,13 +47,23 @@ export interface DraftRequest {
   pictures?: { id: string; name: string; mime: string; data: string }[];
 }
 
+/**
+ * The field type the AI servers read. Videos travel like pictures (never sent, never changed);
+ * an activity's description is plain text, and its code is never sent.
+ */
+export function aiFieldType(type: FieldSpec['type']): 'text' | 'textarea' | 'list' | 'objects' | 'toggle' | 'image' {
+  if (type === 'video') return 'image';
+  if (type === 'activity') return 'textarea';
+  return type;
+}
+
 /** Kinds the server may use: core ones plus any a mod registered, with their fields. */
 function kindCatalogue() {
   return allKinds().map((k) => ({
     kind: k.kind,
     label: k.label,
     description: k.description,
-    fields: k.fields.map((f) => ({ key: f.key, type: f.type, label: f.label, ...(f.type === 'objects' ? { fields: f.fields.map((x) => x.key) } : {}) })),
+    fields: k.fields.map((f) => ({ key: f.key, type: aiFieldType(f.type), label: f.label, ...(f.type === 'objects' ? { fields: f.fields.map((x) => x.key) } : {}) })),
   }));
 }
 

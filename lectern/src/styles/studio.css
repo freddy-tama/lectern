@@ -1240,3 +1240,339 @@ fieldset.field legend {
     margin-left: 0;
   }
 }
+
+/* ─── Calmer inspector ──────────────────────────────────── */
+
+/* Help text shows while you work in a field; errors always show. */
+.inspector .fields > .field > .field-help:not(.field-error),
+.inspector .fields > .field > fieldset > .field-help {
+  display: none;
+}
+
+.inspector .fields > .field:focus-within > .field-help {
+  display: block;
+}
+
+.field-error {
+  color: var(--danger);
+}
+
+.field-switches {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--sunk) 60%, var(--panel));
+}
+
+.more-options {
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.more-options > summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-2);
+  padding: 4px 0;
+}
+
+.more-options > summary::-webkit-details-marker {
+  display: none;
+}
+
+.more-options > summary svg {
+  transition: transform var(--t-fast);
+}
+
+.more-options[open] > summary svg {
+  transform: rotate(90deg);
+}
+
+.more-options > .fields {
+  margin-top: 12px;
+}
+
+/* Video, activity and drawing fields */
+
+.video-drop {
+  position: relative;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  border: 1.5px dashed var(--line-strong);
+  background: var(--sunk);
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: 13px;
+  text-align: center;
+  padding: 10px;
+}
+
+.video-drop.has-video {
+  border-style: solid;
+  background: #111;
+  color: #fff;
+}
+
+.video-drop img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.75;
+}
+
+.video-drop-label {
+  position: relative;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.video-drop.has-video .video-drop-label {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.6);
+}
+
+.starter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip-btn {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--panel);
+}
+
+.chip-btn:hover {
+  background: var(--sunk);
+  color: var(--ink);
+}
+
+.activity-busy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--accent-soft, var(--sunk));
+}
+
+.activity-busy .faint {
+  font-weight: 400;
+  flex-basis: 100%;
+}
+
+.code-box {
+  display: grid;
+  gap: 8px;
+}
+
+.code-textarea {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+}
+
+.draw-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--sunk) 55%, var(--panel));
+}
+
+.draw-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.draw-panel .btn-primary {
+  justify-self: start;
+}
+
+/* ─── Auto style ────────────────────────────────────────── */
+
+.look-trigger .look-name {
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-style-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  text-align: left;
+  color: var(--ink);
+}
+
+.auto-style-row:hover {
+  background: var(--sunk);
+}
+
+.auto-style-row strong {
+  display: block;
+  font-size: 14px;
+}
+
+.auto-style-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--focus) 16%, var(--panel));
+  color: var(--focus);
+}
+
+.mini-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: background var(--t-fast);
+}
+
+.mini-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform var(--t-fast);
+}
+
+.mini-switch.on {
+  background: var(--focus);
+}
+
+.mini-switch.on::after {
+  transform: translateX(14px);
+}
+
+.layout-segmented {
+  flex-wrap: wrap;
+}
+
+.layout-segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The layout auto style chose, shown quietly so it reads as a suggestion, not a setting. */
+.layout-segmented button.is-auto {
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--focus) 55%, transparent);
+  color: var(--ink);
+}
+
+.theme-auto span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+
+/* ─── Typing on the slide, dropping onto it ─────────────── */
+
+.inline-edit {
+  position: absolute;
+  z-index: 5;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  font-kerning: normal;
+  caret-color: currentColor;
+  outline: 4px solid var(--focus);
+  outline-offset: 10px;
+  border-radius: 2px;
+}
+
+.inline-edit::selection {
+  background: color-mix(in srgb, var(--focus) 35%, transparent);
+}
+
+/* The text under the editor hides at once, without the reveal animation. */
+.slide-canvas:has(.inline-edit) .box.is-hidden {
+  transition: none;
+}
+
+.stage.is-dropping .stage-slide {
+  box-shadow: 0 0 0 4px var(--focus), var(--shadow-3);
+}
+
+.stage-drop {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--focus);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  pointer-events: none;
+  box-shadow: var(--shadow-2);
+}
+
+.stage-hint {
+  font-size: 13px;
+}
+
+.studio.panel-hidden {
+  grid-template-columns: 196px minmax(0, 1fr) 0;
+}
+
+.studio.panel-hidden .inspector {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .studio.panel-hidden {
+    grid-template-columns: 150px minmax(0, 1fr) 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .studio.panel-hidden {
+    grid-template-columns: 1fr;
+  }
+}

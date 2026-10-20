@@ -76,7 +76,7 @@ export default function Present() {
     <div className={`present ${chrome ? 'show-chrome' : ''}`} onMouseMove={poke} onClick={(e) => { if ((e.target as HTMLElement).closest('button, a, .present-notes')) return; next(); }}>
       <div className="present-stage">
         <div className="present-slide" key={slide.id}>
-          <SlideView slide={slide} deck={deck} number={index + 1} count={count} step={state.step} flags={state.flags} label={`Slide ${index + 1} of ${count}`} />
+          <SlideView slide={slide} deck={deck} number={index + 1} count={count} step={state.step} flags={state.flags} label={`Slide ${index + 1} of ${count}`} live />
         </div>
         {state.blank && <div className="present-blank" aria-label="Screen blanked" />}
         <LiveScreen deckId={deckId} />

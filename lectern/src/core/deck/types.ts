@@ -45,6 +45,8 @@ export interface Slide<C = Record<string, unknown>> {
   notes: KeyNotes;
   /** Optional layout variant offered by the kind, for example "image-right". */
   variant?: string;
+  /** The presenter chose this layout, so auto style leaves it alone. */
+  variantPinned?: boolean;
   /** Skipped when presenting and exporting, kept in the studio. */
   hidden?: boolean;
 }
@@ -61,6 +63,8 @@ export interface Deck {
   lessonId?: string;
   /** Planned length of the session in minutes. */
   minutes?: number;
+  /** Lectern picks each slide's layout to suit its content (see autoVariants). */
+  autoStyle?: boolean;
   createdAt: number;
   updatedAt: number;
   /** Which plugin (if any) made this deck. Core decks leave it empty. */

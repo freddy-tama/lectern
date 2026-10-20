@@ -6,7 +6,7 @@ import { getTheme } from '../../core/engine/themes';
 import { getKind } from '../../core/kinds/registry';
 import type { AnyKind, FieldSpec } from '../../core/kinds/types';
 import { draftingHints } from '../../core/plugins/registry';
-import { savedCode } from './ai';
+import { aiFieldType, savedCode } from './ai';
 
 const ENDPOINT = '/api/revise-slide';
 
@@ -44,7 +44,7 @@ export function kindSpec(def: AnyKind) {
     description: def.description,
     fields: def.fields.map((f) => ({
       key: f.key,
-      type: f.type,
+      type: aiFieldType(f.type),
       label: f.label,
       ...('help' in f && f.help ? { help: f.help } : {}),
       ...('max' in f && f.max ? { max: f.max } : {}),
@@ -54,7 +54,8 @@ export function kindSpec(def: AnyKind) {
   };
 }
 
-const imageKeys = (fields: FieldSpec[]) => fields.filter((f) => f.type === 'image').map((f) => f.key);
+/** Content the AI never sees or changes: pictures, videos and activity code. */
+const imageKeys = (fields: FieldSpec[]) => fields.flatMap((f) => (f.type === 'image' || f.type === 'video' ? [f.key] : f.type === 'activity' ? [f.htmlKey] : []));
 
 /** The slide's content without pictures: they can be large and the AI never changes them. */
 export function contentForAi(def: AnyKind, content: Record<string, unknown>): Record<string, unknown> {
@@ -74,11 +75,11 @@ export function contentForAi(def: AnyKind, content: Record<string, unknown>): Re
  */
 export function mergeContent(def: AnyKind | undefined, original: Record<string, unknown>, revised: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = { ...original, ...revised };
+  for (const k of imageKeys(def?.fields ?? [])) {
+    if (k in original) out[k] = original[k];
+    else delete out[k];
+  }
   for (const f of def?.fields ?? []) {
-    if (f.type === 'image') {
-      if (f.key in original) out[f.key] = original[f.key];
-      else delete out[f.key];
-    }
     if (f.type !== 'objects' || !Array.isArray(revised[f.key])) continue;
     const sub = imageKeys(f.fields);
     if (!sub.length) continue;

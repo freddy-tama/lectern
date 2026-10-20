@@ -6,6 +6,7 @@ import type { Deck, Slide } from '../../core/deck/types';
 import { assetUrl } from '../../data/repo';
 import { useFontsReady, useWidth } from '../../ui/hooks';
 import { ChartView } from './ChartView';
+import { EmbedView, VideoView } from './MediaView';
 import { TableView } from './TableView';
 
 export interface SlideViewProps {
@@ -19,13 +20,20 @@ export interface SlideViewProps {
   /** Edit mode: draw boxes of later steps faintly instead of hiding them. */
   ghostLater?: boolean;
   flags?: Record<string, boolean>;
-  onSelectBind?(bind: string): void;
+  /** A click on a box that shows content: its bind, and the box's id. */
+  onSelectBind?(bind: string, boxId: string): void;
   activeBind?: string | null;
   onLayout?(layout: SlideLayout): void;
   className?: string;
   /** Rounded corners and a hairline border, for thumbnails and cards. */
   framed?: boolean;
   label?: string;
+  /** Play videos and run activities and web pages. Off for thumbnails, which show stills. */
+  live?: boolean;
+  /** A box drawn by something else for now, such as the text being typed into. */
+  hiddenBox?: string;
+  /** Drawn over the boxes in slide coordinates, for example an editor. */
+  overlay?: React.ReactNode;
 }
 
 export function useSlideLayout(slide: Slide, deck: SlideViewProps['deck'], o: { number?: number; count?: number; mode?: 'edit' | 'show'; flags?: Record<string, boolean> } = {}) {
@@ -43,7 +51,7 @@ export function useSlideLayout(slide: Slide, deck: SlideViewProps['deck'], o: { 
 }
 
 export const SlideView = memo(function SlideView(props: SlideViewProps) {
-  const { slide, deck, step, mode = 'show', ghostLater, onSelectBind, activeBind, onLayout, className, framed, label } = props;
+  const { slide, deck, step, mode = 'show', ghostLater, onSelectBind, activeBind, onLayout, className, framed, label, live = false, hiddenBox, overlay } = props;
   const [ref, width] = useWidth<HTMLDivElement>();
   const layout = useSlideLayout(slide, deck, { number: props.number, count: props.count, mode, flags: props.flags });
   const theme = getTheme(deck.themeId);
@@ -61,7 +69,7 @@ export const SlideView = memo(function SlideView(props: SlideViewProps) {
         <div className="slide-canvas" style={{ width: CANVAS_W, height: CANVAS_H, transform: `scale(${scale})` }}>
           {layout.boxes.map((box) => {
             const later = (box.step ?? 0) > (step ?? Number.POSITIVE_INFINITY);
-            const state = later ? (ghostLater ? 'ghost' : 'hidden') : 'shown';
+            const state = box.id === hiddenBox ? 'hidden' : later ? (ghostLater ? 'ghost' : 'hidden') : 'shown';
             return (
               <BoxView
                 key={box.id}
@@ -71,9 +79,11 @@ export const SlideView = memo(function SlideView(props: SlideViewProps) {
                 editable={Boolean(onSelectBind && box.bind)}
                 active={Boolean(activeBind && box.bind && (box.bind === activeBind || box.bind.startsWith(`${activeBind}.`)))}
                 onSelect={onSelectBind}
+                live={live && state !== 'hidden'}
               />
             );
           })}
+          {overlay}
         </div>
       )}
     </div>
@@ -81,16 +91,16 @@ export const SlideView = memo(function SlideView(props: SlideViewProps) {
 });
 
 /** One positioned box. Exported for static rendering (the view-only web page). */
-export function BoxView({ box, theme, state, editable, active, onSelect }: {
-  box: Box; theme: Theme; state: 'shown' | 'hidden' | 'ghost'; editable: boolean; active: boolean; onSelect?(bind: string): void;
+export function BoxView({ box, theme, state, editable, active, onSelect, live = false }: {
+  box: Box; theme: Theme; state: 'shown' | 'hidden' | 'ghost'; editable: boolean; active: boolean; onSelect?(bind: string, boxId: string): void; live?: boolean;
 }) {
   const style: React.CSSProperties = {
     left: box.x, top: box.y, width: box.w, height: box.h,
     opacity: state === 'ghost' ? (box.opacity ?? 1) * 0.28 : box.opacity ?? 1,
   };
   const classes = ['box', `box-${box.type}`, state === 'hidden' ? 'is-hidden' : '', box.reveal === 'answer' ? 'is-answer' : '', editable ? 'is-editable' : '', active ? 'is-active' : ''].filter(Boolean).join(' ');
-  const onClick = editable && box.bind ? (e: React.MouseEvent) => { e.stopPropagation(); onSelect?.(box.bind!); } : undefined;
-  const step = box.step ? { 'data-step': box.step } : {};
+  const onClick = editable && box.bind ? (e: React.MouseEvent) => { e.stopPropagation(); onSelect?.(box.bind!, box.id); } : undefined;
+  const step = { ...(box.step ? { 'data-step': box.step } : {}), ...(editable && box.bind ? { 'data-box-bind': box.bind } : {}) };
 
   if (box.type === 'text') {
     const s = box.style;
@@ -128,6 +138,11 @@ export function BoxView({ box, theme, state, editable, active, onSelect }: {
   }
   if (box.type === 'table') {
     return <div className={classes} style={style} onClick={onClick} {...step}><TableView box={box} theme={theme} /></div>;
+  }
+  if (box.type === 'video' || box.type === 'embed') {
+    // A running frame takes its own clicks; a still selects the field like any other box.
+    const media = box.type === 'video' ? <VideoView box={box} live={live} /> : <EmbedView box={box} live={live} />;
+    return <div className={`${classes}${live ? ' is-live' : ''}`} style={{ ...style, borderRadius: box.radius ?? 0 }} onClick={live ? undefined : onClick} {...step}>{media}</div>;
   }
   return (
     <div className={classes} style={{ ...style, borderRadius: box.radius ?? 0 }} onClick={onClick} {...step}>

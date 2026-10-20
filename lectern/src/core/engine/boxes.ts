@@ -140,7 +140,51 @@ export interface TableBox extends BoxBase {
   align?: ('left' | 'center' | 'right')[];
 }
 
-export type Box = TextBox | ShapeBox | ImageBox | ChartBox | TableBox;
+/**
+ * A video: a stored file ("asset:<id>"), a link to a video file, or a YouTube or Vimeo page.
+ * It plays on screen; PowerPoint gets the file embedded, YouTube as an online video, others as a link.
+ */
+export interface VideoBox extends BoxBase {
+  type: 'video';
+  src: string;
+  fit: 'cover' | 'contain';
+  radius?: number;
+  /** Seconds to start from. */
+  start?: number;
+  autoplay?: boolean;
+  loop?: boolean;
+  muted?: boolean;
+  title?: string;
+  /** Placeholder colours, for thumbnails and copies that can't play the video. */
+  fill: string;
+  ink: string;
+}
+
+/**
+ * Live content in a frame: an activity's own HTML (sandboxed, no network) or a web page.
+ * Thumbnails and PowerPoint show a still card instead.
+ */
+export interface EmbedBox extends BoxBase {
+  type: 'embed';
+  /** A complete HTML document, run in a sandbox. */
+  html?: string;
+  /** A web page to frame instead. */
+  url?: string;
+  /** Where people open it themselves, for links and QR codes in copies. */
+  openUrl?: string;
+  title: string;
+  radius?: number;
+  fill: string;
+  ink: string;
+  accent: string;
+  onAccent: string;
+  /** Lucide icon name for the still card. */
+  icon?: string;
+  /** Font for the still card. */
+  font?: FontRole;
+}
+
+export type Box = TextBox | ShapeBox | ImageBox | ChartBox | TableBox | VideoBox | EmbedBox;
 
 export interface SlideLayout {
   background: string;

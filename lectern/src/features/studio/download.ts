@@ -1,7 +1,7 @@
 import type { Deck } from '../../core/deck/types';
 import { deckPictures, pictureLine } from '../../core/pictures/credits';
 import { DECK_FILE_EXT, buildDeckFile } from '../../data/deck-file';
-import { imageDataUrl } from '../../data/repo';
+import { imageDataUrl, mediaDataUrl } from '../../data/repo';
 import { pictureCredits } from '../pictures/store';
 
 export function downloadBlob(data: Blob, fileName: string) {
@@ -29,7 +29,7 @@ async function deckCreditLines(deck: Deck): Promise<Record<string, string>> {
 export async function exportPptx(deck: Deck, steps: 'animate' | 'build' | 'final' = 'animate') {
   const { exportDeckToPptx } = await import('../../core/export/pptx');
   const credits = await deckCreditLines(deck).catch(() => ({}));
-  const result = await exportDeckToPptx(deck, { steps, includeNotes: true, resolveImage: imageDataUrl, output: 'blob', credits });
+  const result = await exportDeckToPptx(deck, { steps, includeNotes: true, resolveImage: imageDataUrl, resolveMedia: (src) => mediaDataUrl(src), output: 'blob', credits });
   downloadBlob(result.data as Blob, result.fileName);
   return result.warnings;
 }

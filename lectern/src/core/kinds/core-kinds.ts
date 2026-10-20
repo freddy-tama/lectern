@@ -4,6 +4,7 @@ import { type Box, CANVAS_H, CANVAS_W } from '../engine/boxes';
 import { fontWeight } from '../engine/themes';
 import { M, type LayoutContext, card, heightAt, imageSrc, list, read, shape, slideTitle, sz, text } from './kit';
 import { DATA_KINDS } from './data-kinds';
+import { MEDIA_KINDS } from './media-kinds';
 import { registerKind } from './registry';
 import type { AnyKind, SlideKindDefinition } from './types';
 import { VISUAL_KINDS } from './visual-kinds';
@@ -28,6 +29,7 @@ function eyebrow(ctx: LayoutContext, id: string, value: string, x: number, y: nu
 const title: SlideKindDefinition<C> = {
   kind: 'title', label: 'Title', description: 'Opens the deck: title, subtitle and who is presenting.', icon: 'presentation', group: 'Open',
   variants: [{ id: 'left', label: 'Left aligned' }, { id: 'center', label: 'Centred' }],
+  autoVariant: (c) => (read.str(c, 'image').trim() ? 'left' : 'center'),
   fields: [
     { key: 'eyebrow', label: 'Above the title', type: 'text', placeholder: 'Event, team or date' },
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
@@ -189,6 +191,13 @@ const compare: SlideKindDefinition<C> = {
 const image: SlideKindDefinition<C> = {
   kind: 'image', label: 'Image', description: 'A picture with a short explanation, or full-bleed with a caption.', icon: 'image', group: 'Visual',
   variants: [{ id: 'right', label: 'Image right' }, { id: 'left', label: 'Image left' }, { id: 'full', label: 'Full picture' }],
+  // A picture with only a short title goes full screen; others alternate sides down the deck.
+  autoVariant: (c, auto) => {
+    if (!read.str(c, 'image').trim()) return 'right';
+    const words = read.str(c, 'title').trim().split(/\s+/).filter(Boolean).length;
+    if (!read.str(c, 'body').trim() && !read.bool(c, 'whole') && words <= 8) return 'full';
+    return auto.previous === 'right' ? 'left' : 'right';
+  },
   fields: [
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
     { key: 'body', label: 'Text', type: 'textarea', rows: 4 },
@@ -580,7 +589,7 @@ let registered = false;
 export function registerCoreKinds() {
   if (registered) return;
   registered = true;
-  [...CORE_KINDS, ...DATA_KINDS, ...VISUAL_KINDS].forEach(registerKind);
+  [...CORE_KINDS, ...DATA_KINDS, ...VISUAL_KINDS, ...MEDIA_KINDS].forEach(registerKind);
 }
 
 /** Weight of the body face, for renderers that need it. */
