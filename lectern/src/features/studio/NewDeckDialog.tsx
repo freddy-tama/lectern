@@ -11,10 +11,13 @@ import { getKind } from '../../core/kinds/registry';
 import type { DeckDraft } from '../../core/plugins/api';
 import { deckSources } from '../../core/plugins/registry';
 import type { Course, Lesson } from '../../data/db';
+import { isDeckFile } from '../../data/deck-file';
+import { getProfile } from '../../data/profile';
 import { addDeck } from '../../data/repo';
 import { Dialog } from '../../ui/Dialog';
 import { KindIcon } from '../../ui/KindIcon';
 import { useToast } from '../../ui/Toast';
+import { useOpenDeckFile } from '../backup/actions';
 import { SlideView } from '../slides/SlideView';
 import { type AiStatus, aiStatus, draftWithAI, saveCode, savedCode } from './ai';
 
@@ -95,19 +98,30 @@ const PURPOSE_ICONS: Record<DeckPurpose, React.ReactNode> = {
   report: <ChartColumn size={18} />,
 };
 
+/** New decks start from the person's saved preferences; a deck made for a lesson is always a lesson. */
+function startPurpose(lesson?: Lesson): DeckPurpose {
+  return lesson ? 'lesson' : getProfile().deck.purpose;
+}
+
+function startAudience(purpose: DeckPurpose): Audience {
+  const saved = getProfile().deck;
+  if (purpose === saved.purpose) return saved.audience;
+  return purpose === 'lesson' ? 'teen' : 'adult';
+}
+
 export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean; onClose(): void; lesson?: Lesson; course?: Course }) {
   const navigate = useNavigate();
   const toast = useToast();
   const sources = deckSources();
   const [mode, setMode] = useState<Mode>('notes');
   const [title, setTitle] = useState('');
-  const [purpose, setPurposeState] = useState<DeckPurpose>(lesson ? 'lesson' : 'talk');
-  const [audience, setAudience] = useState<Audience>(lesson ? 'teen' : 'adult');
-  const [themeId, setThemeId] = useState('paper');
+  const [purpose, setPurposeState] = useState<DeckPurpose>(() => startPurpose(lesson));
+  const [audience, setAudience] = useState<Audience>(() => startAudience(startPurpose(lesson)));
+  const [themeId, setThemeId] = useState(() => getProfile().deck.themeId);
   const [notes, setNotes] = useState('');
   const [topic, setTopic] = useState('');
   const [material, setMaterial] = useState('');
-  const [minutes, setMinutes] = useState(40);
+  const [minutes, setMinutes] = useState(() => getProfile().deck.minutes);
   const [ai, setAi] = useState<AiStatus | null>(null);
   const [code, setCode] = useState(savedCode);
   const [busy, setBusy] = useState(false);
@@ -115,14 +129,17 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const [dragging, setDragging] = useState(false);
   const abort = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const openDeck = useOpenDeckFile();
 
   useEffect(() => {
     if (!open) return;
-    setPurposeState(lesson ? 'lesson' : 'talk');
-    setAudience(lesson ? 'teen' : 'adult');
+    const p = startPurpose(lesson);
+    setPurposeState(p);
+    setAudience(startAudience(p));
+    setThemeId(getProfile().deck.themeId);
     setTitle(lesson?.title ?? '');
     setTopic(lesson ? `${lesson.title}${lesson.summary ? `. ${lesson.summary}` : ''}` : '');
-    setMinutes(lesson?.durationMinutes ?? 40);
+    setMinutes(lesson?.durationMinutes ?? getProfile().deck.minutes);
     setError('');
     setBusy(false);
     aiStatus().then(setAi);
@@ -131,7 +148,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const w = wording(purpose);
   const setPurpose = (p: DeckPurpose) => {
     setPurposeState(p);
-    setAudience(p === 'lesson' ? 'teen' : 'adult');
+    setAudience(startAudience(p));
   };
 
   const preview = useMemo(() => (notes.trim() ? outlineToDraft(notes, title || 'Untitled deck') : null), [notes, title]);
@@ -186,6 +203,12 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const readFile = async (file: File) => {
     setError('');
     try {
+      // A Lectern deck file opens as it was saved, as a new deck.
+      if (await isDeckFile(file)) {
+        await openDeck(file, { lessonId: lesson?.id });
+        onClose();
+        return;
+      }
       const text = await fileToOutline(file);
       setNotes(text);
       if (!title) setTitle(/^#\s+(.+)$/m.exec(text)?.[1] ?? file.name.replace(/\.[^.]+$/, ''));
@@ -244,9 +267,9 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
                   </label>
                   <div className="dropzone-foot">
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileInput.current?.click()}><Upload size={14} /> Open a file</button>
-                    <span className="faint">or drop Word, PowerPoint, Markdown or text here</span>
+                    <span className="faint">or drop a PDF, Word, PowerPoint, Excel or text file here</span>
                     {!notes && <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setNotes(purpose === 'lesson' ? SAMPLE : SAMPLE_TALK)}>Try an example</button>}
-                    <input ref={fileInput} type="file" accept={OUTLINE_ACCEPT} hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = ''; }} />
+                    <input ref={fileInput} type="file" accept={`${OUTLINE_ACCEPT},.json`} hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = ''; }} />
                   </div>
                   {preview && (
                     <div className="outline-preview" aria-live="polite">

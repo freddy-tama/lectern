@@ -1,0 +1,181 @@
+/* ─── Backup, restore and storage ───────────────────────── */
+
+.backup {
+  display: grid;
+  gap: 18px;
+}
+
+.backup h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+
+.backup-usage {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+}
+
+.backup-usage-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--ink-2);
+}
+
+.backup-usage-head h3 {
+  color: var(--ink);
+  margin-right: auto;
+}
+
+.backup-usage-head .faint {
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.backup-totals {
+  font-size: 13px;
+}
+
+.backup-persist {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.backup-persist {
+  align-items: flex-start;
+}
+
+.backup-persist svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+.backup-persist > span {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.backup-persist .btn {
+  margin-top: -4px;
+}
+
+.backup-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 18px;
+}
+
+.backup-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 18px;
+}
+
+.backup-card p {
+  font-size: 14px;
+}
+
+.backup-card-foot {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 2px;
+}
+
+.backup-card-foot .faint {
+  font-size: 13px;
+}
+
+.backup-confirm,
+.backup-result {
+  display: grid;
+  gap: 12px;
+  font-size: 14.5px;
+}
+
+.backup-result ul,
+.backup-conflicts ul {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.backup-conflicts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--sunk);
+}
+
+.backup-conflicts legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  font-weight: 600;
+}
+
+.backup-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.backup-choice input {
+  margin-top: 3px;
+  accent-color: var(--brand);
+}
+
+.backup-choice > span {
+  display: grid;
+  gap: 1px;
+}
+
+.backup-choice .faint {
+  font-size: 13px;
+}
+
+/* A deck file dragged over the deck library. */
+.deck-drop {
+  position: relative;
+}
+
+.deck-drop.is-dragging::after {
+  content: 'Drop the deck file to open it';
+  position: absolute;
+  inset: -8px;
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--brand);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--ink);
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.backup-reset {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+}

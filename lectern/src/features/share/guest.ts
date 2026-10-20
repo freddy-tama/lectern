@@ -6,7 +6,7 @@ import { useSyncExternalStore } from 'react';
 import { registerTheme } from '../../core/engine/themes';
 import {
   type GuestMessage, type HostMessage, type JoinMetadata, type LiveState, PartCollector, type PollResult, type Role, type SharePackage,
-  type ShareOptions, deviceLabel, isPackage, peerIdFor,
+  type ShareOptions, deviceLabel, isPackage, peerIdFor, receivedAsset,
 } from '../../core/share/protocol';
 import type { PlayerView, QuizStage, QuizView } from '../../core/share/quiz';
 import { db } from '../../data/db';
@@ -99,18 +99,9 @@ function linkKey(code: string, role: Role) {
   return role === 'presenter' ? `link:${code}:p` : `link:${code}`;
 }
 
-function dataUrlToBlob(data: string): Blob {
-  const [head = '', body = ''] = data.split(',');
-  const mime = /data:([^;]+)/.exec(head)?.[1] ?? 'application/octet-stream';
-  const bytes = atob(body);
-  const arr = new Uint8Array(bytes.length);
-  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-  return new Blob([arr], { type: mime });
-}
-
 async function savePackage(pkg: SharePackage, code: string): Promise<string> {
   const deckId = localDeckId(pkg.deck.id, pkg.role);
-  await db.assets.bulkPut(pkg.assets.map((a) => ({ id: a.id, blob: dataUrlToBlob(a.data), mime: a.mime, name: a.name, createdAt: Date.now() })));
+  await db.assets.bulkPut(pkg.assets.map((a) => receivedAsset(a)));
   if (pkg.theme) {
     const look = normalizeLook(pkg.theme);
     if (look) { registerTheme(look); await saveLook(look).catch(() => {}); }

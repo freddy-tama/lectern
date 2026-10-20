@@ -7,8 +7,10 @@ import type { Box } from '../../core/engine/boxes';
 import { CANVAS_H, CANVAS_W } from '../../core/engine/boxes';
 import { layoutSlide } from '../../core/engine/layout';
 import { getTheme } from '../../core/engine/themes';
+import { deckPictures, pictureLine, slidesLabel } from '../../core/pictures/credits';
 import type { QuizPack, SlidesPack } from '../../core/share/pack';
 import { db } from '../../data/db';
+import { pictureCredits } from '../pictures/store';
 
 export function escapeHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -152,6 +154,11 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0e0e0d;color:#f1efea;
 .page-slide{position:relative;width:calc(${CANVAS_W}px * var(--s));height:calc(${CANVAS_H}px * var(--s));overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.45)}
 .page-slide[hidden]{display:none}
 .page-slide .slide-canvas{transform:scale(var(--s))}
+.page-credits{width:min(680px,calc(100vw - 32px));height:auto;max-height:calc(100vh - 88px);overflow:auto;padding:28px 28px 24px;border-radius:14px;background:#1c1c1a;box-shadow:none;user-select:text;-webkit-user-select:text}
+.page-credits h2{margin:0 0 14px;font:600 24px/1.2 Georgia,"Times New Roman",serif}
+.page-credits ul{display:grid;gap:10px;margin:0;padding:0;list-style:none;color:#d8d4cc;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.page-credits b{margin-right:6px;color:#b5b1a8;font-weight:650}
+.page-credits a{color:#f07a55}
 .bar{position:fixed;left:0;right:0;bottom:0;height:56px;display:flex;align-items:center;gap:6px;padding:0 max(10px,env(safe-area-inset-right)) env(safe-area-inset-bottom) max(10px,env(safe-area-inset-left))}
 .bar .title{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#b5b1a8;padding:0 8px}
 .bar button{display:grid;place-items:center;min-width:44px;height:40px;padding:0 12px;border:0;border-radius:10px;background:#242422;color:#f1efea;font:inherit;font-weight:650;cursor:pointer}
@@ -162,20 +169,22 @@ html,body{margin:0;height:100%;overflow:hidden;background:#0e0e0d;color:#f1efea;
 :fullscreen .bar,:fullscreen .progress{opacity:0;transition:opacity .3s}
 :fullscreen .bar:hover{opacity:1}
 :fullscreen .stage{inset:0}
+:fullscreen .page-credits{max-height:calc(100vh - 32px)}
 @media (prefers-reduced-motion:reduce){.box{transition:none!important}}
 `;
 
 const DECK_JS = `(function(){
 var slides=[].slice.call(document.querySelectorAll('.page-slide'));
+var real=document.querySelectorAll('.page-slide:not(.page-credits)').length;
 var i=0,step=0,root=document.documentElement;
 var count=document.getElementById('count'),prog=document.getElementById('prog');
 function steps(s){return Number(s.getAttribute('data-steps')||0)}
 function show(){
   slides.forEach(function(s,n){s.hidden=n!==i});
   [].forEach.call(slides[i].querySelectorAll('[data-step]'),function(b){b.classList.toggle('is-hidden',Number(b.getAttribute('data-step'))>step)});
-  count.textContent=(i+1)+' / '+slides.length;
-  prog.style.width=((i+1)/slides.length*100)+'%';
-  try{history.replaceState(null,'','#'+(i+1))}catch(e){}
+  count.textContent=i<real?(i+1)+' / '+real:'Credits';
+  prog.style.width=(Math.min(i+1,real)/real*100)+'%';
+  try{history.replaceState(null,'','#'+(i<real?i+1:'credits'))}catch(e){}
 }
 function next(){if(step<steps(slides[i]))step++;else if(i<slides.length-1){i++;step=0}show()}
 function prev(){if(step>0)step--;else if(i>0){i--;step=steps(slides[i])}show()}
@@ -188,15 +197,15 @@ addEventListener('keydown',function(e){
   var k=e.key;
   if(k==='ArrowRight'||k==='ArrowDown'||k==='PageDown'||k===' '||k==='Enter'){e.preventDefault();next()}
   else if(k==='ArrowLeft'||k==='ArrowUp'||k==='PageUp'||k==='Backspace'){e.preventDefault();prev()}
-  else if(k==='Home')go(0);else if(k==='End')go(slides.length-1,true);
+  else if(k==='Home')go(0);else if(k==='End')go(real-1,true);
   else if(k==='f'||k==='F')full();
 });
 var stage=document.getElementById('stage'),x0=null,y0=0;
-stage.addEventListener('click',function(e){if(e.clientX<innerWidth/3)prev();else next()});
+stage.addEventListener('click',function(e){if(e.target.closest&&e.target.closest('.page-credits'))return;if(e.clientX<innerWidth/3)prev();else next()});
 stage.addEventListener('touchstart',function(e){x0=e.touches[0].clientX;y0=e.touches[0].clientY},{passive:true});
 stage.addEventListener('touchend',function(e){if(x0===null)return;var dx=e.changedTouches[0].clientX-x0,dy=e.changedTouches[0].clientY-y0;x0=null;if(Math.abs(dx)>40&&Math.abs(dx)>Math.abs(dy)){e.preventDefault();if(dx<0)next();else prev()}});
 document.getElementById('prev').onclick=prev;document.getElementById('next').onclick=next;document.getElementById('full').onclick=full;
-var start=parseInt(location.hash.slice(1),10);if(start>0)i=Math.min(slides.length,start)-1;
+var h=location.hash.slice(1),start=parseInt(h,10);if(h==='credits')i=slides.length-1;else if(start>0)i=Math.min(real,start)-1;
 fit();show();
 })();`;
 
@@ -255,9 +264,29 @@ async function embeddedFonts(families: Set<string>): Promise<string> {
   return out.join('\n');
 }
 
+/** A credit line as HTML, with its web addresses as links. */
+function creditHtml(line: string): string {
+  return line.split(/(https?:\/\/\S+)/i).map((part, i) => (i % 2 ? `<a href="${escapeHtml(part)}" target="_blank" rel="noopener noreferrer">${escapeHtml(part)}</a>` : escapeHtml(part))).join('');
+}
+
+/**
+ * The page after the last slide that credits each picture, numbered as the page numbers its
+ * slides. Empty when nothing needs a credit, or when the deck has its own credits slide.
+ */
+async function creditsPage(slides: Deck['slides']): Promise<string> {
+  if (slides.some((s) => s.kind === 'credits')) return '';
+  const uses = deckPictures({ slides });
+  const credits = await pictureCredits(uses.map((u) => u.ref)).catch(() => new Map());
+  const items = uses.map((u) => ({ slides: u.slides, line: pictureLine(u.ref, credits.get(u.ref)) })).filter((i) => i.line);
+  if (!items.length) return '';
+  const list = items.map((i) => `<li><b>${slidesLabel(i.slides)}</b>${creditHtml(i.line)}</li>`).join('');
+  return `<section class="page-slide page-credits" data-steps="0" aria-label="Picture credits" hidden><h2>Picture credits</h2><ul>${list}</ul></section>`;
+}
+
 /**
  * A view-only copy of the whole deck as one web page: the slides exactly as
- * designed, with click-by-click reveals, and no notes or script.
+ * designed, with click-by-click reveals, and no notes or script. Picture credits
+ * follow the last slide.
  */
 export async function deckHtml(deck: Deck): Promise<string> {
   const [{ renderToStaticMarkup }, { createElement, Fragment }, { BoxView }, slidesCss] = await Promise.all([
@@ -279,6 +308,8 @@ export async function deckHtml(deck: Deck): Promise<string> {
     }))));
     sections.push(`<section class="page-slide" data-steps="${layout.steps}" aria-label="Slide ${n + 1}"${n ? ' hidden' : ''} style="background:${escapeHtml(layout.background)}"><div class="slide-canvas" style="width:${CANVAS_W}px;height:${CANVAS_H}px">${markup}</div></section>`);
   }
+  const credits = await creditsPage(visible);
+  if (credits) sections.push(credits);
   const fonts = await embeddedFonts(new Set([theme.display.web, theme.body.web, theme.mono.web].flatMap(familyNames)));
   const body = `<div class="stage" id="stage">
 ${sections.join('\n')}

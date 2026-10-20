@@ -2,6 +2,7 @@ import type { Audience, DeckPurpose } from '../../core/deck/types';
 import { allKinds } from '../../core/kinds/registry';
 import type { DeckDraft } from '../../core/plugins/api';
 import { draftingHints } from '../../core/plugins/registry';
+import type { Density } from '../../data/profile';
 
 export interface AiStatus {
   available: boolean;
@@ -37,6 +38,12 @@ export interface DraftRequest {
   minutes: number;
   material?: string;
   title?: string;
+  /** Answers to the AI's questions and remembered preferences. */
+  answers?: { question: string; answer: string }[];
+  /** How much goes on a slide. */
+  density?: Density;
+  /** Pictures the AI may place, by id ("pic1"), as small JPEGs. */
+  pictures?: { id: string; name: string; mime: string; data: string }[];
 }
 
 /** Kinds the server may use: core ones plus any a mod registered, with their fields. */

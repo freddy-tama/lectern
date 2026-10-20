@@ -2,7 +2,9 @@
 
 import Dexie, { type EntityTable } from 'dexie';
 import type { Deck } from '../core/deck/types';
+import type { PictureCredit } from '../core/pictures/credits';
 import type { LectureNotes, TranscriptSegment } from '../core/transcribe/types';
+import { quotaWatch } from './storage';
 
 export type CourseColor = 'coral' | 'amber' | 'olive' | 'teal' | 'sky' | 'indigo' | 'plum' | 'slate';
 
@@ -135,6 +137,8 @@ export interface Asset {
   mime: string;
   name: string;
   createdAt: number;
+  /** Where a picture came from and its licence. Pictures from before the picture finder have none. */
+  credit?: PictureCredit;
 }
 
 export interface StudyMark {
@@ -180,3 +184,6 @@ export class LecternDB extends Dexie {
 }
 
 export const db = new LecternDB();
+
+// A save that fails because the browser is out of space reaches the app's storage warning.
+db.use(quotaWatch);

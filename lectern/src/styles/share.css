@@ -982,6 +982,14 @@
   color: var(--ink-2);
 }
 
+.phone-credit {
+  margin: 0;
+  padding: 0 4px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .phone-files-btn {
   display: flex;
   align-items: center;

@@ -4,6 +4,7 @@ import { installedPlugins } from '../../core/plugins/registry';
 import { resetAll } from '../../data/repo';
 import { Dialog } from '../../ui/Dialog';
 import { useToast } from '../../ui/Toast';
+import { BackupPanel } from '../backup/BackupPanel';
 
 /** Mods that live in this repository's /plugins folder. */
 const KNOWN = [
@@ -77,23 +78,24 @@ export function ModsPage() {
 
       <section className="section" aria-labelledby="data-title">
         <div className="section-head"><h2 id="data-title">Your data</h2></div>
-        <div className="prose">
-          <p>Courses, lessons and decks are saved in this browser only. Clearing site data removes them.</p>
+        <BackupPanel />
+        <div className="backup-reset">
+          <p className="faint">Start over with the sample courses. This deletes everything in this browser.</p>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmReset(true)}><RotateCcw size={15} /> Reset to the samples…</button>
         </div>
-        <button type="button" className="btn btn-secondary" style={{ marginTop: 14 }} onClick={() => setConfirmReset(true)}><RotateCcw size={16} /> Restore the sample courses</button>
       </section>
 
       <Dialog
         open={confirmReset}
         onClose={() => setConfirmReset(false)}
-        title="Restore the sample courses?"
-        description="This deletes every course, lesson and deck in this browser and loads the samples again. It can’t be undone."
+        title="Reset to the sample courses?"
+        description="This deletes every course, lesson, deck, note and recording in this browser and loads the samples again. It can’t be undone."
         footer={<>
           <button type="button" className="btn btn-ghost" onClick={() => setConfirmReset(false)}>Keep my data</button>
-          <button type="button" className="btn btn-primary" style={{ background: 'var(--danger)', color: '#fff' }} onClick={async () => { setConfirmReset(false); await resetAll(true); toast.show('Sample courses restored'); }}>Delete and restore</button>
+          <button type="button" className="btn btn-primary" style={{ background: 'var(--danger)', color: '#fff' }} onClick={async () => { setConfirmReset(false); await resetAll(true); toast.show('Sample courses loaded'); }}>Delete and reset</button>
         </>}
       >
-        <p className="muted">Export any deck you want to keep first (Studio → Export).</p>
+        <p className="muted">Download a backup first if you might want any of it back.</p>
       </Dialog>
     </div>
   );
