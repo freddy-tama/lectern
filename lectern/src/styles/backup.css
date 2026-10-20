@@ -179,3 +179,105 @@
   border-top: 1px solid var(--line);
   font-size: 13.5px;
 }
+
+/* ─── Backup reminder, at the top of the page ───────────── */
+
+.backup-nudge {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 18px 40px 0;
+}
+
+.backup-nudge-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 10px 10px 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: color-mix(in srgb, var(--sunk) 55%, var(--panel));
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.backup-nudge-icon {
+  flex: none;
+  color: var(--ink-3);
+}
+
+.backup-nudge-text {
+  flex: 1 1 320px;
+  min-width: 0;
+  margin: 0;
+}
+
+.backup-nudge-text strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.backup-nudge-text a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.backup-nudge-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+@media (max-width: 860px) {
+  .backup-nudge {
+    padding: 14px 16px 0;
+  }
+
+  .backup-nudge-icon {
+    display: none;
+  }
+}
+
+/* ─── Install Lectern, in the storage card ──────────────── */
+
+.backup-install {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.backup-install-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+}
+
+.backup-install-head h4 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 auto 0 0;
+  font-size: 14.5px;
+  color: var(--ink);
+}
+
+.backup-install-head h4 svg {
+  flex: none;
+  color: var(--ink-2);
+}
+
+.backup-install p {
+  margin: 0;
+}
+
+.backup-install strong {
+  font-weight: 600;
+  color: var(--ink);
+}
