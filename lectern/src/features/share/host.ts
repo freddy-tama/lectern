@@ -12,7 +12,8 @@ import type { Deck } from '../../core/deck/types';
 import { getTheme, isBuiltInTheme } from '../../core/engine/themes';
 import {
   DEFAULT_OPTIONS, type GuestMessage, type HostMessage, type JoinMetadata, type LiveState, type PollResult, type Role,
-  type SharePackage, type ShareOptions, assetIds, deckForRole, joinUrl, newCode, newToken, peerIdFor, pollChoices, splitParts, tally,
+  type SharePackage, type ShareOptions, assetIds, deckForRole, joinUrl, newCode, newToken, peerIdFor, pollChoices, sharedAsset, splitParts,
+  tally,
 } from '../../core/share/protocol';
 import {
   type BoardRow, DEFAULT_QUIZ, QuizEngine, type QuizResults, type QuizSettings, type QuizStage, type QuizView,
@@ -139,7 +140,7 @@ async function packageFor(role: Role): Promise<string | null> {
   const assets: SharePackage['assets'] = [];
   for (const id of assetIds({ shared, custom })) {
     const asset = await db.assets.get(id);
-    if (asset) assets.push({ id, mime: asset.mime, name: asset.name, data: await blobToDataUrl(asset.blob) });
+    if (asset) assets.push(sharedAsset(asset, await blobToDataUrl(asset.blob)));
   }
   const pkg: SharePackage = { format: 'lectern-share', version: 1, role, deck: shared, theme: custom, assets, options: snap.options };
   const json = JSON.stringify(pkg);

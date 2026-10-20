@@ -21,6 +21,8 @@ export interface PptxOptions {
   resolveImage?: (src: string) => Promise<string | null>;
   /** Default 'blob' in browsers, 'nodebuffer' otherwise. */
   output?: 'blob' | 'nodebuffer';
+  /** A credit line for each picture source. Slides that show a credited picture get it in their speaker notes. */
+  credits?: Record<string, string>;
 }
 
 export interface PptxResult {
@@ -64,6 +66,13 @@ export function keyNotesText(notes: KeyNotes): string {
   if (links.length) lines.push(`Links: ${links.map((l) => (l.label ? `${l.label} — ${l.url}` : l.url)).join('; ')}`);
   if (lines.length) blocks.push(lines.join('\n'));
   return blocks.join('\n\n');
+}
+
+/** The speaker-notes block that credits the pictures on one slide. Empty when none of them has a credit. */
+export function pictureCreditsText(boxes: Box[], credits: Record<string, string> | undefined): string {
+  if (!credits) return '';
+  const lines = [...new Set(boxes.filter((b): b is ImageBox => b.type === 'image').map((b) => credits[b.src]?.trim()).filter(Boolean))];
+  return lines.length ? [lines.length === 1 ? 'Picture credit' : 'Picture credits', ...lines.map((l) => `• ${l}`)].join('\n') : '';
 }
 
 function safeFileName(title: string): string {
@@ -553,10 +562,8 @@ export async function exportDeckToPptx(deck: Deck, options: PptxOptions = {}): P
           warnings.push(`${label}: a ${box.type} could not be exported (${error instanceof Error ? error.message : String(error)}).`);
         }
       }
-      if (includeNotes && slide.notes) {
-        const notes = keyNotesText(slide.notes);
-        if (notes) page.addNotes(notes);
-      }
+      const notes = [includeNotes && slide.notes ? keyNotesText(slide.notes) : '', pictureCreditsText(layout.boxes, options.credits)].filter(Boolean).join('\n\n');
+      if (notes) page.addNotes(notes);
       pages.push(meta);
       animate.push(mode === 'animate' && steps > 0);
     }

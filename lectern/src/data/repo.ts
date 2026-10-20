@@ -1,6 +1,7 @@
 import type { Deck } from '../core/deck/types';
 import { uid } from '../core/deck/types';
 import { type Asset, type Course, type CourseColor, COURSE_COLORS, type Lesson, type Note, type Recording, db } from './db';
+import { keepStorage } from './storage';
 
 export async function ensureSeeded() {
   const seeded = await db.settings.get('seeded');
@@ -207,6 +208,7 @@ function unlink(note: Note, deckId?: string, lessonId?: string): Note {
 
 export async function saveDeck(deck: Deck) {
   await db.decks.put({ ...deck, updatedAt: Date.now() });
+  keepStorage();
 }
 
 /** Stores a new deck and, when it belongs to a lesson, links it. */
@@ -215,6 +217,7 @@ export async function addDeck(deck: Deck) {
     await db.decks.put(deck);
     if (deck.lessonId) await db.lessons.update(deck.lessonId, { deckId: deck.id, updatedAt: Date.now() });
   });
+  keepStorage();
 }
 
 export async function deleteDeck(id: string): Promise<() => Promise<void>> {

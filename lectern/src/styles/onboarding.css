@@ -1,0 +1,437 @@
+/* ─── First-run questionnaire (/start) ──────────────────── */
+
+.ob {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background:
+    radial-gradient(1200px 600px at 110% -10%, color-mix(in srgb, var(--brand) 9%, transparent), transparent 60%),
+    var(--bg);
+}
+
+.ob-top {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 32px;
+}
+
+.ob-progress {
+  display: flex;
+  gap: 6px;
+  margin: 0 auto;
+  padding: 0;
+  list-style: none;
+}
+
+.ob-progress li {
+  width: 34px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--line-strong);
+  transition: background var(--t-med);
+}
+
+.ob-progress li.is-done {
+  background: var(--ink-3);
+}
+
+.ob-progress li.is-current {
+  background: var(--brand);
+}
+
+.ob-layout {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
+  gap: 48px;
+  width: min(1160px, 100%);
+  margin: 0 auto;
+  padding: 24px 32px 64px;
+  align-items: start;
+}
+
+.ob-step {
+  display: grid;
+  gap: 10px;
+  max-width: 640px;
+  animation: ob-in var(--t-med) var(--ease-out);
+}
+
+@keyframes ob-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+.ob-title {
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  outline: none;
+}
+
+.ob-help {
+  font-size: 15.5px;
+  max-width: 52ch;
+  margin-bottom: 14px;
+}
+
+.ob-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.ob-cards-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ob-card,
+.ob-toggle {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+  box-shadow: var(--shadow-1);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+}
+
+.ob-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-2);
+}
+
+.ob-card:active {
+  transform: scale(0.995);
+}
+
+.ob-card[aria-checked='true'] {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink), var(--shadow-2);
+}
+
+.ob-card-icon,
+.ob-toggle-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--sunk);
+  color: var(--ink-2);
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.ob-toggle-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+}
+
+.ob-card[aria-checked='true'] .ob-card-icon {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.ob-card-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ob-card-text strong {
+  font-size: 15.5px;
+  font-weight: 620;
+}
+
+.ob-card-text span {
+  font-size: 13.5px;
+  color: var(--ink-3);
+}
+
+.ob-check {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  color: transparent;
+  transition: background var(--t-fast), border-color var(--t-fast), color var(--t-fast);
+}
+
+.ob-card[aria-checked='true'] .ob-check {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--panel);
+}
+
+.ob-style {
+  display: grid;
+  gap: 22px;
+}
+
+.ob-field {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.ob-pills {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ob-pill {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  text-align: left;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+
+.ob-pill strong {
+  font-size: 14.5px;
+  font-weight: 620;
+}
+
+.ob-pill span {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.ob-pill[aria-checked='true'],
+.ob-chip[aria-checked='true'] {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+
+.ob-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ob-chip {
+  height: 34px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 13.5px;
+  font-weight: 560;
+  color: var(--ink-2);
+}
+
+.ob-chip[aria-checked='true'] {
+  color: var(--ink);
+}
+
+.ob-themes {
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+}
+
+.ob-toggles {
+  display: grid;
+  gap: 8px;
+}
+
+/* The label is also a .switch, which draws its checkbox as a toggle. */
+.ob-toggle.switch {
+  display: grid;
+  font-size: inherit;
+  cursor: pointer;
+}
+
+.ob-toggle-ai {
+  background: color-mix(in srgb, var(--brand-soft) 45%, var(--panel));
+}
+
+.ob-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+/* Preview */
+
+.ob-preview {
+  position: sticky;
+  top: 24px;
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  backdrop-filter: blur(6px);
+  box-shadow: var(--shadow-2);
+}
+
+.ob-mock {
+  display: grid;
+  grid-template-columns: 128px minmax(0, 1fr);
+  min-height: 150px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.ob-mock-nav {
+  display: grid;
+  align-content: start;
+  gap: 3px;
+  padding: 10px 8px;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--sunk) 55%, var(--bg));
+}
+
+.ob-mock-make,
+.ob-mock-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 6px;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 560;
+  color: var(--ink-2);
+  animation: ob-in var(--t-med) var(--ease-out);
+}
+
+.ob-mock-make {
+  margin-bottom: 4px;
+  white-space: nowrap;
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+.ob-mock-link.is-on {
+  background: var(--panel);
+  color: var(--ink);
+  box-shadow: var(--shadow-1);
+}
+
+.ob-mock-home {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding: 12px;
+}
+
+.ob-mock-lead {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ob-mock-drop,
+.ob-mock-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 52px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-3);
+}
+
+.ob-mock-drop {
+  border: 1.5px dashed var(--line-strong);
+  background: var(--panel);
+}
+
+.ob-mock-card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.ob-mock-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.ob-mock-row i {
+  height: 26px;
+  border-radius: 7px;
+  background: var(--sunk);
+}
+
+.ob-sample {
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--shadow-1);
+}
+
+.ob-summary {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .ob-top {
+    padding: 14px 16px;
+  }
+
+  .ob-progress li {
+    width: 18px;
+  }
+
+  .ob-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    padding: 8px 16px 48px;
+  }
+
+  .ob-preview {
+    position: static;
+    order: 2;
+  }
+
+  .ob-cards-2,
+  .ob-pills {
+    grid-template-columns: 1fr;
+  }
+
+  .ob-actions {
+    position: sticky;
+    bottom: 0;
+    margin: 12px -16px 0;
+    padding: 12px 16px;
+    background: color-mix(in srgb, var(--bg) 92%, transparent);
+    backdrop-filter: blur(6px);
+    border-top: 1px solid var(--line);
+  }
+
+  .ob-actions .btn-lg {
+    flex: 1;
+  }
+}
+
+@media (max-width: 520px) {
+  .ob-top .logo-word {
+    display: none;
+  }
+}

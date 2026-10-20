@@ -6,7 +6,12 @@
   "outputDirectory": "dist",
   "functions": {
     "api/draft-deck.ts": { "maxDuration": 300 },
-    "api/lecture-notes.ts": { "maxDuration": 300 }
+    "api/deck-questions.ts": { "maxDuration": 120 },
+    "api/lecture-notes.ts": { "maxDuration": 300 },
+    "api/revise-slide.ts": { "maxDuration": 300 },
+    "api/picture-search.ts": { "maxDuration": 30 },
+    "api/picture-fetch.ts": { "maxDuration": 60 },
+    "api/picture-generate.ts": { "maxDuration": 180 }
   },
   "rewrites": [
     { "source": "/((?!api/|assets/|samples/).*)", "destination": "/index.html" }

@@ -37,6 +37,34 @@ interface DraftBody {
   title?: unknown;
   kinds?: unknown;
   hints?: unknown;
+  /** Answers to the AI's questions and remembered preferences, as { question, answer }. */
+  answers?: unknown;
+  /** How much goes on a slide: visual, balanced or detailed. */
+  density?: unknown;
+  /** Pictures from the person's files: { id, name, mime, data (base64) }. */
+  pictures?: unknown;
+}
+
+interface Picture {
+  id: string;
+  name: string;
+  mime: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif';
+  data: string;
+}
+
+const PICTURE_ID = /^pic\d{1,2}$/;
+const PICTURE_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'] as const;
+
+function cleanPictures(raw: unknown): Picture[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, 8).flatMap((p): Picture[] => {
+    const o = (p ?? {}) as Record<string, unknown>;
+    const id = text(o.id, 8);
+    const mime = text(o.mime, 20) as Picture['mime'];
+    const data = typeof o.data === 'string' ? o.data : '';
+    if (!PICTURE_ID.test(id) || !PICTURE_MIMES.includes(mime) || !data || data.length > 400_000 || !/^[A-Za-z0-9+/=]+$/.test(data)) return [];
+    return [{ id, name: text(o.name, 120), mime, data }];
+  });
 }
 
 function json(data: unknown, status = 200) {
@@ -64,7 +92,7 @@ function cleanCatalogue(raw: unknown): CatalogueKind[] {
 }
 
 /** One JSON-schema variant per slide kind, built from its editable fields. */
-function slideSchema(kinds: CatalogueKind[]) {
+function slideSchema(kinds: CatalogueKind[], pictures: Picture[]) {
   const notes = {
     type: 'object',
     additionalProperties: false,
@@ -81,7 +109,10 @@ function slideSchema(kinds: CatalogueKind[]) {
   const variants = kinds.map((k) => {
     const properties: Record<string, unknown> = {};
     for (const f of k.fields) {
-      if (f.type === 'image') continue;
+      if (f.type === 'image') {
+        if (pictures.length) properties[f.key] = { type: 'string', enum: ['', ...pictures.map((p) => p.id)], description: 'The id of a provided picture, or an empty string.' };
+        continue;
+      }
       if (f.type === 'text' || f.type === 'textarea') properties[f.key] = { type: 'string' };
       else if (f.type === 'toggle') properties[f.key] = { type: 'boolean' };
       else if (f.type === 'list') properties[f.key] = { type: 'array', items: { type: 'string' } };
@@ -146,9 +177,15 @@ const PURPOSE_RULES: Record<Purpose, string> = {
 - Never invent data. Use only figures from the material.`,
 };
 
+const DENSITY_RULES: Record<string, string> = {
+  visual: 'Mostly pictures, few words: at most 3 very short points or about 20 words on a slide. Prefer statement, image, big-number, diagram and gallery slides over bullet lists. Everything else goes in notes.script. Where a picture would help and none is provided, add the cue "Picture: <what to show>" so the presenter knows what to add.',
+  balanced: 'Balanced: short points with visuals; follow the audience limits.',
+  detailed: 'Detailed: slides may carry fuller points (up to the audience limit), tables and charts, so the deck also works when read without a presenter. Keep explanations in notes.script.',
+};
+
 const PURPOSE_NOUN: Record<Purpose, string> = { lesson: 'teaching slide decks', talk: 'slide decks for talks', pitch: 'pitch decks', report: 'slide decks for reports' };
 
-function systemPrompt(kinds: CatalogueKind[], hints: string, purpose: Purpose) {
+function systemPrompt(kinds: CatalogueKind[], hints: string, purpose: Purpose, pictures: Picture[]) {
   const catalogue = kinds.map((k) => `- ${k.kind} (${k.label}): ${k.description} Fields: ${k.fields.filter((f) => f.type !== 'image').map((f) => `${f.key} [${f.type}${f.fields ? `: ${f.fields.join(', ')}` : ''}]`).join(', ')}`).join('\n');
   return `You plan ${PURPOSE_NOUN[purpose]}. Every slide has audience-facing content and key notes for the presenter and for people who read the deck on their own.
 
@@ -161,7 +198,9 @@ How to write a deck:
 - Plan the minutes so the slides add up to the session length.
 - Facts in the provided material are authoritative; use them as written and do not contradict them. Do not invent statistics, quotes or sources; if you are not sure a figure is right, leave it out.
 - Write in the language of the topic and material.
-- Leave image fields out; the presenter adds pictures.
+${pictures.length
+  ? '- Pictures from the material are attached, each with an id such as "pic1". Put a picture\'s id in an image field where the picture supports the slide; use each picture at most once and leave image fields empty when nothing fits. Never describe a picture you cannot see.'
+  : '- Leave image fields out; the presenter adds pictures.'}
 
 What this deck is for:
 ${PURPOSE_RULES[purpose]}
@@ -179,7 +218,7 @@ export async function POST(request: Request) {
   const code = process.env.LECTERN_ACCESS_CODE;
   if (code && request.headers.get('x-lectern-code') !== code) return json({ error: 'Enter the access code for this server to use AI drafting.' }, 401);
   const length = Number(request.headers.get('content-length') ?? 0);
-  if (length > 400_000) return json({ error: 'The material is too long. Paste a shorter section.' }, 413);
+  if (length > 4_000_000) return json({ error: 'The material is too long. Use fewer files or pictures.' }, 413);
 
   let body: DraftBody;
   try {
@@ -197,15 +236,29 @@ export async function POST(request: Request) {
   const kinds = cleanCatalogue(body.kinds);
   if (!kinds.length) return json({ error: 'No slide types were sent.' }, 400);
   const hints = text(body.hints, 4_000);
+  const pictures = cleanPictures(body.pictures);
+  const density = ['visual', 'balanced', 'detailed'].includes(String(body.density)) ? String(body.density) : '';
+  const answers = Array.isArray(body.answers)
+    ? (body.answers as Record<string, unknown>[]).slice(0, 16).map((a) => ({ q: text(a?.question, 300), a: text(a?.answer, 300) })).filter((a) => a.a)
+    : [];
 
   const client = new Anthropic();
   const user = [
     `Make a ${purpose} deck for a ${minutes}-minute session.`,
     `Audience: ${AUDIENCE_RULES[audience]}`,
+    density ? `Words on a slide: ${DENSITY_RULES[density]}` : '',
     `What the deck is about: ${topic}`,
     title ? `Deck title: ${title}` : '',
+    answers.length ? `The presenter's answers and preferences (follow them):\n${answers.map((a) => `- ${a.q ? `${a.q} → ` : ''}${a.a}`).join('\n')}` : '',
     material ? `Material to draw from:\n<material>\n${material}\n</material>` : '',
   ].filter(Boolean).join('\n\n');
+  const content: Anthropic.Beta.BetaContentBlockParam[] = [
+    { type: 'text', text: user },
+    ...pictures.flatMap((p): Anthropic.Beta.BetaContentBlockParam[] => [
+      { type: 'text', text: `Picture ${p.id}${p.name ? ` (${p.name})` : ''}:` },
+      { type: 'image', source: { type: 'base64', media_type: p.mime, data: p.data } },
+    ]),
+  ];
 
   try {
     // Streamed so a long draft never hits a request timeout; finalMessage() gathers it.
@@ -215,9 +268,9 @@ export async function POST(request: Request) {
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: slideSchema(kinds) } },
-      system: systemPrompt(kinds, hints, purpose),
-      messages: [{ role: 'user', content: user }],
+      output_config: { effort: 'medium', format: { type: 'json_schema', schema: slideSchema(kinds, pictures) } },
+      system: systemPrompt(kinds, hints, purpose, pictures),
+      messages: [{ role: 'user', content }],
     }).finalMessage();
     if (response.stop_reason === 'refusal') return json({ error: 'The AI declined to draft this topic. Try rewording it, or start from your notes.' }, 422);
     if (response.stop_reason === 'max_tokens') return json({ error: 'The draft ran too long. Try a shorter session or less material.' }, 422);

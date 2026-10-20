@@ -5,7 +5,9 @@ import { LessonPage } from '../features/courses/LessonPage';
 import { DecksPage } from '../features/home/DecksPage';
 import { Home } from '../features/home/Home';
 import { ModsPage } from '../features/home/ModsPage';
+import { PreferencesPage } from '../features/settings/PreferencesPage';
 import { ToastProvider } from '../ui/Toast';
+import { StorageGuard } from '../features/backup/StorageGuard';
 import { SharePanel } from '../features/share/SharePanel';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Shell } from './Shell';
@@ -21,6 +23,8 @@ const SchedulePage = lazy(() => import('../features/schedule/SchedulePage'));
 const RecordingsPage = lazy(() => import('../features/recordings/RecordingsPage'));
 const RecordingDetail = lazy(() => import('../features/recordings/RecordingDetail'));
 const Landing = lazy(() => import('../features/landing/Landing'));
+const Onboarding = lazy(() => import('../features/onboarding/Onboarding'));
+const MakePage = lazy(() => import('../features/autodeck/MakePage'));
 const JoinPage = lazy(() => import('../features/share/JoinPage'));
 const SavedDeck = lazy(() => import('../features/share/JoinPage').then((m) => ({ default: m.SavedDeck })));
 const PackPage = lazy(() => import('../features/share/PackPage').then((m) => ({ default: m.PackPage })));
@@ -56,6 +60,7 @@ function Guarded({ children }: { children: React.ReactNode }) {
 export function App() {
   return (
     <ToastProvider>
+      <StorageGuard />
       <BrowserRouter>
         <Guarded>
           <Routes>
@@ -70,8 +75,11 @@ export function App() {
               <Route path="recordings/:recordingId" element={<RecordingDetail />} />
               <Route path="decks" element={<DecksPage />} />
               <Route path="mods" element={<ModsPage />} />
+              <Route path="make" element={<MakePage />} />
+              <Route path="settings" element={<PreferencesPage />} />
             </Route>
             <Route path="welcome" element={<Landing />} />
+            <Route path="start" element={<Onboarding />} />
             <Route path="join" element={<JoinPage />} />
             <Route path="join/:code" element={<JoinPage />} />
             <Route path="phone/:deckId" element={<SavedDeck />} />

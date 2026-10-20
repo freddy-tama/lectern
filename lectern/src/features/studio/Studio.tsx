@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import {
-  AlertTriangle, ArrowLeft, BookOpen, ChevronDown, ClipboardList, Copy, Download, EyeOff, FileJson, FileText, MonitorPlay,
-  Plus, PresentationIcon, Redo2, ScrollText, Shapes, Trash2, Undo2,
+  AlertTriangle, ArrowLeft, BookOpen, ChevronDown, ClipboardList, Copy, Copyright, Download, EyeOff, FileJson, FileText, MonitorPlay,
+  Plus, PresentationIcon, Redo2, Scissors, ScrollText, Shapes, Trash2, Undo2,
   Globe, QrCode as QrIcon, Trophy,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -9,8 +9,10 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { NotFound } from '../../app/App';
 import { cloneSlide, makeSlide } from '../../core/deck/draft';
 import { wording } from '../../core/deck/purpose';
+import { canSplit, fitsOnSlide, isOverflowWarning, splitInDeck, splitSlide } from '../../core/deck/split';
 import { type KeyNotes, type Slide, deckMinutes, deckPurpose } from '../../core/deck/types';
 import type { SlideLayout } from '../../core/engine/boxes';
+import { getTheme } from '../../core/engine/themes';
 import { getKind } from '../../core/kinds/registry';
 import { deckFields, exporters } from '../../core/plugins/registry';
 import { db } from '../../data/db';
@@ -20,8 +22,11 @@ import { Menu } from '../../ui/Menu';
 import { useToast } from '../../ui/Toast';
 import { minutesLabel } from '../../ui/format';
 import { SlideNotesButton } from '../notes/SlideNotesButton';
+import { PictureContext, type PictureSlideContext } from '../pictures/context';
+import { PictureCredits } from '../pictures/PictureCredits';
 import { openPresenter } from '../present/sync';
 import { SlideView } from '../slides/SlideView';
+import { AskAboutThis } from './AskAboutThis';
 import { AudienceMenu } from './AudienceMenu';
 import { convertSlide } from './convert';
 import { DeckDetailsDialog } from './DeckDetailsDialog';
@@ -33,6 +38,7 @@ import { KindPicker } from './KindPicker';
 import { LookMenu } from './LookMenu';
 import { NotesPanel } from './NotesPanel';
 import { SlideRail } from './SlideRail';
+import { AiMenu, ProposalBar, ProposalNotes, ProposalStage, useSlideRevision } from './SlideAi';
 import { useDeckEditor } from './useDeckEditor';
 
 export default function Studio() {
@@ -47,6 +53,7 @@ export default function Studio() {
   const [layout, setLayout] = useState<SlideLayout | null>(null);
   const [busy, setBusy] = useState('');
   const [details, setDetails] = useState(false);
+  const [credits, setCredits] = useState(false);
   const context = useLiveQuery(async () => {
     if (!deck?.lessonId) return null;
     const lesson = await db.lessons.get(deck.lessonId);
@@ -64,6 +71,7 @@ export default function Studio() {
 
   const index = deck ? Math.max(0, deck.slides.findIndex((s) => s.id === selectedId)) : 0;
   const slide = deck?.slides[index];
+  const revision = useSlideRevision({ deck, slide, change });
 
   const updateSlide = useCallback((id: string, fn: (s: Slide) => Slide, key?: string) => {
     change((d) => ({ ...d, slides: d.slides.map((s) => (s.id === id ? fn(s) : s)) }), key);
@@ -99,6 +107,22 @@ export default function Studio() {
     toast.show('Slide deleted', { action: { label: 'Undo', run: () => { undo(); setSelectedId(id); } } });
   };
 
+  /** Moves the items that don't fit onto a new slide of the same kind, in one undo step. */
+  const splitHere = () => {
+    if (!deck || !slide) return;
+    const pair = splitSlide(slide, { fits: (s) => fitsOnSlide(s, deck) });
+    if (!pair) return;
+    const id = slide.id;
+    change((d) => splitInDeck(d, id, pair));
+    toast.show('Split into two slides', { action: { label: 'Undo', run: () => { undo(); setSelectedId(id); } } });
+  };
+
+  /** Adds an answer from Ask to the end of the script. */
+  const insertIntoNotes = (id: string, value: string) => {
+    updateSlide(id, (s) => ({ ...s, notes: { ...s.notes, script: s.notes.script.trim() ? `${s.notes.script.trimEnd()}\n\n${value}` : value } }));
+    toast.show('Added to the script', { action: { label: 'Undo', run: () => undo() } });
+  };
+
   const move = (delta: number) => {
     if (!deck) return;
     const to = index + delta;
@@ -118,12 +142,14 @@ export default function Studio() {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.ctrlKey || e.metaKey;
       if (document.querySelector('dialog[open], .menu')) return;
+      if ((e.target as HTMLElement | null)?.closest?.('.ask-pop')) return;
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
       const typing = (e.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable="true"]');
       if (typing) { if (e.key === 'Escape') (e.target as HTMLElement).blur(); return; }
       const { deck: d, index: i, selectedId: id } = keyState.current;
       if (!d) return;
+      if (e.key === 'Escape' && revision.proposal) { e.preventDefault(); revision.discard(); return; }
       if (e.key === 'F5' || (mod && e.key === 'Enter')) { e.preventDefault(); navigate(`/present/${d.id}${e.shiftKey ? `?from=${i}` : ''}`); return; }
       if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(id); return; }
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); move(e.key === 'ArrowUp' ? -1 : 1); return; }
@@ -136,6 +162,8 @@ export default function Studio() {
   });
 
   const focusBind = useCallback((bind: string) => {
+    // Selecting text on the slide is for Ask, not for jumping to its field.
+    if (window.getSelection()?.toString().trim()) return;
     setActiveBind(bind);
     requestAnimationFrame(() => {
       const el = document.querySelector<HTMLElement>(`[data-bind="${CSS.escape(bind)}"]`) ?? document.querySelector<HTMLElement>(`[data-bind="${CSS.escape(bind.split('.')[0])}"]`);
@@ -165,7 +193,11 @@ export default function Studio() {
         const warnings = await exportPptx(deck, kind === 'pptx' ? 'animate' : 'build');
         toast.show(warnings.length ? `PowerPoint saved. ${warnings.length} item${warnings.length === 1 ? '' : 's'} could not be included.` : 'PowerPoint saved, with key notes as speaker notes');
       } else if (kind === 'json') {
-        exportJson(deck);
+        const { pictures, missing } = await exportJson(deck);
+        const withPictures = pictures ? `, with ${pictures} picture${pictures === 1 ? '' : 's'}` : '';
+        toast.show(missing
+          ? `Deck file saved${withPictures}. ${missing} picture${missing === 1 ? ' was' : 's were'} no longer in this browser.`
+          : `Deck file saved${withPictures}. Open it from Decks → Open a deck file.`, { duration: 5000 });
       } else if (kind === 'web') {
         const { deckHtml } = await import('../share/standalone');
         downloadBlob(new Blob([await deckHtml(deck)], { type: 'text/html;charset=utf-8' }), `${safeName(deck.title)}.html`);
@@ -197,9 +229,44 @@ export default function Studio() {
   const def = slide ? getKind(slide.kind) : undefined;
   const flags = useMemo(() => ({}), []);
 
+  // What the picture finder knows about this slide: words to search for, the frame's shape, and the deck's look.
+  const pictureContext = useMemo<PictureSlideContext | null>(() => {
+    if (!deck || !slide) return null;
+    const kind = getKind(slide.kind);
+    const heading = kind?.heading(slide.content) ?? '';
+    return {
+      kind: slide.kind,
+      variant: slide.variant,
+      // Kinds name themselves when they have no title ("Gallery"): search for the deck's subject instead.
+      heading: heading && heading !== kind?.label ? heading : deck.title,
+      text: kind?.text(slide.content) ?? [],
+      deckTitle: deck.title,
+      theme: getTheme(deck.themeId),
+      audience: deck.audience,
+      purpose: deckPurpose(deck),
+    };
+  }, [deck, slide]);
+
+  /** Adds a credits slide at the end, or refreshes the deck's credits slide. */
+  const creditsSlide = (lines: string[]) => {
+    if (!deck) return;
+    const existing = deck.slides.find((s) => s.kind === 'credits');
+    if (existing) {
+      updateSlide(existing.id, (s) => ({ ...s, content: { ...s.content, lines } }));
+      setSelectedId(existing.id);
+      return;
+    }
+    const made = makeSlide('credits', { lines }, { minutes: 0.5, script: '' });
+    change((d) => ({ ...d, slides: [...d.slides, made] }));
+    setSelectedId(made.id);
+  };
+
   if (deck === undefined) return <div className="page-loading"><div className="spinner" /></div>;
   if (deck === null) return <NotFound message="This deck was deleted or never existed." />;
   const back = context?.lesson ? `/lessons/${context.lesson.id}` : '/decks';
+  const shown = deck.slides.filter((s) => !s.hidden);
+  const shownNumber = slide ? shown.indexOf(slide) + 1 : 0;
+  const shownCount = shown.length;
 
   return (
     <div className="studio">
@@ -234,7 +301,8 @@ export default function Studio() {
                 <button type="button" className="menu-item" onClick={() => { close(); doExport('pptx-build'); }}><Copy size={16} /><span>PowerPoint, one slide per step<span className="menu-detail">For Google Slides and Keynote</span></span></button>
                 <button type="button" className="menu-item" onClick={() => { close(); doExport('web'); }}><Globe size={16} /><span>Web page, view only<span className="menu-detail">One file that opens in any browser, offline. No notes</span></span></button>
                 <button type="button" className="menu-item" onClick={() => { close(); navigate(`/print/${deck.id}`); }}><FileText size={16} /><span>Key notes handout<span className="menu-detail">Print or save as PDF</span></span></button>
-                <button type="button" className="menu-item" onClick={() => { close(); doExport('json'); }}><FileJson size={16} /><span>Lectern deck file<span className="menu-detail">A backup you can open again</span></span></button>
+                <button type="button" className="menu-item" onClick={() => { close(); doExport('json'); }}><FileJson size={16} /><span>Lectern deck file<span className="menu-detail">The whole deck with its pictures, to open again in Lectern</span></span></button>
+                <button type="button" className="menu-item" onClick={() => { close(); setCredits(true); }}><Copyright size={16} /><span>Picture credits<span className="menu-detail">Where each picture came from. Copy them or add a credits slide</span></span></button>
                 {exporters().map((x) => (
                   <button key={x.id} type="button" className="menu-item" onClick={() => { close(); doExport(x.id); }}><Shapes size={16} /><span>{x.label}<span className="menu-detail">{x.description}</span></span></button>
                 ))}
@@ -278,41 +346,57 @@ export default function Studio() {
         {slide && (
           <>
             <Stage>
-              <SlideView
-                slide={slide}
-                deck={deck}
-                number={deck.slides.filter((s) => !s.hidden).indexOf(slide) + 1}
-                count={deck.slides.filter((s) => !s.hidden).length}
-                mode="edit"
-                step={step}
-                ghostLater
-                flags={flags}
-                onSelectBind={focusBind}
-                activeBind={activeBind}
-                onLayout={setLayout}
-                className="stage-slide"
-                label={`Slide ${index + 1} preview`}
-              />
+              {revision.proposal ? (
+                <ProposalStage revision={revision} slide={slide} deck={deck} number={shownNumber} count={shownCount} />
+              ) : (
+                <SlideView
+                  slide={slide}
+                  deck={deck}
+                  number={shownNumber}
+                  count={shownCount}
+                  mode="edit"
+                  step={step}
+                  ghostLater
+                  flags={flags}
+                  onSelectBind={focusBind}
+                  activeBind={activeBind}
+                  onLayout={setLayout}
+                  className="stage-slide"
+                  label={`Slide ${index + 1} preview`}
+                />
+              )}
             </Stage>
             <div className="stage-bar">
-              {layout && layout.steps > 0 ? (
-                <div className="segmented" role="group" aria-label="Preview reveal step">
-                  <button type="button" aria-pressed={step === undefined} onClick={() => setStep(undefined)}>All</button>
-                  {Array.from({ length: layout.steps + 1 }, (_, k) => (
-                    <button key={k} type="button" aria-pressed={step === k} onClick={() => setStep(k)}>{k === 0 ? 'Start' : `Click ${k}`}</button>
-                  ))}
-                </div>
-              ) : <span className="faint" style={{ fontSize: 13 }}>Click any text on the slide to edit it.</span>}
-              {layout?.warnings.length ? (
-                <span className="stage-warning" role="status"><AlertTriangle size={14} /> {layout.warnings[0]}</span>
-              ) : null}
+              {revision.proposal ? <ProposalBar revision={revision} /> : (
+                <>
+                  {layout && layout.steps > 0 ? (
+                    <div className="segmented" role="group" aria-label="Preview reveal step">
+                      <button type="button" aria-pressed={step === undefined} onClick={() => setStep(undefined)}>All</button>
+                      {Array.from({ length: layout.steps + 1 }, (_, k) => (
+                        <button key={k} type="button" aria-pressed={step === k} onClick={() => setStep(k)}>{k === 0 ? 'Start' : `Click ${k}`}</button>
+                      ))}
+                    </div>
+                  ) : <span className="faint" style={{ fontSize: 13 }}>Click any text on the slide to edit it. Select text to ask about it.</span>}
+                  {layout?.warnings.length ? (
+                    <StageWarning warnings={layout.warnings} canSplit={canSplit(slide)} onSplit={splitHere} />
+                  ) : null}
+                  <span className="stage-tools">
+                    <AiMenu slide={slide} disabled={!def} onRun={revision.run} onSplit={splitHere} />
+                  </span>
+                </>
+              )}
             </div>
-            <NotesPanel
-              slide={slide}
-              purpose={deckPurpose(deck)}
-              onChange={(notes: KeyNotes, key) => updateSlide(slide.id, (s) => ({ ...s, notes }), key)}
-              aside={<SlideNotesButton deckId={deck.id} slideId={slide.id} slideNumber={index + 1} lessonId={context?.lesson?.id} courseId={context?.course?.id} />}
-            />
+            {revision.proposal?.status === 'ready' ? (
+              <ProposalNotes revision={revision} slide={slide} purpose={deckPurpose(deck)} />
+            ) : (
+              <NotesPanel
+                slide={slide}
+                purpose={deckPurpose(deck)}
+                onChange={(notes: KeyNotes, key) => updateSlide(slide.id, (s) => ({ ...s, notes }), key)}
+                aside={<SlideNotesButton deckId={deck.id} slideId={slide.id} slideNumber={index + 1} lessonId={context?.lesson?.id} courseId={context?.course?.id} />}
+              />
+            )}
+            <AskAboutThis deck={deck} slide={slide} disabled={Boolean(revision.proposal)} onInsert={(t) => insertIntoNotes(slide.id, t)} />
           </>
         )}
       </div>
@@ -342,11 +426,13 @@ export default function Studio() {
               </div>
             )}
             {def ? (
-              <Fields
-                fields={def.fields}
-                content={slide.content}
-                onChange={(key, value) => updateSlide(slide.id, (s) => ({ ...s, content: { ...s.content, [key]: value } }), `${slide.id}:${key}`)}
-              />
+              <PictureContext.Provider value={pictureContext}>
+                <Fields
+                  fields={def.fields}
+                  content={slide.content}
+                  onChange={(key, value) => updateSlide(slide.id, (s) => ({ ...s, content: { ...s.content, [key]: value } }), `${slide.id}:${key}`)}
+                />
+              </PictureContext.Provider>
             ) : (
               <p className="muted">This slide comes from a mod that isn’t installed. Its content is kept and shows again when the mod is on.</p>
             )}
@@ -358,10 +444,26 @@ export default function Studio() {
           </>
         )}
       </aside>
+      <PictureCredits open={credits} deck={deck} onClose={() => setCredits(false)} onCreditsSlide={creditsSlide} />
       {deckFields().length > 0 && (
         <DeckDetailsDialog open={details} deck={deck} onClose={() => setDetails(false)} onSave={(extra) => change((d) => ({ ...d, extra }), 'details')} />
       )}
     </div>
+  );
+}
+
+/** The stage's first warning, overflow first; when the slide is too full, a one-click Split. */
+function StageWarning({ warnings, canSplit: splittable, onSplit }: { warnings: string[]; canSplit: boolean; onSplit(): void }) {
+  const overflow = warnings.find(isOverflowWarning);
+  return (
+    <span className="stage-warning-group">
+      <span className="stage-warning" role="status"><AlertTriangle size={14} /> {overflow ?? warnings[0]}</span>
+      {overflow && splittable && (
+        <button type="button" className="btn btn-secondary btn-sm stage-split" onClick={onSplit} title="Move what doesn’t fit onto a new slide of the same type">
+          <Scissors size={14} /> Split
+        </button>
+      )}
+    </span>
   );
 }
 

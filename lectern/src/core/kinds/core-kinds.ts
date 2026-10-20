@@ -531,7 +531,50 @@ const closing: SlideKindDefinition<C> = {
   },
 };
 
-export const CORE_KINDS: AnyKind[] = [title, section, agenda, bullets, compare, image, quote, term, stats, steps, question, recall, summary, closing];
+const credits: SlideKindDefinition<C> = {
+  kind: 'credits', label: 'Credits', description: 'Picture credits and sources in small type, in one or two columns.', icon: 'copyright', group: 'Close',
+  fields: [
+    { key: 'title', label: 'Title', type: 'text' },
+    { key: 'lines', label: 'Credits', type: 'list', itemLabel: 'Credit', max: 40, help: 'Export → Picture credits fills this in from the deck’s pictures.' },
+  ],
+  create: () => ({ title: 'Picture credits', lines: ['“Title” by the photographer · CC BY 4.0 · where it came from'] }),
+  heading: (c) => read.str(c, 'title') || 'Credits',
+  // Credits are reference text nobody reads aloud, so they don't count against the slide's word budget.
+  text: (c) => [read.str(c, 'title')].filter(Boolean),
+  layout(c, ctx) {
+    const { box, bottom } = slideTitle(ctx, read.str(c, 'title') || 'Credits');
+    const lines = read.list(c, 'lines');
+    const boxes: Box[] = [box];
+    if (!lines.length) return { boxes };
+    // Credits are reference text: small, the same size throughout, two columns when there are many.
+    const cols = lines.length > 7 ? 2 : 1;
+    const gap = 72;
+    const colW = (M.w - gap * (cols - 1)) / cols;
+    const perCol = Math.ceil(lines.length / cols);
+    const columns = Array.from({ length: cols }, (_, k) => lines.slice(k * perCol, (k + 1) * perCol));
+    const room = M.bottom - bottom;
+    const lineGap = (s: number) => Math.round(s * 0.55);
+    const height = (s: number, part: string[]) => part.reduce((sum, l) => sum + heightAt(ctx, l, s, colW, 'body', 1.3), 0) + lineGap(s) * (part.length - 1);
+    let size = 28;
+    while (size > 14 && columns.some((part) => height(size, part) > room)) size -= 1;
+    if (columns.some((part) => height(size, part) > room)) ctx.warnings.push('These credits don’t fit on one slide. Split them over two credits slides.');
+    columns.forEach((part, k) => {
+      let y = bottom;
+      part.forEach((line, j) => {
+        const i = k * perCol + j;
+        const h = Math.ceil(heightAt(ctx, line, size, colW, 'body', 1.3));
+        boxes.push({
+          type: 'text', id: `line-${i}`, x: M.x + k * (colW + gap), y, w: colW, h, text: line, bind: `lines.${i}`,
+          style: { font: 'body', size, weight: fontWeight(ctx.theme, 'body'), color: ctx.theme.colors.muted, align: 'left', valign: 'top', lineHeight: 1.3 },
+        });
+        y += h + lineGap(size);
+      });
+    });
+    return { boxes };
+  },
+};
+
+export const CORE_KINDS: AnyKind[] = [title, section, agenda, bullets, compare, image, quote, term, stats, steps, question, recall, summary, closing, credits];
 
 let registered = false;
 export function registerCoreKinds() {

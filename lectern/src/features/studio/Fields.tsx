@@ -1,7 +1,14 @@
-import { Check, ImagePlus, Link2, Plus, Trash2, X } from 'lucide-react';
+import { Check, ExternalLink, ImagePlus, Plus, Search, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FieldSpec } from '../../core/kinds/types';
-import { assetUrl, saveAsset } from '../../data/repo';
+import { RIGHTS_LABEL, captionCredit, creditLine, needsCredit, shortCredit } from '../../core/pictures/credits';
+import { searchWords } from '../../core/pictures/rank';
+import { assetUrl } from '../../data/repo';
+import { useToast } from '../../ui/Toast';
+import { NoServerError, downloadPicture } from '../pictures/api';
+import { frameShape, searchesFrom, usePictureContext } from '../pictures/context';
+import { PictureFinder } from '../pictures/PictureFinder';
+import { dismissResult, isStarred, savePicture, starPicture, undismissResult, unstarPicture, useCredit, usePictureMemory } from '../pictures/store';
 
 type Content = Record<string, unknown>;
 
@@ -66,7 +73,7 @@ function Field({ spec, content, onChange, prefix }: { spec: FieldSpec; content: 
     case 'objects':
       return <ObjectsField spec={spec} content={content} onChange={onChange} bind={bind} />;
     case 'image':
-      return <ImageField spec={spec} value={typeof value === 'string' ? value : ''} onChange={(v) => onChange(spec.key, v)} bind={bind} />;
+      return <ImageField spec={spec} value={typeof value === 'string' ? value : ''} onChange={(v) => onChange(spec.key, v)} bind={bind} siblings={content} onSibling={onChange} nested={Boolean(prefix)} />;
     default:
       return null;
   }
@@ -175,49 +182,158 @@ function ObjectsField({ spec, content, onChange, bind }: { spec: Extract<FieldSp
   );
 }
 
-function ImageField({ spec, value, onChange, bind }: { spec: Extract<FieldSpec, { type: 'image' }>; value: string; onChange(v: string): void; bind: string }) {
+function ImageField({ spec, value, onChange, bind, siblings, onSibling, nested }: {
+  spec: Extract<FieldSpec, { type: 'image' }>; value: string; onChange(v: string): void; bind: string;
+  /** The other fields next to this one: a gallery item's caption, a person's name, the slide's title. */
+  siblings: Content; onSibling(key: string, value: unknown): void; nested: boolean;
+}) {
+  const context = usePictureContext();
+  const toast = useToast();
   const [url, setUrl] = useState<string | null>(null);
-  const [linking, setLinking] = useState(false);
-  const [link, setLink] = useState('');
+  const [finding, setFinding] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [over, setOver] = useState(false);
   const [error, setError] = useState('');
   const input = useRef<HTMLInputElement>(null);
+  const credit = useCredit(value);
+  const memory = usePictureMemory();
+  const isAsset = value.startsWith('asset:');
+  const starred = isAsset && isStarred(memory, value);
+  const str = (key: string) => (typeof siblings[key] === 'string' ? (siblings[key] as string) : '');
+  // A picture's caption says best what it shows; then the item's name, the slide's heading and the deck's subject.
+  const searches = nested
+    ? searchesFrom(str('caption'), str('name'), str('label'), context?.heading, context?.deckTitle)
+    : searchesFrom(str('caption'), str('term'), context?.heading, context?.deckTitle);
+  const query = searches[0] ?? '';
+  const shape = frameShape(context?.kind ?? '', context?.variant, spec.key);
+
   useEffect(() => {
     let alive = true;
     if (!value) setUrl(null);
     else assetUrl(value).then((u) => alive && setUrl(u));
     return () => { alive = false; };
   }, [value]);
-  const take = async (file: File | undefined) => {
+
+  const run = async (job: () => Promise<string>) => {
+    setError('');
+    setBusy(true);
+    try {
+      onChange(await job());
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const take = (file: File | undefined) => {
     setError('');
     if (!file) return;
-    if (!file.type.startsWith('image/')) { setError('Choose an image file (PNG, JPEG, WebP, GIF or SVG).'); return; }
-    if (file.size > 12 * 1024 * 1024) { setError('This image is over 12 MB. Choose a smaller one.'); return; }
-    onChange(await saveAsset(file, file.name));
+    if (!file.type.startsWith('image/')) { setError('Choose a picture file: JPEG, PNG, WebP, GIF or SVG.'); return; }
+    if (file.size > 12 * 1024 * 1024) { setError('This picture is over 12 MB. Choose a smaller one.'); return; }
+    void run(() => savePicture(file, file.name, { source: 'upload', rights: 'own' }));
   };
+
+  /** A picture dragged from a web page arrives as a link; it's downloaded like a pasted one. */
+  const takeLink = (link: string) => run(async () => {
+    try {
+      const { blob, url: final } = await downloadPicture(link);
+      return await savePicture(blob, 'Picture', { source: 'link', rights: 'unclear', url: final });
+    } catch (e) {
+      if (e instanceof NoServerError) return link;
+      throw e;
+    }
+  });
+
+  const remove = async () => {
+    const before = value;
+    const from = credit?.resultId && credit.query ? credit : null;
+    onChange('');
+    if (from) await dismissResult(from.query!, from.resultId!);
+    toast.show(from ? `Picture removed. It won’t be suggested for “${from.query}” again.` : 'Picture removed', {
+      action: { label: 'Undo', run: () => { onChange(before); if (from) void undismissResult(from.query!, from.resultId!); } },
+    });
+  };
+
+  const toggleStar = async () => {
+    if (!isAsset) return;
+    if (starred) await unstarPicture(value);
+    else await starPicture(value, searchWords(`${credit?.query ?? ''} ${query} ${credit?.title ?? ''}`), credit?.title || query);
+  };
+
+  // Image and gallery slides have a caption: offer to put a credit there, where the audience sees it.
+  const caption = credit && needsCredit(credit) && 'caption' in siblings && !str('caption').trim() ? captionCredit(credit) : '';
+
   return (
     <div className="field image-field" data-bind={bind} tabIndex={-1}>
       <span className="field-label">{spec.label}</span>
       <div
-        className={`image-drop ${url ? 'has-image' : ''}`}
-        onDragOver={(e) => e.preventDefault()}
-        onDrop={(e) => { e.preventDefault(); take(e.dataTransfer.files[0]); }}
+        className={`image-drop ${url ? 'has-image' : ''} ${over ? 'over' : ''}`}
+        onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setOver(false);
+          const file = e.dataTransfer.files[0];
+          const link = e.dataTransfer.getData('text/uri-list').split('\n').find((l) => /^https?:\/\//i.test(l.trim()));
+          if (file) take(file);
+          else if (link) void takeLink(link.trim());
+        }}
       >
-        {url ? <img src={url} alt="" /> : <span className="faint">Drop an image here</span>}
+        {url ? <img src={url} alt="" /> : (
+          <button type="button" className="image-drop-find" onClick={() => setFinding(true)}>
+            <Search size={18} aria-hidden />
+            <span>Find a picture</span>
+            <span className="faint">or drop one here</span>
+          </button>
+        )}
+        {busy && <span className="image-busy"><span className="spinner" /></span>}
       </div>
+      {value && (credit ? (
+        <div className="image-credit">
+          <span className={`pf-rights rights-${credit.rights}`}>{RIGHTS_LABEL[credit.rights]}</span>
+          <span className="image-credit-line" title={creditLine(credit) || undefined}>{shortCredit(credit)}</span>
+          {(credit.page || credit.url) && <a href={credit.page || credit.url} target="_blank" rel="noopener noreferrer" className="image-credit-link" aria-label="Open where this picture came from" title="Open where this picture came from"><ExternalLink size={13} /></a>}
+        </div>
+      ) : /^https?:\/\//i.test(value) ? (
+        <div className="image-credit">
+          <span className="image-credit-line">Linked from {hostOf(value)}. It shows only while that site keeps it.</span>
+          <button type="button" className="btn btn-ghost btn-xs" onClick={() => takeLink(value)} disabled={busy}>Keep a copy</button>
+        </div>
+      ) : null)}
+      {caption && (
+        <button type="button" className="btn btn-ghost btn-xs image-caption-btn" onClick={() => onSibling('caption', caption)} title={caption}>
+          <Plus size={13} /> Show the credit as the caption
+        </button>
+      )}
       <div className="image-actions">
-        <button type="button" className="btn btn-secondary btn-sm" onClick={() => input.current?.click()}><ImagePlus size={14} /> {value ? 'Replace' : 'Upload'}</button>
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setLinking((x) => !x)}><Link2 size={14} /> Link</button>
-        {value && <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => onChange('')}><Trash2 size={14} /> Remove</button>}
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setFinding(true)}><Search size={14} /> {value ? 'Change' : 'Find a picture'}</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => input.current?.click()} disabled={busy}><ImagePlus size={14} /> Upload</button>
+        {isAsset && (
+          <button type="button" className={`icon-btn image-star ${starred ? 'on' : ''}`} onClick={toggleStar} aria-pressed={starred}
+            aria-label={starred ? 'Starred: offered first for similar searches. Click to unstar' : 'Star this picture to reuse it in other slides'}
+            title={starred ? 'Starred: offered first when you search for something similar' : 'Star to reuse it in other slides'}>
+            <Star size={15} fill={starred ? 'currentColor' : 'none'} />
+          </button>
+        )}
+        {value && <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={remove}><Trash2 size={14} /> Remove</button>}
         <input ref={input} type="file" accept="image/*" hidden onChange={(e) => { take(e.target.files?.[0]); e.target.value = ''; }} />
       </div>
-      {linking && (
-        <form className="link-row" onSubmit={(e) => { e.preventDefault(); if (/^https?:\/\//i.test(link.trim())) { onChange(link.trim()); setLinking(false); setLink(''); } else setError('Paste a link that starts with http:// or https://'); }}>
-          <input className="input" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" aria-label="Image link" autoFocus />
-          <button type="submit" className="btn btn-primary btn-sm">Use link</button>
-        </form>
-      )}
-      {error && <span className="field-help" style={{ color: 'var(--danger)' }}>{error}</span>}
+      {error && <span className="field-help" role="alert" style={{ color: 'var(--danger)' }}>{error}</span>}
       {spec.help && <span className="field-help">{spec.help}</span>}
+      <PictureFinder
+        open={finding}
+        onClose={() => setFinding(false)}
+        query={query}
+        suggestions={searches.slice(1, 4)}
+        shape={shape}
+        context={context}
+        onPick={(ref, note) => { onChange(ref); setFinding(false); if (note) toast.show(note, { duration: 6000 }); }}
+      />
     </div>
   );
+}
+
+function hostOf(url: string) {
+  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return 'another site'; }
 }

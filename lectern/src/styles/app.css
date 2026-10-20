@@ -986,3 +986,204 @@
   display: grid;
   gap: 10px;
 }
+
+/* ─── Make a deck, in the sidebar ───────────────────────── */
+
+.nav-make {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 40px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-radius: 11px;
+  background: var(--brand);
+  color: var(--brand-ink);
+  font-size: 14px;
+  font-weight: 620;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.1), 0 4px 14px color-mix(in srgb, var(--brand) 28%, transparent);
+  transition: background var(--t-fast), transform var(--t-fast);
+}
+
+.nav-make:hover {
+  background: color-mix(in srgb, var(--brand) 88%, black);
+}
+
+.nav-make:active {
+  transform: scale(0.99);
+}
+
+.nav-make.active {
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--brand);
+}
+
+/* ─── Home: recent recordings ───────────────────────────── */
+
+.home-recordings {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.home-recording {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+}
+
+.home-recording-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--sunk);
+  color: var(--ink-2);
+}
+
+.home-recording-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.home-recording-text strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14.5px;
+}
+
+.home-recording-text span {
+  font-size: 12.5px;
+}
+
+/* ─── Preferences ───────────────────────────────────────── */
+
+.prefs {
+  max-width: 880px;
+}
+
+.prefs-section {
+  margin-top: 30px;
+}
+
+.prefs-help {
+  margin: -6px 0 12px;
+  font-size: 14px;
+  max-width: 64ch;
+}
+
+.prefs-focus {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px;
+}
+
+.audience-option.prefs-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.prefs-option > span:last-child {
+  display: grid;
+  gap: 1px;
+  color: var(--ink);
+  font-size: inherit;
+}
+
+.prefs-option > span:last-child span {
+  font-size: 12.5px;
+  color: var(--ink-3);
+}
+
+.prefs-option-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--sunk);
+  color: var(--ink-2);
+}
+
+.prefs-option[aria-checked='true'] .prefs-option-icon {
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.prefs-list {
+  display: grid;
+  margin: 0;
+  padding: 4px 16px;
+  list-style: none;
+}
+
+.prefs-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 52px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.prefs-row:last-child {
+  border-bottom: 0;
+}
+
+.prefs-row-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+}
+
+.prefs-row-label svg {
+  color: var(--ink-3);
+}
+
+.prefs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 14px;
+  padding: 18px;
+}
+
+.prefs-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 22px 0 10px;
+  font-size: 15px;
+}
+
+.prefs-answer {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.prefs-answer .faint {
+  font-size: 12.5px;
+}
+
+.prefs-answer strong {
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.prefs-forget-all {
+  margin-top: 8px;
+}
+
+.shell-drop-hint {
+  z-index: 60;
+}

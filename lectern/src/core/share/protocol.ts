@@ -4,6 +4,8 @@
 import type { Deck, Slide } from '../deck/types';
 import { deckPurpose, emptyNotes } from '../deck/types';
 import type { Theme } from '../engine/themes';
+import type { PictureCredit } from '../pictures/credits';
+import type { Asset } from '../../data/db';
 import type { PlayerView, QuizStage, QuizView } from './quiz';
 
 /** The presenter's own phone (teleprompter and remote) or someone watching. */
@@ -36,6 +38,8 @@ export interface SharedAsset {
   name: string;
   /** Base64 data URL. */
   data: string;
+  /** Where a picture came from, so the phone can credit it too. */
+  credit?: PictureCredit;
 }
 
 /** Everything a phone needs to show the deck with no further connection. */
@@ -167,6 +171,26 @@ export function assetIds(value: unknown, found = new Set<string>()): Set<string>
     for (const v of Object.values(value)) assetIds(v, found);
   }
   return found;
+}
+
+/** A stored picture as it travels to a phone: the file, with its credit. */
+export function sharedAsset(asset: Pick<Asset, 'id' | 'mime' | 'name' | 'credit'>, data: string): SharedAsset {
+  return { id: asset.id, mime: asset.mime, name: asset.name, data, ...(asset.credit ? { credit: asset.credit } : {}) };
+}
+
+function dataUrlToBlob(data: string): Blob {
+  const [head = '', body = ''] = data.split(',');
+  const mime = /data:([^;]+)/.exec(head)?.[1] ?? 'application/octet-stream';
+  const bytes = atob(body);
+  const arr = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+  return new Blob([arr], { type: mime });
+}
+
+/** A picture from a share package, ready to keep on the phone with its credit. */
+export function receivedAsset(shared: SharedAsset, now = Date.now()): Asset {
+  const credit = shared.credit && typeof shared.credit === 'object' ? shared.credit : undefined;
+  return { id: shared.id, blob: dataUrlToBlob(shared.data), mime: shared.mime, name: shared.name, createdAt: now, ...(credit ? { credit } : {}) };
 }
 
 /** Splits text into parts small enough for any browser's data channel. */

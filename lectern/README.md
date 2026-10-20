@@ -2,7 +2,7 @@
 
 Make presentations for anything (talks, pitches, reports and lessons) and run your classes week by week. Lectern turns notes into well-designed slides and gives every slide **key notes**: what you'll say, what the audience should take away, and the question you expect. The same notes feed the presenter view, the teleprompter, review mode, the printed handout and the PowerPoint speaker notes.
 
-It runs in the browser and saves to the browser (IndexedDB). There's no account and no server-side storage. Recorded lectures are transcribed in the browser too. The only server features are optional: AI drafting and AI class notes.
+It runs in the browser and saves to the browser (IndexedDB). There's no account and no server-side storage. Recorded lectures are transcribed in the browser too. The only server features are optional: picture search, AI drafting, AI pictures and AI class notes.
 
 ## What you can do
 
@@ -13,7 +13,8 @@ It runs in the browser and saves to the browser (IndexedDB). There's no account 
 | **Schedule** | Week, month and agenda views of lessons and dated notes. Drag to reschedule, click an empty slot to add a lesson or note, and export everything to your calendar app (.ics). |
 | **Notes** | Plans, reflections after class ("How did it go?"), reminders and ideas, with checklists, tags and pins. Link a note to a course, lesson, deck or a single slide; it then shows up there, in the presenter view and on the schedule. Press N anywhere to jot one down. |
 | **Recordings** | Record a class with the microphone, or drop in a recording (mp3, m4a, wav, webm, ogg, or a video). It's transcribed on your device, so the audio never leaves the browser. The transcript follows the audio as it plays: click any line to jump there, search it, edit it, and export it as text or subtitles (SRT, VTT). Link a recording to its lesson, save the transcript or a passage as a note, and, with AI set up, turn it into class notes (summary, key points, a to-do list, quiz questions) and a quiz deck. |
-| **Studio** | 22 slide types laid out for you on a 16:9 canvas. **Open:** title, section, agenda. **Explain:** points, compare, quote, key term, steps, timeline, statement, code. **Data:** big numbers, charts (column, bar, line, pie, doughnut), tables. **Pictures and diagrams:** image, gallery, people, diagram (cycle, funnel, 2×2). **Engage:** question or poll, quick recall. **Close:** takeaways, closing. Click any text on the slide to edit it. Undo, redo and autosave work everywhere. |
+| **Studio** | 23 slide types laid out for you on a 16:9 canvas. **Open:** title, section, agenda. **Explain:** points, compare, quote, key term, steps, timeline, statement, code. **Data:** big numbers, charts (column, bar, line, pie, doughnut), tables. **Pictures and diagrams:** image, gallery, people, diagram (cycle, funnel, 2×2). **Engage:** question or poll, quick recall. **Close:** takeaways, closing, credits. Click any text on the slide to edit it. Undo, redo and autosave work everywhere. |
+| **Pictures** | **Find a picture** on any image field searches Openverse and Wikimedia Commons (and Pexels, with a key) for pictures you may reuse, starting from the slide's heading. Results are ranked by size, shape and licence, and logos and icons are left out. You can also paste a link, upload, or make one with AI when the server has an image model. Every picture is kept in the browser with its source, author and licence. **Export ▸ Picture credits** lists them all, copies them, and adds or updates a credits slide; credits also go in the PowerPoint speaker notes and the handout. ★ a picture to have it offered first for similar searches, and a search result you hide or remove isn't suggested again for that search. |
 | **Purpose** | Each deck is a Lesson, Talk, Pitch or Report. The purpose sets the wording of the key notes and review mode, the presenter's cue ideas and how AI drafts the deck. Classroom wording only appears on lessons. |
 | **Looks** | Six built-in looks, plus your own: colours, heading and body fonts, corner style, a logo and footer text, with a live preview. Three audience sizes (young learners, teens, adults) set type size and how many words a slide can hold. |
 | **Key notes** | On every slide: a script, takeaways, a likely question with its answer, cues ("Pause", "Show the number") and the minutes the slide should take. |
@@ -111,14 +112,20 @@ See [docs/mods.md](docs/mods.md) to write your own.
 ## Deploy to Vercel
 
 1. Import the repository in Vercel. If Lectern isn't at the repository root, set **Root Directory** to the `lectern` folder.
-2. Vercel reads [`vercel.json`](vercel.json): a Vite build to `dist/`, single-page routing, and the AI function in `api/`.
+2. Vercel reads [`vercel.json`](vercel.json): a Vite build to `dist/`, single-page routing, and the functions in `api/`.
 3. Optional environment variables:
 
 | Variable | What it does |
 |---|---|
 | `ANTHROPIC_API_KEY` | Turns on "With AI" drafting and AI class notes from recordings. Without it, both explain that they aren't set up, and everything else works, transcription included. |
 | `LECTERN_MODEL` | The model that drafts decks and writes class notes. Default `claude-opus-5-5`. |
-| `LECTERN_ACCESS_CODE` | People must enter this code before AI drafting or class notes run, so a public site doesn't spend your credit for strangers. |
+| `LECTERN_ACCESS_CODE` | People must enter this code before AI drafting, AI pictures or class notes run, so a public site doesn't spend your credit for strangers. Picture search works without it. |
+| `OPENAI_API_KEY` | Turns on **Make with AI** in the picture finder, with OpenAI's `gpt-image-1-mini`. Claude doesn't make pictures, so this is a second provider. Without an image key the tab is hidden. |
+| `GEMINI_API_KEY` | The same with Google's Gemini image model (`gemini-3.1-flash-image`), used when there's no OpenAI key. |
+| `LECTERN_IMAGE_PROVIDER` | `openai`, `gemini` or `off`. Picks one when both keys are set, or turns AI pictures off. |
+| `LECTERN_IMAGE_MODEL` | The image model for that provider, for example `gpt-image-1` or `gemini-3-pro-image`. |
+| `PEXELS_API_KEY` | Adds [Pexels](https://www.pexels.com/api/) photos to picture search. Openverse and Wikimedia Commons need no key. |
+| `OPENVERSE_CLIENT_ID`, `OPENVERSE_CLIENT_SECRET` | Optional [Openverse API credentials](https://api.openverse.org/v1/). Anonymous use has low rate limits shared by everyone using your server; search results are cached for an hour to help. |
 | `LECTERN_PLUGINS` | Build with mods, for example `chinese,lesson-plan`. Leave it empty for the general edition. |
 | `VITE_PEER_HOST`, `VITE_PEER_PORT`, `VITE_PEER_PATH`, `VITE_PEER_KEY` | Your own [PeerJS server](https://github.com/peers/peerjs-server) for Share to phones. By default PeerJS's free public server introduces devices; slides, state and votes then go straight between them. |
 | `VITE_ICE_SERVERS` | JSON list of your own STUN/TURN servers, for networks that block direct connections. |
@@ -128,6 +135,10 @@ For local AI drafting, put the same variables in `.env.local`. The dev server se
 ### How AI drafting works
 
 [`api/draft-deck.ts`](api/draft-deck.ts) sends the topic, the audience and any material you paste to Claude. It asks for a structured-output JSON schema built from the slide types installed in that build, mods included. The reply is streamed, so long decks don't time out. Server-side refusal fallback (`fallbacks: "default"`) is on: if the model declines a request, the API retries it on Anthropic's recommended fallback model. The returned deck goes through the same path as an outline, so key notes are filled in and timed the same way.
+
+### How pictures are found and kept
+
+[`api/picture-search.ts`](api/picture-search.ts) asks each library separately, so fast answers show while slow ones are still coming, and the browser ranks the results. [`api/picture-fetch.ts`](api/picture-fetch.ts) downloads the picture you pick, or a link you paste, so nothing is hotlinked and other sites' CORS rules don't matter. It accepts only http and https on ports 80 and 443, refuses local and private addresses, and checks every address again when it connects, so a name that changes its answer can't reach a private network. Redirects are checked the same way. Files over 12 MB are refused, and the type comes from the file's first bytes (JPEG, PNG, WebP or GIF), never from its name. The browser then scales very large photos to 2400 px and stores the picture as an asset with its credit. [`api/picture-generate.ts`](api/picture-generate.ts) sends your description, with a style taken from the deck's look and audience, to the image provider.
 
 ### How transcription works
 
@@ -151,14 +162,15 @@ src/
     deck/          deck and key-notes types, outline parser, drafting, word counts
     transcribe/    transcript segments, search, SRT/VTT/text export, audio sectioning
     engine/        box layout on a 1920×1080 canvas, text measuring, themes
-    kinds/         the slide-type contract, layout kit and the 14 core types
+    kinds/         the slide-type contract, layout kit and the core types
+    pictures/      picture credits, licences and search ranking
     export/        PowerPoint export (pptxgenjs)
     import/        Word / PowerPoint / Markdown → outline
     plugins/       the mod contract and registry
   data/            IndexedDB (Dexie): courses, lessons, decks, notes, recordings, assets, study progress
   features/        home, courses, studio, present, study, notes, schedule, share, recordings
   ui/              dialogs, menus, toasts, formatting
-api/               Vercel functions for AI drafting and class notes
+api/               Vercel functions for AI drafting, class notes, picture search, download and AI pictures
 plugins/           mods, each a folder with an index.ts
 tests/             vitest: seed data, PowerPoint export, mods
 ```

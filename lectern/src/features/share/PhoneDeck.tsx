@@ -4,14 +4,17 @@
 import {
   AArrowDown, AArrowUp, ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Download, EyeOff, LoaderCircle, Maximize, Radio, ScrollText, WifiOff, X,
 } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { Deck, Slide } from '../../core/deck/types';
 import { deckPurpose } from '../../core/deck/types';
 import { wording } from '../../core/deck/purpose';
 import { getKind } from '../../core/kinds/registry';
+import { slideCreditLines, slidePictures } from '../../core/pictures/credits';
 import { type LiveState, type PollResult, type Role, type ShareOptions, pollChoices } from '../../core/share/protocol';
 import { useKeys } from '../../ui/hooks';
+import { pictureCredits } from '../pictures/store';
 import { advance, retreat, useLiveDeck } from '../present/useLiveDeck';
 import { SlideView } from '../slides/SlideView';
 import { exportPptx } from '../studio/download';
@@ -33,6 +36,13 @@ function clock(ms: number) {
   const m = Math.floor((s % 3600) / 60);
   const sec = String(s % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
+}
+
+/** The credit lines for the pictures on a slide, from this phone's copy of them. */
+function useSlideCredits(slide: Slide | undefined): string[] {
+  const refs = slide ? slidePictures(slide) : [];
+  const credits = useLiveQuery(() => pictureCredits(refs), [refs.join('|')]);
+  return useMemo(() => (slide && credits ? slideCreditLines(slide, credits) : []), [slide, credits]);
 }
 
 /** Keeps the phone's screen on while presenting. */
@@ -210,6 +220,7 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
     if (e.key === 'ArrowRight') go(index + 1);
     else if (e.key === 'ArrowLeft') go(index - 1);
   }, [index, count]);
+  const creditLines = useSlideCredits(slide);
 
   if (!slide) return null;
   const question = live ? link.quiz?.question : null;
@@ -292,6 +303,10 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
             <p>{n.check.question}</p>
             {reveal ? <p className="muted">{n.check.answer}</p> : n.check.answer && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setReveal(true)}>Show the answer</button>}
           </section>
+        )}
+
+        {creditLines.length > 0 && (
+          <p className="phone-credit faint">{creditLines.length === 1 ? 'Picture credit' : 'Picture credits'}: {creditLines.join('; ')}</p>
         )}
 
         <button type="button" className="phone-files-btn" onClick={() => setFiles(true)}>
