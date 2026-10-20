@@ -60,7 +60,14 @@ function devApi(): Plugin {
           const response = await handler(new Request(`http://localhost${url}`, { method, headers, body: body ? new Uint8Array(body) : undefined }));
           res.statusCode = response.status;
           response.headers.forEach((v, k) => res.setHeader(k, v));
-          res.end(Buffer.from(await response.arrayBuffer()));
+          // Streamed as it comes, so event streams (the deck assistant's step cards) arrive live, as on Vercel.
+          const reader = response.body?.getReader();
+          for (;;) {
+            const chunk = reader ? await reader.read() : { done: true as const, value: undefined };
+            if (chunk.done) break;
+            res.write(chunk.value);
+          }
+          res.end();
         } catch (error) {
           server.config.logger.error(String(error));
           res.statusCode = 500;
