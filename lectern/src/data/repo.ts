@@ -46,8 +46,8 @@ export async function loadSampleData() {
 
 /** Removes everything and loads the samples again. */
 export async function resetAll(withSamples = true) {
-  await db.transaction('rw', [db.courses, db.lessons, db.decks, db.assets, db.study, db.notes, db.recordings], async () => {
-    await Promise.all([db.courses.clear(), db.lessons.clear(), db.decks.clear(), db.assets.clear(), db.study.clear(), db.notes.clear(), db.recordings.clear()]);
+  await db.transaction('rw', [db.courses, db.lessons, db.decks, db.assets, db.study, db.notes, db.recordings, db.jobs], async () => {
+    await Promise.all([db.courses.clear(), db.lessons.clear(), db.decks.clear(), db.assets.clear(), db.study.clear(), db.notes.clear(), db.recordings.clear(), db.jobs.clear()]);
   });
   if (withSamples) await loadSampleData();
 }

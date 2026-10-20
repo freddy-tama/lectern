@@ -750,3 +750,462 @@
     padding: 36px 16px 30px;
   }
 }
+
+/* ─── Outline: the plan to check before the slides are written ─── */
+
+.ol {
+  display: grid;
+  gap: 18px;
+  max-width: 880px;
+}
+
+.ol-head {
+  display: grid;
+  gap: 6px;
+}
+
+.ol-deck-title {
+  width: 100%;
+  margin: 0 -8px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--ink);
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  transition: background var(--t-fast), box-shadow var(--t-fast);
+}
+
+.ol-deck-title:hover {
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.ol-deck-title:focus {
+  outline: none;
+  background: var(--panel);
+  box-shadow: 0 0 0 2px var(--focus);
+}
+
+.ol-lead {
+  margin: 0;
+  max-width: 62ch;
+}
+
+.ol-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ol-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 4px 8px;
+  padding: 8px 8px 10px 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--panel);
+  animation: ad-in var(--t-med) var(--ease-out);
+}
+
+.ol-row:focus-within {
+  border-color: var(--line-strong);
+}
+
+.ol-row.is-dragging {
+  z-index: 2;
+  box-shadow: var(--shadow-3);
+}
+
+.ol-grip {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink-3);
+  cursor: grab;
+  touch-action: none;
+}
+
+.ol-grip:hover {
+  background: var(--sunk);
+  color: var(--ink);
+}
+
+.ol-row.is-dragging .ol-grip {
+  cursor: grabbing;
+}
+
+.ol-num {
+  min-width: 20px;
+  padding-top: 8px;
+  color: var(--ink-3);
+  font-size: 13px;
+  text-align: right;
+}
+
+.ol-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ol-title {
+  font-size: 15.5px;
+  font-weight: 600;
+}
+
+.ol-point {
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.ol-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px 0;
+}
+
+.ol-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.ol-kind:focus-within,
+.ol-minutes:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 22%, transparent);
+}
+
+.ol-kind select {
+  max-width: 170px;
+  padding: 2px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  outline: none;
+}
+
+.ol-minutes {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.ol-minutes input {
+  width: 46px;
+  padding: 1px 2px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: right;
+  outline: none;
+}
+
+.ol-pic {
+  position: relative;
+  display: inline-flex;
+}
+
+.ol-pic img {
+  width: 48px;
+  height: 32px;
+  border-radius: 6px;
+  object-fit: cover;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.ol-pic button {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--panel);
+  color: var(--ink-2);
+}
+
+.ol-pic button:hover {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.ol-pic-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 999px;
+  background: none;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.ol-pic-add:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+
+.ol-pic-option img {
+  width: 40px;
+  height: 28px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex: none;
+}
+
+.ol-pic-option span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ol-add {
+  justify-self: start;
+}
+
+.ol-empty {
+  margin: 0;
+}
+
+.ol-foot {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0 18px;
+  border-top: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.ol-total {
+  margin-left: auto;
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+/* ─── Drafting: slides arriving batch by batch ─── */
+
+.ad-drafting {
+  display: grid;
+  gap: 22px;
+}
+
+.ad-drafting .ad-filmstrip {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ad-drafting-progress {
+  max-width: 420px;
+  margin-top: 4px;
+}
+
+.ad-stopped {
+  color: var(--warn);
+}
+
+.ad-drafting-stop {
+  display: grid;
+  gap: 10px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+  border-radius: var(--r-md);
+  background: var(--warn-soft);
+}
+
+.ad-drafting-stop .ad-error {
+  margin: 0;
+}
+
+.ad-drafting-stop .ad-result-actions {
+  margin-top: 0;
+}
+
+.ad-drafting-help {
+  margin: 0;
+  font-size: 13px;
+}
+
+.ad-slot {
+  display: grid;
+  align-content: center;
+  gap: 6px;
+  aspect-ratio: 16 / 9;
+  padding: 12px 14px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: var(--sunk);
+  overflow: hidden;
+}
+
+.ad-slot strong {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 13.5px;
+  line-height: 1.3;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.ad-slot-kind,
+.ad-slot-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-3);
+  font-size: 12px;
+}
+
+.ad-thumb.is-writing .ad-slot {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--brand) 45%, transparent);
+  background: linear-gradient(90deg, var(--sunk), color-mix(in srgb, var(--brand-soft) 70%, var(--sunk)), var(--sunk));
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease infinite;
+}
+
+.ad-thumb.is-writing .ad-slot-state {
+  color: var(--brand);
+}
+
+.ad-thumb.is-failed .ad-slot {
+  border-color: color-mix(in srgb, var(--danger) 45%, transparent);
+}
+
+.ad-thumb.is-failed .ad-slot-state {
+  color: var(--danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ad-thumb.is-writing .ad-slot {
+    animation: none;
+  }
+}
+
+/* ─── A job waiting on the deck maker, and AI use on the result ─── */
+
+.ad-resume {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+}
+
+.ad-resume-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--brand-soft);
+  color: var(--brand);
+}
+
+.ad-resume-body {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ad-resume-body strong {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ad-resume-body span {
+  color: var(--ink-2);
+  font-size: 13.5px;
+}
+
+.ad-resume-body .faint {
+  color: var(--ink-3);
+  font-size: 12.5px;
+}
+
+.ad-resume-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ad-usage {
+  color: var(--ink-2);
+  font-size: 13px;
+}
+
+.ad-usage summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.ad-usage p {
+  max-width: 72ch;
+  margin: 6px 0 0;
+}
+
+@media (max-width: 640px) {
+  .ol-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .ol-num {
+    display: none;
+  }
+
+  .ol-total {
+    flex-basis: 100%;
+    order: -1;
+    margin-left: 0;
+  }
+
+  .ol-foot .btn-lg {
+    flex: 1 1 auto;
+  }
+
+  .ad-resume {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .ad-resume-actions {
+    grid-column: 1 / -1;
+  }
+}
