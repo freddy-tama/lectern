@@ -62,6 +62,7 @@ export function layoutSlide(slide: Slide, o: LayoutOptions): SlideLayout {
       boxes,
       steps: maxStep(boxes),
       warnings: [...new Set(ctx.warnings)],
+      ...(frame === 'content' ? { words: { count: words, budget } } : {}),
     };
   } catch (error) {
     console.error('Slide layout failed', slide.kind, error);

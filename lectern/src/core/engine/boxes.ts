@@ -149,6 +149,8 @@ export interface SlideLayout {
   steps: number;
   /** Text that did not fit, for the studio's warnings. */
   warnings: string[];
+  /** Words on the slide and the audience's budget. Only content slides carry a budget. */
+  words?: { count: number; budget: number };
 }
 
 export function maxStep(boxes: Box[]): number {

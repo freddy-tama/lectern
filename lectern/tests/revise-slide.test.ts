@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from 'vitest';
-import { GET, POST, type KindSpec, cleanContent, cleanKind, cleanNotes, contentSchema, responseSchema } from '../api/revise-slide';
+import { GET, POST, type KindSpec, cleanBudget, cleanContent, cleanKind, cleanNotes, cleanProblems, contentSchema, fitRequest, responseSchema } from '../api/revise-slide';
+import { DENSITY } from '../src/core/kinds/kit';
 import { type Slide, emptyNotes } from '../src/core/deck/types';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
 import { getKind } from '../src/core/kinds/registry';
@@ -101,6 +102,33 @@ describe('content schema', () => {
         expect([...(o.required ?? [])].sort(), def).toEqual(Object.keys(o.properties ?? {}).sort());
       }
     }
+  });
+});
+
+describe('fit mode', () => {
+  it('answers with a whole slide, like a revision', () => {
+    const k = specOf('bullets');
+    expect(responseSchema(k, 'fit')).toEqual(responseSchema(k, 'revise'));
+  });
+
+  it('carries the exact warnings and the budget, and asks to change only what is needed', () => {
+    const warning = 'Text is too long to fit: “Everything we learned about onboarding…”';
+    const ask = fitRequest([warning, '92 words on this slide. For this audience, aim for 70 or fewer and move the rest to the key notes.'], { words: 70, bullets: 6 }, 92);
+    expect(ask).toContain(`- ${warning}`);
+    expect(ask).toContain('- 92 words on this slide.');
+    expect(ask).toContain('For this audience a slide holds at most 6 points and about 70 words. This slide has 92 words now.');
+    expect(ask).toContain('Change only what is needed to make the slide fit, and keep its meaning, facts and language.');
+    expect(ask).toContain('Move detail you cut into notes.script');
+    expect(fitRequest(['x'], null)).not.toMatch(/at most/);
+  });
+
+  it('keeps only well-formed budgets and warnings from the client', () => {
+    expect(cleanBudget(DENSITY.teen)).toEqual(DENSITY.teen);
+    expect(cleanBudget({ words: 9_999, bullets: 3.4 })).toEqual({ words: 400, bullets: 3 });
+    expect(cleanBudget({ words: 'many' })).toBeNull();
+    expect(cleanBudget(undefined)).toBeNull();
+    expect(cleanProblems(['a', 'a', ' ', 7, 'x'.repeat(400), ...Array(10).fill('b')])).toEqual(['a', 'x'.repeat(300), 'b']);
+    expect(cleanProblems('a')).toEqual([]);
   });
 });
 
@@ -214,5 +242,8 @@ describe('the endpoint without a model call', () => {
     expect((await post({ mode: 'ask', kind: kindSpec(getKind('bullets')!), messages: [{ role: 'user', text: 'Why?' }] })).status).toBe(400);
     expect((await post({ mode: 'ask', selection: 'text', kind: kindSpec(getKind('bullets')!), messages: [] })).status).toBe(400);
     expect((await post({ mode: 'revise', preset: 'custom', instruction: '  ', kind: kindSpec(getKind('bullets')!) })).status).toBe(400);
+    const fit = await post({ mode: 'fit', problems: [], kind: kindSpec(getKind('bullets')!) });
+    expect(fit.status).toBe(400);
+    expect(await fit.json()).toMatchObject({ error: 'This slide already fits.' });
   });
 });

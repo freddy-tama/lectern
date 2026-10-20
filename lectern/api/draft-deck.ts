@@ -6,6 +6,9 @@
 //   ANTHROPIC_API_KEY     required for AI drafting
 //   LECTERN_MODEL         optional, defaults to claude-opus-5-5
 //   LECTERN_ACCESS_CODE   optional; when set, requests must send it in "x-lectern-code"
+//
+// The request carries "budget": { words, bullets }, the audience's limits from the client's
+// layout rules (src/core/kinds/kit.ts), so the prompt never keeps its own copy of the numbers.
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -43,6 +46,8 @@ interface DraftBody {
   density?: unknown;
   /** Pictures from the person's files: { id, name, mime, data (base64) }. */
   pictures?: unknown;
+  /** How much one slide holds for the audience: { words, bullets }. */
+  budget?: unknown;
 }
 
 interface Picture {
@@ -89,6 +94,39 @@ function cleanCatalogue(raw: unknown): CatalogueKind[] {
     });
     return [{ kind, label: text(k.label, 60), description: text(k.description, 240), fields }];
   });
+}
+
+/**
+ * Keeps only the fields the slide kind defines, at sensible sizes, as the schema asked for them.
+ * Image fields keep a provided picture's id and nothing else. Fields of the wrong type are left
+ * out, so the kind's defaults fill them.
+ */
+export function cleanDraftContent(kind: CatalogueKind, raw: unknown, pictureIds: string[]): Record<string, unknown> {
+  const c = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const f of kind.fields) {
+    const v = c[f.key];
+    if (f.type === 'image') {
+      const id = text(v, 8);
+      if (pictureIds.includes(id)) out[f.key] = id;
+    } else if (f.type === 'text' || f.type === 'textarea') {
+      if (typeof v === 'string') out[f.key] = text(v, f.type === 'text' ? 600 : 4_000);
+    } else if (f.type === 'toggle') {
+      if (typeof v === 'boolean') out[f.key] = v;
+    } else if (f.type === 'list') {
+      if (Array.isArray(v)) out[f.key] = v.map((s) => text(s, 600)).filter(Boolean).slice(0, 40);
+    } else if (f.type === 'objects' && Array.isArray(v)) {
+      const sub = f.fields?.length ? f.fields : ['label'];
+      out[f.key] = v.filter((x) => x && typeof x === 'object').slice(0, 40)
+        .map((x) => Object.fromEntries(sub.map((k) => [k, text((x as Record<string, unknown>)[k], 1_000)])));
+    }
+  }
+  if (kind.kind === 'question') {
+    const options = Array.isArray(out.options) ? out.options.length : 0;
+    const n = Number(c.correct);
+    out.correct = Number.isInteger(n) && n >= 0 && n < options ? n : -1;
+  }
+  return out;
 }
 
 /** One JSON-schema variant per slide kind, built from its editable fields. */
@@ -144,11 +182,29 @@ function slideSchema(kinds: CatalogueKind[], pictures: Picture[]) {
   };
 }
 
-const AUDIENCE_RULES: Record<string, string> = {
-  young: 'Young learners aged 6-11. At most 3 short points per slide and about 25 words on a slide. Simple words, concrete examples, frequent quick checks. Scripts are short and warm.',
-  teen: 'Teenagers aged 12-17. At most 5 points per slide and about 45 words on a slide. Relatable examples; a check for understanding every 8-10 minutes.',
-  adult: 'Adults (university, workshops, talks). At most 6 points per slide and about 70 words on a slide. Precise language; examples from work and everyday life.',
+const AUDIENCE_RULES: Record<string, { who: string; style: string }> = {
+  young: { who: 'Young learners aged 6-11.', style: 'Simple words, concrete examples, frequent quick checks. Scripts are short and warm.' },
+  teen: { who: 'Teenagers aged 12-17.', style: 'Relatable examples; a check for understanding every 8-10 minutes.' },
+  adult: { who: 'Adults (university, workshops, talks).', style: 'Precise language; examples from work and everyday life.' },
 };
+
+export interface Budget {
+  words: number;
+  bullets: number;
+}
+
+export function cleanBudget(raw: unknown): Budget | null {
+  const b = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const words = Math.round(Number(b.words));
+  const bullets = Math.round(Number(b.bullets));
+  if (!(words > 0) || !(bullets > 0)) return null;
+  return { words: Math.min(words, 400), bullets: Math.min(bullets, 20) };
+}
+
+export function audienceRule(audience: string, budget: Budget | null): string {
+  const a = AUDIENCE_RULES[audience] ?? AUDIENCE_RULES.teen;
+  return [a.who, budget ? `At most ${budget.bullets} points per slide and about ${budget.words} words on a slide.` : 'Keep each slide short.', a.style].join(' ');
+}
 
 const PURPOSES = ['lesson', 'talk', 'pitch', 'report'] as const;
 type Purpose = (typeof PURPOSES)[number];
@@ -245,7 +301,7 @@ export async function POST(request: Request) {
   const client = new Anthropic();
   const user = [
     `Make a ${purpose} deck for a ${minutes}-minute session.`,
-    `Audience: ${AUDIENCE_RULES[audience]}`,
+    `Audience: ${audienceRule(audience, cleanBudget(body.budget))}`,
     density ? `Words on a slide: ${DENSITY_RULES[density]}` : '',
     `What the deck is about: ${topic}`,
     title ? `Deck title: ${title}` : '',
@@ -279,13 +335,14 @@ export async function POST(request: Request) {
     const out = response.content.slice(lastSwitch + 1).map((b) => (b.type === 'text' ? b.text : '')).join('');
     if (!out.trim()) return json({ error: 'The AI returned no deck. Try again.' }, 502);
     const parsed = JSON.parse(out) as { title: string; slides: { kind: string; content: Record<string, unknown>; notes: Record<string, unknown> }[] };
-    const allowed = new Set(kinds.map((k) => k.kind));
-    const slides = parsed.slides.filter((s) => allowed.has(s.kind)).map((s) => {
+    const byKind = new Map(kinds.map((k) => [k.kind, k]));
+    const pictureIds = pictures.map((p) => p.id);
+    const slides = (Array.isArray(parsed.slides) ? parsed.slides : []).filter((s) => byKind.has(s?.kind)).map((s) => {
       const n = s.notes ?? {};
       const question = text(n.checkQuestion, 400);
       return {
         kind: s.kind,
-        content: s.content ?? {},
+        content: cleanDraftContent(byKind.get(s.kind)!, s.content, pictureIds),
         notes: {
           script: text(n.script, 4_000),
           keyPoints: Array.isArray(n.keyPoints) ? n.keyPoints.map((p) => text(p, 300)).filter(Boolean).slice(0, 6) : [],

@@ -124,6 +124,7 @@ export async function POST(request: Request) {
       messages: [{ role: 'user', content: user }],
     }).finalMessage();
     if (response.stop_reason === 'refusal') return json({ error: 'The AI declined to read this material.' }, 422);
+    if (response.stop_reason === 'max_tokens') return json({ error: 'The AI’s questions ran too long.' }, 422);
     const lastSwitch = response.content.map((b) => b.type as string).lastIndexOf('fallback');
     const out = response.content.slice(lastSwitch + 1).map((b) => (b.type === 'text' ? b.text : '')).join('');
     const parsed = JSON.parse(out) as { title?: string; topic?: string; purpose?: string; questions?: Record<string, unknown>[] };

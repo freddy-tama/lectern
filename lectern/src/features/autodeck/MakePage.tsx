@@ -12,7 +12,7 @@ import type { DeckDraft } from '../../core/plugins/api';
 import { transcriptText } from '../../core/transcribe/segments';
 import { db } from '../../data/db';
 import { DENSITIES, type Density, LENGTHS, rememberDeckPrefs, useProfile } from '../../data/profile';
-import { addDeck, isoDate, saveAsset } from '../../data/repo';
+import { addDeck, isoDate, saveAsset, saveDeck } from '../../data/repo';
 import { useToast } from '../../ui/Toast';
 import { addRecordingFile } from '../recordings/actions';
 import { cancelTranscription, loadPrefs, onTranscriptionEnd, transcribe, useTranscriber } from '../recordings/engine';
@@ -20,6 +20,7 @@ import { formatBytes, jobLabel } from '../recordings/status';
 import { SlideView } from '../slides/SlideView';
 import { type AiStatus, aiStatus, draftWithAI, saveCode, savedCode } from '../studio/ai';
 import { exportPptx } from '../studio/download';
+import { type DraftFit, fitDraft, fitSummary } from '../studio/fit-deck';
 import { type AiQuestion, fetchQuestions } from './ai';
 import { dragHasFiles, onHandOff, takeHandedOff } from './handoff';
 import { ACCEPT_ALL, type Source, buildMaterial, countWords, fallbackTopic, kindOf, offlineDraft, placePictures, purposeLabel, stem } from './make';
@@ -27,7 +28,7 @@ import { pictureForAi, pictureForDeck } from './pictures';
 import { type Answer, QuestionDialog } from './QuestionDialog';
 import '../../styles/autodeck.css';
 
-type Stage = 'gather' | 'reading' | 'asking' | 'drafting' | 'done';
+type Stage = 'gather' | 'reading' | 'asking' | 'drafting' | 'checking' | 'done';
 
 const MAX_FILES = 20;
 const PURPOSE_KEY = '__purpose';
@@ -107,10 +108,13 @@ export default function MakePage() {
   const [asked, setAsked] = useState(0);
   const [hint, setHint] = useState<{ title: string; topic: string } | null>(null);
   const [deck, setDeck] = useState<Deck | null>(null);
+  const [fit, setFit] = useState<DraftFit | null>(null);
+  const [fixing, setFixing] = useState(0);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
   const [exporting, setExporting] = useState(false);
   const abort = useRef<AbortController | null>(null);
+  const skipCheck = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const started = useRef(Date.now());
 
@@ -162,6 +166,17 @@ export default function MakePage() {
   const pictures = ready.flatMap((s) => s.pictures).slice(0, 8);
   const aiOn = ai?.available === true;
 
+  /** Checks a fresh AI draft with the real fonts and fixes what doesn't fit. Skip keeps the fixes made so far. */
+  const checkDraft = async (made: Deck): Promise<DraftFit> => {
+    const skip = new AbortController();
+    skipCheck.current = skip;
+    try {
+      return await fitDraft(made, { signal: skip.signal, onFixing: (n) => { setFixing(n); setStage('checking'); } });
+    } finally {
+      skipCheck.current = null;
+    }
+  };
+
   const draft = async (answers: Answer[], suggestion: { title: string; topic: string } | null) => {
     setStage('drafting');
     started.current = Date.now();
@@ -195,12 +210,15 @@ export default function MakePage() {
       }
       result = await placePictures(result, pictures, async (f) => saveAsset(await pictureForDeck(f), f.name));
       const made = draftToDeck(result, { audience, themeId, purpose: chosen, ...(aiOn ? { source: 'ai' } : {}) });
-      await addDeck(made);
+      const checked = aiOn ? await checkDraft(made) : null;
+      const final = checked?.deck ?? made;
+      await addDeck(final);
       rememberDeckPrefs(
         { purpose: chosen, audience, minutes, density, themeId },
         real.filter((a) => a.remember).map((a) => ({ key: a.key, question: a.question, answer: a.answer, updatedAt: Date.now() })),
       );
-      setDeck(made);
+      setDeck(final);
+      setFit(checked && fitSummary(checked.report) ? checked : null);
       setDoneSources(kept.sources);
       setSources(() => []);
       setBrief('');
@@ -255,6 +273,7 @@ export default function MakePage() {
   };
 
   const cancel = () => {
+    if (stage === 'checking') { skipCheck.current?.abort(); return; }
     abort.current?.abort();
     abort.current = null;
     setStage('gather');
@@ -264,9 +283,18 @@ export default function MakePage() {
     setSources(() => []);
     setBrief('');
     setDeck(null);
+    setFit(null);
     setHint(null);
     setStage('gather');
     setPurposeTouched(false);
+  };
+
+  /** Swaps between the checked deck and the draft as the AI wrote it. */
+  const toggleFit = async () => {
+    if (!fit || !deck) return;
+    const next = deck === fit.deck ? fit.before : fit.deck;
+    await saveDeck(next);
+    setDeck(next);
   };
 
   const download = async () => {
@@ -290,7 +318,7 @@ export default function MakePage() {
   };
 
   const usual = purpose === profile.deck.purpose && audience === profile.deck.audience && minutes === profile.deck.minutes && density === profile.deck.density && themeId === profile.deck.themeId;
-  const working = stage === 'reading' || stage === 'asking' || stage === 'drafting';
+  const working = stage === 'reading' || stage === 'asking' || stage === 'drafting' || stage === 'checking';
 
   return (
     <div
@@ -302,6 +330,7 @@ export default function MakePage() {
       {stage === 'done' && deck ? (
         <Result
           deck={deck}
+          fit={fit && { text: deck === fit.deck ? fitSummary(fit.report, deck.minutes) : 'Showing the draft as the AI wrote it.', undone: deck !== fit.deck, canUndo: fit.deck !== fit.before, onToggle: toggleFit }}
           sources={doneSources}
           remembered={profile.remembered.length}
           exporting={exporting}
@@ -324,7 +353,7 @@ export default function MakePage() {
           </header>
 
           {working ? (
-            <Working stage={stage} sources={ready.length} asked={asked} started={started.current} onCancel={cancel} />
+            <Working stage={stage} sources={ready.length} asked={asked} fixing={fixing} started={started.current} onCancel={cancel} />
           ) : (
             <div className="ad-grid">
               <div className="ad-main">
@@ -469,7 +498,7 @@ export default function MakePage() {
   );
 }
 
-function Working({ stage, sources, asked, started, onCancel }: { stage: Stage; sources: number; asked: number; started: number; onCancel(): void }) {
+function Working({ stage, sources, asked, fixing, started, onCancel }: { stage: Stage; sources: number; asked: number; fixing: number; started: number; onCancel(): void }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
@@ -479,7 +508,8 @@ function Working({ stage, sources, asked, started, onCancel }: { stage: Stage; s
   const steps = [
     { label: `Read ${sources} file${sources === 1 ? '' : 's'}`, state: 'done' },
     { label: stage === 'reading' ? 'Looking for questions to ask' : asked ? `Answered ${asked} question${asked === 1 ? '' : 's'}` : 'Questions skipped', state: stage === 'reading' ? 'active' : 'done' },
-    { label: 'Writing the slides and speaker notes', state: stage === 'drafting' ? 'active' : 'todo' },
+    { label: 'Writing the slides and speaker notes', state: stage === 'drafting' ? 'active' : stage === 'checking' ? 'done' : 'todo' },
+    ...(stage === 'checking' ? [{ label: 'Checking every slide fits', state: 'active' }] : []),
   ];
   return (
     <section className="ad-working card" aria-live="polite" aria-busy="true">
@@ -495,15 +525,19 @@ function Working({ stage, sources, asked, started, onCancel }: { stage: Stage; s
         ))}
       </ol>
       <p className="faint ad-working-time">
-        {stage === 'drafting' ? (secs < 20 ? 'This usually takes under a minute.' : `Still writing · ${secs} s. Long files take a little longer.`) : 'Reading your files…'}
+        {stage === 'checking'
+          ? `Shortening ${fixing} slide${fixing === 1 ? '' : 's'} that ${fixing === 1 ? 'doesn’t' : 'don’t'} fit…`
+          : stage === 'drafting' ? (secs < 20 ? 'This usually takes under a minute.' : `Still writing · ${secs} s. Long files take a little longer.`) : 'Reading your files…'}
       </p>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>{stage === 'checking' ? 'Skip the check' : 'Cancel'}</button>
     </section>
   );
 }
 
-function Result({ deck, sources, remembered, exporting, onDownload, onOpen, onPresent, onAgain }: {
+function Result({ deck, fit, sources, remembered, exporting, onDownload, onOpen, onPresent, onAgain }: {
   deck: Deck;
+  /** What the check after drafting fixed, with a way back to the draft as written. */
+  fit: { text: string; undone: boolean; canUndo: boolean; onToggle(): void } | null;
   sources: Source[];
   remembered: number;
   exporting: boolean;
@@ -522,6 +556,12 @@ function Result({ deck, sources, remembered, exporting, onDownload, onOpen, onPr
         <p className="muted">
           {shown.length} slides with speaker notes · about {Math.round(deckMinutes(deck))} min · {purposeLabel(deck.purpose ?? 'talk')} · {AUDIENCES.find((a) => a.id === deck.audience)?.label}
         </p>
+        {fit && (
+          <p className="ad-fit" role="status">
+            {fit.canUndo ? <Check size={14} /> : <AlertCircle size={14} />} {fit.text}
+            {fit.canUndo && <button type="button" className="ad-link" onClick={fit.onToggle}>{fit.undone ? 'Redo' : 'Undo'}</button>}
+          </p>
+        )}
         <div className="ad-result-actions">
           <button type="button" className="btn btn-brand btn-lg" onClick={onDownload} disabled={exporting}>
             {exporting ? <><Loader2 size={17} className="spin" /> Making the file…</> : <><Download size={17} /> Download PowerPoint</>}

@@ -1,4 +1,5 @@
 import type { Audience, DeckPurpose } from '../../core/deck/types';
+import { DENSITY } from '../../core/kinds/kit';
 import { allKinds } from '../../core/kinds/registry';
 import type { DeckDraft } from '../../core/plugins/api';
 import { draftingHints } from '../../core/plugins/registry';
@@ -60,7 +61,7 @@ export async function draftWithAI(req: DraftRequest, signal?: AbortSignal): Prom
   const res = await fetch('/api/draft-deck', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-lectern-code': savedCode() },
-    body: JSON.stringify({ ...req, kinds: kindCatalogue(), hints: draftingHints() }),
+    body: JSON.stringify({ ...req, kinds: kindCatalogue(), hints: draftingHints(), budget: DENSITY[req.audience] }),
     signal,
   });
   const body = await res.json().catch(() => ({}));

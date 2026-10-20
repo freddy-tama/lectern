@@ -1240,3 +1240,18 @@ fieldset.field legend {
     margin-left: 0;
   }
 }
+
+/* A suggestion that was trimmed to fit, or still doesn't fit the slide. */
+.proposal-fitted {
+  color: var(--ink-2);
+}
+
+.proposal-warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+}

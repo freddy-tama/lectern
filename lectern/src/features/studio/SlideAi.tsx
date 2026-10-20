@@ -3,10 +3,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { wording } from '../../core/deck/purpose';
 import { canSplit, splitInDeck } from '../../core/deck/split';
 import type { Deck, DeckPurpose, KeyNotes, Slide } from '../../core/deck/types';
+import { loadSlideFonts } from '../../ui/hooks';
 import { Menu } from '../../ui/Menu';
 import { SlideView } from '../slides/SlideView';
 import { saveCode, savedCode } from './ai';
-import { PRESETS, type PresetId, type RevisionResult, SlideAiError, type SlideAiStatus, TONES, requestLabel, reviseSlide, slideAiStatus } from './slide-ai';
+import { PRESETS, type PresetId, type RevisionResult, SlideAiError, type SlideAiStatus, TONES, checkRevision, requestLabel, reviseSlide, slideAiStatus } from './slide-ai';
 
 const PRESET_ICONS: Record<string, typeof Shrink> = { shorter: Shrink, simpler: Feather, detail: ListPlus, example: Lightbulb, notes: NotebookPen };
 
@@ -19,6 +20,12 @@ export interface Proposal {
   result?: RevisionResult;
   error?: string;
   needsCode?: boolean;
+  /** While loading: the suggestion didn't fit and is being trimmed. */
+  fitting?: boolean;
+  /** The suggestion was trimmed to fit before it was shown. */
+  fitted?: boolean;
+  /** A suggested slide still doesn't fit. */
+  overflow?: boolean;
 }
 
 /** True when the parts of the key notes a reader sees differ. Time alone doesn't count. */
@@ -62,13 +69,21 @@ export function useSlideRevision({ deck, slide, change }: { deck: Deck | null | 
     setProposal({ ...base, status: 'loading' });
     setShowOriginal(false);
     setUseNotes(true);
-    reviseSlide(deck, slide, preset, instruction, ac.signal).then(
-      (result) => { if (!ac.signal.aborted) setProposal({ ...base, status: 'ready', result }); },
-      (e: Error) => {
-        if (ac.signal.aborted || e.name === 'AbortError') return;
-        setProposal({ ...base, status: 'error', error: e.message, needsCode: e instanceof SlideAiError && e.needsCode });
-      },
-    );
+    const fitting = () => { if (!ac.signal.aborted) setProposal({ ...base, status: 'loading', fitting: true }); };
+    reviseSlide(deck, slide, preset, instruction, ac.signal)
+      .then(async (result) => {
+        // Key notes leave the slide alone. Anything else is checked, and fitted once if it overflows.
+        if (preset === 'notes') return { result, fitted: false, overflow: false };
+        await loadSlideFonts();
+        return checkRevision(deck, result, { signal: ac.signal, onFitting: fitting });
+      })
+      .then(
+        ({ result, fitted, overflow }) => { if (!ac.signal.aborted) setProposal({ ...base, status: 'ready', result, fitted, overflow }); },
+        (e: Error) => {
+          if (ac.signal.aborted || e.name === 'AbortError') return;
+          setProposal({ ...base, status: 'error', error: e.message, needsCode: e instanceof SlideAiError && e.needsCode });
+        },
+      );
   }, [deck, slide]);
 
   const retry = useCallback(() => { if (proposal) run(proposal.preset, proposal.instruction); }, [proposal, run]);
@@ -250,7 +265,7 @@ export function ProposalBar({ revision }: { revision: SlideRevision }) {
     return (
       <div className="proposal-bar" role="status">
         <span className="spinner" />
-        <span>Working on it: <strong>{proposal.label}</strong></span>
+        <span>{proposal.fitting ? 'Shortening it to fit' : 'Working on it'}: <strong>{proposal.label}</strong></span>
         <button type="button" className="btn btn-ghost btn-sm" onClick={discard}><X size={14} /> Cancel</button>
       </div>
     );
@@ -271,6 +286,9 @@ export function ProposalBar({ revision }: { revision: SlideRevision }) {
   return (
     <div className="proposal-bar" role="status" aria-label="AI suggestion">
       <span className="chip chip-brand proposal-label"><Sparkles size={13} /> {proposal.label}</span>
+      {proposal.overflow
+        ? <span className="proposal-warn"><AlertTriangle size={13} /> Still too long for the slide</span>
+        : proposal.fitted && <span className="proposal-fitted">Shortened to fit</span>}
       <div className="segmented" role="group" aria-label="Compare">
         <button type="button" aria-pressed={!showOriginal} onClick={() => setShowOriginal(false)}>Suggestion</button>
         <button type="button" aria-pressed={showOriginal} onClick={() => setShowOriginal(true)}>Original</button>

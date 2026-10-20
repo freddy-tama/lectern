@@ -30,6 +30,7 @@ import { AskAboutThis } from './AskAboutThis';
 import { AudienceMenu } from './AudienceMenu';
 import { convertSlide } from './convert';
 import { DeckDetailsDialog } from './DeckDetailsDialog';
+import { useDraftFitNotice } from './fit-deck';
 import { downloadBlob, exportJson, exportPptx, safeName } from './download';
 import { Fields } from './Fields';
 import { makeQuiz } from '../../core/deck/quiz-maker';
@@ -47,6 +48,7 @@ export default function Studio() {
   const navigate = useNavigate();
   const toast = useToast();
   const { deck, change, undo, redo, canUndo, canRedo, save } = useDeckEditor(deckId);
+  useDraftFitNotice(deck, change);
   const [selectedId, setSelectedId] = useState('');
   const [activeBind, setActiveBind] = useState<string | null>(null);
   const [step, setStep] = useState<number | undefined>(undefined);
