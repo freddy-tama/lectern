@@ -12,6 +12,7 @@
     "dev:mods": "cross-env LECTERN_PLUGINS=chinese,lesson-plan vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "icons": "node scripts/make-icons.mjs",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

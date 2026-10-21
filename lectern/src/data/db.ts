@@ -4,6 +4,7 @@ import Dexie, { type EntityTable } from 'dexie';
 import type { Deck } from '../core/deck/types';
 import type { PictureCredit } from '../core/pictures/credits';
 import type { LectureNotes, TranscriptSegment } from '../core/transcribe/types';
+import type { DraftJob } from './draft-jobs';
 import { quotaWatch } from './storage';
 
 export type CourseColor = 'coral' | 'amber' | 'olive' | 'teal' | 'sky' | 'indigo' | 'plum' | 'slate';
@@ -162,6 +163,8 @@ export class LecternDB extends Dexie {
   settings!: EntityTable<Setting, 'key'>;
   notes!: EntityTable<Note, 'id'>;
   recordings!: EntityTable<Recording, 'id'>;
+  /** AI drafting in progress. Not part of backups. */
+  jobs!: EntityTable<DraftJob, 'id'>;
 
   constructor() {
     super('lectern');
@@ -179,6 +182,9 @@ export class LecternDB extends Dexie {
     this.version(3).stores({
       notes: 'id, courseId, lessonId, deckId, date, updatedAt, *tags, recordingId',
       recordings: 'id, courseId, lessonId, date, updatedAt',
+    });
+    this.version(4).stores({
+      jobs: 'id, status, updatedAt',
     });
   }
 }

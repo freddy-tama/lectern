@@ -112,7 +112,7 @@ See [docs/mods.md](docs/mods.md) to write your own.
 ## Deploy to Vercel
 
 1. Import the repository in Vercel. If Lectern isn't at the repository root, set **Root Directory** to the `lectern` folder.
-2. Vercel reads [`vercel.json`](vercel.json): a Vite build to `dist/`, single-page routing, and the functions in `api/`.
+2. Vercel reads [`vercel.json`](vercel.json): a Vite build to `dist/`, single-page routing, the functions in `api/`, and cache headers. Hashed files in `assets/` are cached for good; `sw.js` and the manifest are checked on every visit, so a deploy reaches people straight away.
 3. Optional environment variables:
 
 | Variable | What it does |
@@ -131,6 +131,17 @@ See [docs/mods.md](docs/mods.md) to write your own.
 | `VITE_ICE_SERVERS` | JSON list of your own STUN/TURN servers, for networks that block direct connections. |
 
 For local AI drafting, put the same variables in `.env.local`. The dev server serves `api/` itself.
+
+### Where your data lives
+
+Vercel stores nothing. Decks, pictures and recordings live in the visitor's browser (IndexedDB) and preferences in localStorage, so data belongs to one browser at one address: a preview deployment's URL starts empty. Two things can clear it:
+
+- **Safari** deletes a site's data after 7 days of Safari use without a visit. Apps added to the Dock or the Home Screen are exempt, but they have their own storage, separate from Safari's, so data moves across with a backup.
+- **Other browsers** can clear data that isn't persistent when the disk runs low. Lectern asks for persistent storage after the first save; Chrome and Edge give it to installed apps.
+
+So Lectern can be installed, and **Preferences ▸ Your data** shows whether the data is protected, with an Install button where the browser has one and the Share ▸ Add to Dock / Home Screen steps on Safari. When you have decks of your own (edited samples count, untouched ones don't) and no backup from the last 14 days, a quiet reminder offers **Download a backup**, at most once a week. On Safari it also suggests installing.
+
+The service worker ([`src/pwa/sw.js`](src/pwa/sw.js)) keeps the app shell, so Lectern opens offline after one visit. The build writes `dist/sw.js` with the list of files to keep and a version made from their contents. It never handles `/api/*`, other sites or anything but GET. After a deploy the new version installs in the background and Lectern offers **Reload**, but not while you're presenting. The dev server's `sw.js` removes any worker a production preview left on the same address. The app icons are drawn from the logo by `npm run icons`.
 
 ### How AI drafting works
 

@@ -9,6 +9,7 @@ import { getProfile, shows, useProfile } from '../data/profile';
 import { createCourse } from '../data/repo';
 import { dragHasFiles, handOffFiles } from '../features/autodeck/handoff';
 import { useOpenDeckFile } from '../features/backup/actions';
+import { BackupNudge } from '../features/backup/BackupNudge';
 import { QuickCapture, openQuickCapture } from '../features/notes/QuickCapture';
 import { RecordingsNavBadge } from '../features/recordings/NavBadge';
 import { RecordingsGlobal } from '../features/recordings/RecorderDialog';
@@ -16,6 +17,9 @@ import { Logo } from '../ui/Logo';
 import { useToast } from '../ui/Toast';
 
 type ThemePref = 'system' | 'light' | 'dark';
+
+/** The page colour behind each theme, for the browser's and the installed app's title bar. */
+const THEME_COLOR = { light: '#F7F6F3', dark: '#141413' } as const;
 
 function useThemePref(): [ThemePref, (t: ThemePref) => void] {
   const [pref, setPref] = useState<ThemePref>(() => {
@@ -25,6 +29,10 @@ function useThemePref(): [ThemePref, (t: ThemePref) => void] {
     const root = document.documentElement;
     if (pref === 'system') root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', pref);
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+      const own = meta.media.includes('dark') ? 'dark' : 'light';
+      meta.content = THEME_COLOR[pref === 'system' ? own : pref];
+    }
     try { localStorage.setItem('lectern.theme', pref); } catch { /* private mode */ }
   }, [pref]);
   return [pref, setPref];
@@ -155,6 +163,7 @@ export function Shell() {
         </div>
       </nav>
       <main className="main" id="main">
+        <BackupNudge />
         <Outlet />
       </main>
       {dropHint && <div className="ad-drag-hint shell-drop-hint" aria-hidden><Upload size={18} /> Drop to make a deck from these files</div>}

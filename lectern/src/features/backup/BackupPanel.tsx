@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { Archive, Download, HardDrive, ShieldAlert, ShieldCheck, Upload } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { type InstallWay, clearsIdleData, idleClearerName, usePwa } from '../../app/pwa';
 import type { ConflictChoice, OpenedBackup, RestoreResult } from '../../data/backup';
 import { db } from '../../data/db';
 import { isDeckFile } from '../../data/deck-file';
@@ -9,12 +10,22 @@ import { Dialog } from '../../ui/Dialog';
 import { LOCALE, plural, timeAgo } from '../../ui/format';
 import { useToast } from '../../ui/Toast';
 import { countsText, downloadBackup, lastBackupAt, useOpenDeckFile } from './actions';
+import { InstallLectern } from './InstallLectern';
 import '../../styles/backup.css';
 
 type Restore =
   | { step: 'confirm'; backup: OpenedBackup }
   | { step: 'working'; backup: OpenedBackup }
   | { step: 'done'; result: RestoreResult };
+
+/** Why Lectern's data isn't safe yet, pointing to installing where that's the fix. */
+function atRiskText(persisted: boolean, way: InstallWay): string {
+  if (clearsIdleData(way)) {
+    return `${persisted ? '' : 'Not protected yet. '}${idleClearerName()} clears a site’s data after 7 days without a visit. Install Lectern to keep it.`;
+  }
+  const risk = 'Not protected yet. The browser may clear Lectern’s data if the disk gets full.';
+  return way === 'prompt' || way === 'menu' ? `${risk} Installing Lectern is the surest fix.` : risk;
+}
 
 function madeOn(iso: string) {
   const d = iso ? new Date(iso) : null;
@@ -24,6 +35,7 @@ function madeOn(iso: string) {
 /** Backing up everything, restoring a backup, and how much space Lectern uses in this browser. */
 export function BackupPanel() {
   const toast = useToast();
+  const { way } = usePwa();
   const openDeck = useOpenDeckFile();
   const fileInput = useRef<HTMLInputElement>(null);
   const [usage, setUsage] = useState<StorageUsage | null>(null);
@@ -98,8 +110,14 @@ export function BackupPanel() {
   const protect = async () => {
     const ok = await requestPersistence();
     refreshUsage();
-    toast.show(ok ? 'This browser will keep Lectern’s data.' : 'The browser said no for now. Browsers often agree once a site is used more, or is installed as an app.', { duration: 6000 });
+    const canInstall = way !== 'installed' && way !== 'none';
+    toast.show(ok ? 'This browser will keep Lectern’s data.' : canInstall
+      ? 'The browser said no for now. Installing Lectern is the surest way to keep its data.'
+      : 'The browser said no for now. Browsers often agree once a site is used more.', { duration: 6000 });
   };
+
+  // Chrome and Edge keep an installed app's data, so ask again straight after installing.
+  const installed = () => { requestPersistence().finally(refreshUsage); };
 
   const share = usage && usage.quota ? Math.min(100, (usage.usage / usage.quota) * 100) : 0;
 
@@ -126,16 +144,17 @@ export function BackupPanel() {
             {totals.audioBytes > 0 && ` · ${formatBytes(totals.audioBytes)} of audio`}
           </p>
         )}
-        {usage && (usage.persisted ? (
+        {usage && (usage.persisted && !clearsIdleData(way) ? (
           <p className="backup-persist"><ShieldCheck size={16} aria-hidden /><span>Protected. The browser won’t clear Lectern’s data to make space.</span></p>
         ) : (
           <p className="backup-persist">
             <ShieldAlert size={16} aria-hidden />
-            <span>Not protected yet. The browser may clear Lectern’s data if the disk gets full.</span>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={protect}>Ask to keep it</button>
+            <span>{atRiskText(usage.persisted, way)}</span>
+            {!usage.persisted && <button type="button" className="btn btn-ghost btn-sm" onClick={protect}>Ask to keep it</button>}
           </p>
         ))}
         {!usage && <p className="faint">This browser doesn’t say how much space Lectern uses.</p>}
+        <InstallLectern way={way} onInstalled={installed} />
       </section>
 
       <div className="backup-actions">

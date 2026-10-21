@@ -48,12 +48,21 @@ export interface DraftRequest {
 }
 
 /** Kinds the server may use: core ones plus any a mod registered, with their fields. */
-function kindCatalogue() {
+export function kindCatalogue() {
   return allKinds().map((k) => ({
     kind: k.kind,
     label: k.label,
     description: k.description,
-    fields: k.fields.map((f) => ({ key: f.key, type: f.type, label: f.label, ...(f.type === 'objects' ? { fields: f.fields.map((x) => x.key) } : {}) })),
+    fields: k.fields.map((f) => ({
+      key: f.key,
+      type: f.type,
+      label: f.label,
+      ...(f.type === 'objects' ? {
+        fields: f.fields.map((x) => x.key),
+        images: f.fields.filter((x) => x.type === 'image').map((x) => x.key),
+        ...(f.max ? { max: f.max } : {}),
+      } : {}),
+    })),
   }));
 }
 

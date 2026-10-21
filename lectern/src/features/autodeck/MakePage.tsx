@@ -2,33 +2,44 @@ import {
   AlertCircle, AudioLines, Check, Download, FileText, Image as ImageIcon, Loader2, MonitorPlay, Pencil,
   RotateCcw, Sparkles, Upload, Wand2, X,
 } from 'lucide-react';
+import { useLiveQuery } from 'dexie-react-hooks';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { draftToDeck } from '../../core/deck/draft';
+import { fitChanged } from '../../core/deck/fit';
 import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, deckMinutes, uid } from '../../core/deck/types';
 import { allThemes, fontFamily } from '../../core/engine/themes';
+import { DENSITY } from '../../core/kinds/kit';
 import { documentPictures, fileToOutline } from '../../core/import/files';
-import type { DeckDraft } from '../../core/plugins/api';
+import { draftingHints } from '../../core/plugins/registry';
 import { transcriptText } from '../../core/transcribe/segments';
 import { db } from '../../data/db';
+import { type DraftJob, type DraftRequest, type PlannedSlide, type UsageByModel, deleteJob, getJob, openJob } from '../../data/draft-jobs';
 import { DENSITIES, type Density, LENGTHS, rememberDeckPrefs, useProfile } from '../../data/profile';
-import { addDeck, isoDate, saveAsset, saveDeck } from '../../data/repo';
+import { addDeck, isoDate, saveAsset } from '../../data/repo';
 import { useToast } from '../../ui/Toast';
 import { addRecordingFile } from '../recordings/actions';
 import { cancelTranscription, loadPrefs, onTranscriptionEnd, transcribe, useTranscriber } from '../recordings/engine';
 import { formatBytes, jobLabel } from '../recordings/status';
 import { SlideView } from '../slides/SlideView';
-import { type AiStatus, aiStatus, draftWithAI, saveCode, savedCode } from '../studio/ai';
+import { type AiStatus, aiStatus, kindCatalogue, saveCode, savedCode } from '../studio/ai';
 import { exportPptx } from '../studio/download';
-import { type DraftFit, fitDraft, fitSummary } from '../studio/fit-deck';
-import { type AiQuestion, fetchQuestions } from './ai';
+import { fitSummary } from '../studio/fit-deck';
+import { type AiQuestion, draftOutline, fetchQuestions } from './ai';
+import { approveOutline, createJob, finishJob, recover, runJob, runsSnapshot, saveOutline, stopJob, subscribeRuns, toggleDraftFit } from './drafting';
+import { DraftingView, ResumeCard, useJobPictures } from './DraftingView';
 import { dragHasFiles, onHandOff, takeHandedOff } from './handoff';
 import { ACCEPT_ALL, type Source, buildMaterial, countWords, fallbackTopic, kindOf, offlineDraft, placePictures, purposeLabel, stem } from './make';
 import { pictureForAi, pictureForDeck } from './pictures';
+import { OutlineEditor } from './OutlineEditor';
 import { type Answer, QuestionDialog } from './QuestionDialog';
+import { usageCost, usageLine, usageTotals } from './usage';
 import '../../styles/autodeck.css';
 
-type Stage = 'gather' | 'reading' | 'asking' | 'drafting' | 'checking' | 'done';
+/** "job" shows the open drafting job: its outline, its slides being written, or the finished deck. */
+type Stage = 'gather' | 'reading' | 'asking' | 'outlining' | 'building' | 'job' | 'done';
+
+const NOTHING: ReadonlySet<string> = new Set();
 
 const MAX_FILES = 20;
 const PURPOSE_KEY = '__purpose';
@@ -48,8 +59,8 @@ const BRIEF_PLACEHOLDER: Record<DeckPurpose, string> = {
 
 // The files being gathered live outside the page, so they survive a visit to another page,
 // and a document that finishes reading (or a transcript that finishes) while you're away
-// is still filled in when you come back.
-const kept = { sources: [] as Source[], brief: '' };
+// is still filled in when you come back. So does the open drafting job.
+const kept = { sources: [] as Source[], brief: '', jobId: '' };
 const keptListeners = new Set<() => void>();
 
 function setSources(update: (all: Source[]) => Source[]) {
@@ -103,30 +114,59 @@ export default function MakePage() {
   const [ask, setAsk] = useState(profile.askQuestions);
   const [ai, setAi] = useState<AiStatus | null>(null);
   const [code, setCode] = useState(savedCode);
-  const [stage, setStage] = useState<Stage>('gather');
+  const [stage, setStage] = useState<Stage>(kept.jobId ? 'job' : 'gather');
   const [questions, setQuestions] = useState<AiQuestion[]>([]);
   const [asked, setAsked] = useState(0);
   const [hint, setHint] = useState<{ title: string; topic: string } | null>(null);
   const [deck, setDeck] = useState<Deck | null>(null);
-  const [fit, setFit] = useState<DraftFit | null>(null);
-  const [fixing, setFixing] = useState(0);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [jobId, setJobIdState] = useState(kept.jobId);
   const abort = useRef<AbortController | null>(null);
-  const skipCheck = useRef<AbortController | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const started = useRef(Date.now());
 
+  const openJobId = useCallback((id: string) => { kept.jobId = id; setJobIdState(id); }, []);
+  // Each read says which id it was for: a live query keeps its last result until the new one
+  // arrives. undefined while loading; null when there is no such job or deck.
+  const jobRead = useLiveQuery(async () => ({ id: jobId, job: jobId ? (await getJob(jobId)) ?? null : null }), [jobId]);
+  const job = jobRead && jobRead.id === jobId ? jobRead.job : undefined;
+  const waiting = useLiveQuery(async () => (await openJob()) ?? null, []);
+  const runs = useSyncExternalStore(subscribeRuns, runsSnapshot);
+  const jobPictures = useJobPictures(job);
+  const doneId = job?.status === 'done' ? job.decks[0]?.deckId : undefined;
+  const deckRead = useLiveQuery(async () => ({ id: doneId, deck: doneId ? (await db.decks.get(doneId)) ?? null : null }), [doneId]);
+  const doneDeck = deckRead && deckRead.id === doneId ? deckRead.deck : undefined;
+
+  useEffect(() => { void recover(); }, []);
   useEffect(() => { aiStatus().then(setAi); }, []);
   useEffect(() => { document.title = 'Make a deck · Lectern'; return () => { document.title = 'Lectern'; }; }, []);
   useEffect(() => () => abort.current?.abort(), []);
 
   useEffect(() => { kept.brief = brief; }, [brief]);
 
+  // A discarded job leaves nothing to show: back to the files.
+  useEffect(() => {
+    if (stage === 'job' && job === null) { openJobId(''); setStage('gather'); }
+  }, [stage, job, openJobId]);
+
+  // Once the deck is made, the files have done their job.
+  const jobDone = job?.status === 'done';
+  useEffect(() => {
+    if (!jobDone || !kept.sources.length) return;
+    setDoneSources(kept.sources);
+    setSources(() => []);
+    setBrief('');
+  }, [jobDone]);
+
   const addFiles = useCallback((files: File[]) => {
     setError('');
     setStage((s) => (s === 'done' ? 'gather' : s));
+    if (kept.jobId) {
+      void getJob(kept.jobId).then((j) => { if (!j || j.status === 'done') { openJobId(''); setStage('gather'); } });
+    }
     const room = Math.max(0, MAX_FILES - kept.sources.length);
     if (files.length > room) toast.show(`Up to ${MAX_FILES} files at a time. ${files.length - room} left out.`, { tone: 'error' });
     const fresh: Source[] = files.slice(0, room).map((file) => {
@@ -147,7 +187,7 @@ export default function MakePage() {
           .catch((e: Error) => patch(s.id, { status: 'error', error: e.message || 'This file’s audio couldn’t be read.' }));
       }
     }
-  }, [toast]);
+  }, [toast, openJobId]);
 
   // Files dropped elsewhere in the app arrive here.
   useEffect(() => {
@@ -166,19 +206,7 @@ export default function MakePage() {
   const pictures = ready.flatMap((s) => s.pictures).slice(0, 8);
   const aiOn = ai?.available === true;
 
-  /** Checks a fresh AI draft with the real fonts and fixes what doesn't fit. Skip keeps the fixes made so far. */
-  const checkDraft = async (made: Deck): Promise<DraftFit> => {
-    const skip = new AbortController();
-    skipCheck.current = skip;
-    try {
-      return await fitDraft(made, { signal: skip.signal, onFixing: (n) => { setFixing(n); setStage('checking'); } });
-    } finally {
-      skipCheck.current = null;
-    }
-  };
-
   const draft = async (answers: Answer[], suggestion: { title: string; topic: string } | null) => {
-    setStage('drafting');
     started.current = Date.now();
     const controller = abort.current ?? new AbortController();
     abort.current = controller;
@@ -188,41 +216,59 @@ export default function MakePage() {
     if (match) { chosen = match.id; setPurpose(match.id); }
     const real = answers.filter((a) => a.key !== PURPOSE_KEY);
     const known = profile.remembered.filter((r) => !real.some((a) => a.key === r.key));
+    const remember = () => rememberDeckPrefs(
+      { purpose: chosen, audience, minutes, density, themeId },
+      real.filter((a) => a.remember).map((a) => ({ key: a.key, question: a.question, answer: a.answer, updatedAt: Date.now() })),
+    );
     try {
-      let result: DeckDraft;
-      if (aiOn) {
-        const forAi = (await Promise.all(pictures.map(async (f, i) => {
-          const p = await pictureForAi(f);
-          return p ? { id: `pic${i + 1}`, name: f.name, ...p } : null;
-        }))).filter((p): p is NonNullable<typeof p> => p !== null);
-        result = await draftWithAI({
-          topic: brief.trim() || suggestion?.topic || fallbackTopic(ready),
-          audience,
-          purpose: chosen,
-          minutes,
-          density,
-          material: buildMaterial(ready),
-          answers: [...real, ...known].map(({ question, answer }) => ({ question, answer })),
-          pictures: forAi,
-        }, controller.signal);
-      } else {
-        result = offlineDraft(ready, suggestion?.title || stem(ready.find((s) => s.kind !== 'picture')?.file.name ?? 'New deck'));
+      if (!aiOn) {
+        setStage('building');
+        let result = offlineDraft(ready, suggestion?.title || stem(ready.find((s) => s.kind !== 'picture')?.file.name ?? 'New deck'));
+        result = await placePictures(result, pictures, async (f) => saveAsset(await pictureForDeck(f), f.name));
+        const made = draftToDeck(result, { audience, themeId, purpose: chosen });
+        await addDeck(made);
+        remember();
+        setDeck(made);
+        setDoneSources(kept.sources);
+        setSources(() => []);
+        setBrief('');
+        setStage('done');
+        return;
       }
-      result = await placePictures(result, pictures, async (f) => saveAsset(await pictureForDeck(f), f.name));
-      const made = draftToDeck(result, { audience, themeId, purpose: chosen, ...(aiOn ? { source: 'ai' } : {}) });
-      const checked = aiOn ? await checkDraft(made) : null;
-      const final = checked?.deck ?? made;
-      await addDeck(final);
-      rememberDeckPrefs(
-        { purpose: chosen, audience, minutes, density, themeId },
-        real.filter((a) => a.remember).map((a) => ({ key: a.key, question: a.question, answer: a.answer, updatedAt: Date.now() })),
-      );
-      setDeck(final);
-      setFit(checked && fitSummary(checked.report) ? checked : null);
-      setDoneSources(kept.sources);
-      setSources(() => []);
-      setBrief('');
-      setStage('done');
+      // With AI, the deck starts as an outline to check. Its slides are written once it's approved.
+      setStage('outlining');
+      const forAi = (await Promise.all(pictures.map(async (f, i) => {
+        const p = await pictureForAi(f);
+        return p ? { id: `pic${i + 1}`, name: f.name, ...p } : null;
+      }))).filter((p): p is NonNullable<typeof p> => p !== null);
+      const request: DraftRequest = {
+        topic: brief.trim() || suggestion?.topic || fallbackTopic(ready),
+        audience,
+        purpose: chosen,
+        minutes,
+        density,
+        material: buildMaterial(ready),
+        answers: [...real, ...known].map(({ question, answer }) => ({ question, answer })),
+        pictures: forAi,
+        kinds: kindCatalogue(),
+        hints: draftingHints(),
+        budget: DENSITY[audience],
+      };
+      const startedAt = Date.now();
+      const res = await draftOutline(request, controller.signal);
+      if (!res.outline.length) throw new Error('The AI returned no outline. Try again.');
+      remember();
+      const made = await createJob({
+        request,
+        settings: { audience, themeId, purpose: chosen },
+        pictures,
+        title: res.title || suggestion?.title || 'Untitled deck',
+        outline: res.outline,
+        usage: res.usage,
+        startedAt,
+      });
+      openJobId(made.id);
+      setStage('job');
     } catch (e) {
       if ((e as Error).name === 'AbortError') { setStage('gather'); return; }
       setError((e as Error).message || 'The deck couldn’t be made. Try again.');
@@ -230,6 +276,47 @@ export default function MakePage() {
     } finally {
       abort.current = null;
     }
+  };
+
+  // Outline edits read the job afresh, so a late save never undoes the approval.
+  const onOutlineChange = useCallback(async (title: string, outline: PlannedSlide[]) => {
+    const current = await getJob(jobId);
+    if (current?.status === 'outline') await saveOutline(current, title, outline);
+  }, [jobId]);
+
+  const writeSlides = async (title: string, outline: PlannedSlide[]) => {
+    const current = await getJob(jobId);
+    if (!current) return;
+    await approveOutline(current, title, outline);
+    void runJob(current.id);
+  };
+
+  const continueJob = (target: DraftJob) => {
+    openJobId(target.id);
+    setStage('job');
+    if (target.status !== 'outline') void runJob(target.id);
+  };
+
+  const keepJob = async () => {
+    if (!job) return;
+    setSaving(true);
+    try {
+      await finishJob(job);
+    } catch {
+      toast.show('The deck couldn’t be saved. Try again.', { tone: 'error' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const discardJob = async (target: DraftJob) => {
+    await stopJob(target.id);
+    const snapshot = (await getJob(target.id)) ?? target;
+    await deleteJob(target.id);
+    if (target.id === jobId) { openJobId(''); setStage('gather'); }
+    toast.show('Draft discarded', {
+      action: { label: 'Undo', run: () => { void db.jobs.put({ ...snapshot, status: snapshot.status === 'drafting' ? 'interrupted' : snapshot.status }); } },
+    });
   };
 
   const make = async () => {
@@ -273,7 +360,6 @@ export default function MakePage() {
   };
 
   const cancel = () => {
-    if (stage === 'checking') { skipCheck.current?.abort(); return; }
     abort.current?.abort();
     abort.current = null;
     setStage('gather');
@@ -283,25 +369,18 @@ export default function MakePage() {
     setSources(() => []);
     setBrief('');
     setDeck(null);
-    setFit(null);
     setHint(null);
+    openJobId('');
     setStage('gather');
     setPurposeTouched(false);
   };
 
-  /** Swaps between the checked deck and the draft as the AI wrote it. */
-  const toggleFit = async () => {
-    if (!fit || !deck) return;
-    const next = deck === fit.deck ? fit.before : fit.deck;
-    await saveDeck(next);
-    setDeck(next);
-  };
-
+  const shownDeck = stage === 'job' ? doneDeck : deck;
   const download = async () => {
-    if (!deck) return;
+    if (!shownDeck) return;
     setExporting(true);
     try {
-      const warnings = await exportPptx(deck);
+      const warnings = await exportPptx(shownDeck);
       toast.show(warnings.length ? `PowerPoint saved, with ${warnings.length} note${warnings.length === 1 ? '' : 's'}` : 'PowerPoint saved');
     } catch {
       toast.show('The PowerPoint couldn’t be made. Try again.', { tone: 'error' });
@@ -314,11 +393,19 @@ export default function MakePage() {
     if (!dragHasFiles(e)) return;
     e.preventDefault();
     setDragging(false);
-    if (stage === 'gather' || stage === 'done') addFiles(Array.from(e.dataTransfer.files));
+    if (view === 'gather' || view === 'result') addFiles(Array.from(e.dataTransfer.files));
   };
 
   const usual = purpose === profile.deck.purpose && audience === profile.deck.audience && minutes === profile.deck.minutes && density === profile.deck.density && themeId === profile.deck.themeId;
-  const working = stage === 'reading' || stage === 'asking' || stage === 'drafting' || stage === 'checking';
+  const working = stage === 'reading' || stage === 'asking' || stage === 'outlining' || stage === 'building';
+  /** What the page shows; "loading" while the open job is read. */
+  const view = stage === 'done' && deck ? 'result'
+    : stage !== 'job' ? 'gather'
+    : job === undefined || (job?.status === 'done' && doneDeck === undefined) ? 'loading'
+    : !job ? 'gather'
+    : job.status === 'outline' ? 'outline'
+    : job.status === 'done' ? (doneDeck ? 'result' : 'gather')
+    : 'drafting';
 
   return (
     <div
@@ -327,17 +414,39 @@ export default function MakePage() {
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }}
       onDrop={onDrop}
     >
-      {stage === 'done' && deck ? (
+      {view === 'loading' ? null : view === 'result' && shownDeck ? (
         <Result
-          deck={deck}
-          fit={fit && { text: deck === fit.deck ? fitSummary(fit.report, deck.minutes) : 'Showing the draft as the AI wrote it.', undone: deck !== fit.deck, canUndo: fit.deck !== fit.before, onToggle: toggleFit }}
+          deck={shownDeck}
           sources={doneSources}
           remembered={profile.remembered.length}
+          usage={stage === 'job' ? job?.usage : undefined}
+          fit={stage === 'job' && job ? fitLine(job, shownDeck) : undefined}
           exporting={exporting}
           onDownload={download}
-          onOpen={() => navigate(`/studio/${deck.id}`)}
-          onPresent={() => navigate(`/present/${deck.id}`)}
+          onOpen={() => navigate(`/studio/${shownDeck.id}`)}
+          onPresent={() => navigate(`/present/${shownDeck.id}`)}
           onAgain={reset}
+        />
+      ) : view === 'outline' && job ? (
+        <OutlineEditor
+          key={job.id}
+          job={job}
+          pictureUrls={jobPictures.map((p) => p.url)}
+          onChange={onOutlineChange}
+          onWrite={writeSlides}
+          onDiscard={() => void discardJob(job)}
+        />
+      ) : view === 'drafting' && job ? (
+        <DraftingView
+          job={job}
+          running={runs.has(job.id)}
+          writing={runs.get(job.id) ?? NOTHING}
+          pictures={jobPictures}
+          saving={saving}
+          onStop={() => void stopJob(job.id)}
+          onContinue={() => void runJob(job.id)}
+          onKeep={() => void keepJob()}
+          onDiscard={() => void discardJob(job)}
         />
       ) : (
         <>
@@ -347,14 +456,18 @@ export default function MakePage() {
             <p className="muted ad-lead">
               PDFs, Word, PowerPoint, Excel, web pages, pictures and recordings.{' '}
               {aiOn || ai === null
-                ? 'Lectern reads them, asks a few questions, then writes the slides and speaker notes.'
+                ? 'Lectern reads them, asks a few questions and plans an outline for you to check. Then it writes the slides and speaker notes.'
                 : 'Lectern builds the slides from their headings and points.'}
             </p>
           </header>
 
           {working ? (
-            <Working stage={stage} sources={ready.length} asked={asked} fixing={fixing} started={started.current} onCancel={cancel} />
+            <Working stage={stage} sources={ready.length} asked={asked} started={started.current} onCancel={cancel} />
           ) : (
+            <>
+            {waiting && waiting.id !== jobId && (
+              <ResumeCard job={waiting} onOpen={() => continueJob(waiting)} onDiscard={() => void discardJob(waiting)} />
+            )}
             <div className="ad-grid">
               <div className="ad-main">
                 <div
@@ -483,6 +596,7 @@ export default function MakePage() {
                 </p>
               </aside>
             </div>
+            </>
           )}
         </>
       )}
@@ -493,12 +607,12 @@ export default function MakePage() {
         onCancel={cancel}
         onDone={(answers) => { setAsked(answers.length); void draft(answers, hint); }}
       />
-      {dragging && (stage === 'gather' || stage === 'done') && <div className="ad-drag-hint" aria-hidden><Upload size={18} /> Drop to add</div>}
+      {dragging && (view === 'gather' || view === 'result') && <div className="ad-drag-hint" aria-hidden><Upload size={18} /> Drop to add</div>}
     </div>
   );
 }
 
-function Working({ stage, sources, asked, fixing, started, onCancel }: { stage: Stage; sources: number; asked: number; fixing: number; started: number; onCancel(): void }) {
+function Working({ stage, sources, asked, started, onCancel }: { stage: Stage; sources: number; asked: number; started: number; onCancel(): void }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
@@ -508,8 +622,7 @@ function Working({ stage, sources, asked, fixing, started, onCancel }: { stage: 
   const steps = [
     { label: `Read ${sources} file${sources === 1 ? '' : 's'}`, state: 'done' },
     { label: stage === 'reading' ? 'Looking for questions to ask' : asked ? `Answered ${asked} question${asked === 1 ? '' : 's'}` : 'Questions skipped', state: stage === 'reading' ? 'active' : 'done' },
-    { label: 'Writing the slides and speaker notes', state: stage === 'drafting' ? 'active' : stage === 'checking' ? 'done' : 'todo' },
-    ...(stage === 'checking' ? [{ label: 'Checking every slide fits', state: 'active' }] : []),
+    { label: stage === 'building' ? 'Building the slides from your files' : 'Planning the outline', state: stage === 'outlining' || stage === 'building' ? 'active' : 'todo' },
   ];
   return (
     <section className="ad-working card" aria-live="polite" aria-busy="true">
@@ -525,21 +638,57 @@ function Working({ stage, sources, asked, fixing, started, onCancel }: { stage: 
         ))}
       </ol>
       <p className="faint ad-working-time">
-        {stage === 'checking'
-          ? `Shortening ${fixing} slide${fixing === 1 ? '' : 's'} that ${fixing === 1 ? 'doesn’t' : 'don’t'} fit…`
-          : stage === 'drafting' ? (secs < 20 ? 'This usually takes under a minute.' : `Still writing · ${secs} s. Long files take a little longer.`) : 'Reading your files…'}
+        {stage === 'outlining'
+          ? (secs < 20 ? 'This usually takes under a minute. You’ll check the plan next.' : `Still planning · ${secs} s. Long files take a little longer.`)
+          : stage === 'building' ? 'Almost there…' : 'Reading your files…'}
       </p>
-      <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>{stage === 'checking' ? 'Skip the check' : 'Cancel'}</button>
+      <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>Cancel</button>
     </section>
   );
 }
 
-function Result({ deck, fit, sources, remembered, exporting, onDownload, onOpen, onPresent, onAgain }: {
+/** Tokens and an estimated cost of the AI calls that made the deck, with the breakdown on request. */
+function UsageNote({ usage }: { usage: UsageByModel }) {
+  const line = usageLine(usage);
+  if (!line) return null;
+  const t = usageTotals(usage);
+  const cost = usageCost(usage);
+  return (
+    <details className="ad-usage">
+      <summary>AI use: {line}</summary>
+      <p className="faint tabular">
+        {t.calls} call{t.calls === 1 ? '' : 's'} · {t.input.toLocaleString('en-US')} input · {t.cacheRead.toLocaleString('en-US')} read from the prompt cache · {t.cacheWrite.toLocaleString('en-US')} written to it · {t.output.toLocaleString('en-US')} output, thinking included.
+        {cost === null ? ' The price of this model isn’t known to Lectern.' : ' The cost is an estimate at list prices.'}
+      </p>
+    </details>
+  );
+}
+
+interface FitLine {
+  text: string;
+  undone: boolean;
+  canUndo: boolean;
+  onToggle(): void;
+}
+
+/** What the check after drafting changed, with Undo back to the draft as the AI wrote it. */
+function fitLine(job: DraftJob, deck: Deck): FitLine | undefined {
+  const fit = job.decks[0]?.fit;
+  if (!fit) return undefined;
+  return {
+    text: fit.undone ? 'Showing the draft as the AI wrote it.' : fitSummary(fit.report, deck.minutes),
+    undone: fit.undone,
+    canUndo: fitChanged(fit.report),
+    onToggle: () => void toggleDraftFit(job.id),
+  };
+}
+
+function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, onOpen, onPresent, onAgain }: {
   deck: Deck;
-  /** What the check after drafting fixed, with a way back to the draft as written. */
-  fit: { text: string; undone: boolean; canUndo: boolean; onToggle(): void } | null;
   sources: Source[];
   remembered: number;
+  usage?: UsageByModel;
+  fit?: FitLine;
   exporting: boolean;
   onDownload(): void;
   onOpen(): void;
@@ -556,12 +705,13 @@ function Result({ deck, fit, sources, remembered, exporting, onDownload, onOpen,
         <p className="muted">
           {shown.length} slides with speaker notes · about {Math.round(deckMinutes(deck))} min · {purposeLabel(deck.purpose ?? 'talk')} · {AUDIENCES.find((a) => a.id === deck.audience)?.label}
         </p>
-        {fit && (
+        {fit?.text && (
           <p className="ad-fit" role="status">
-            {fit.canUndo ? <Check size={14} /> : <AlertCircle size={14} />} {fit.text}
-            {fit.canUndo && <button type="button" className="ad-link" onClick={fit.onToggle}>{fit.undone ? 'Redo' : 'Undo'}</button>}
+            {fit.undone || !fit.canUndo ? <AlertCircle size={15} /> : <Check size={15} />} {fit.text}
+            {fit.canUndo && <> <button type="button" className="ad-link" onClick={fit.onToggle}>{fit.undone ? 'Redo' : 'Undo'}</button></>}
           </p>
         )}
+        {usage && <UsageNote usage={usage} />}
         <div className="ad-result-actions">
           <button type="button" className="btn btn-brand btn-lg" onClick={onDownload} disabled={exporting}>
             {exporting ? <><Loader2 size={17} className="spin" /> Making the file…</> : <><Download size={17} /> Download PowerPoint</>}
