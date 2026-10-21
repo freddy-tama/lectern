@@ -189,6 +189,17 @@ describe('seed data', () => {
     expect(ah.slides.length).toBeLessThanOrEqual(10);
     expect(ah.slides.find((s) => s.kind === 'recall')?.content.cards).toHaveLength(3);
     expect(ah.slides.filter((s) => s.kind === 'question').at(-1)?.content.options).toHaveLength(3);
+    // The sample talk ends with a three-question quiz, then the open question for the room.
+    const mt = byId.deck_meetings_talk!;
+    const scored = mt.slides.filter((s) => s.kind === 'question' && (s.content.correct as number) >= 0);
+    expect(scored.map((s) => s.id)).toEqual(['s_mt_q1', 's_mt_q2', 's_mt_q3']);
+    for (const s of scored) {
+      const options = s.content.options as string[];
+      expect(options, s.id).toHaveLength(4);
+      expect(new Set(options).size, s.id).toBe(4);
+    }
+    expect(mt.slides.map((s) => s.id).indexOf('s_mt_q1')).toBe(mt.slides.map((s) => s.id).indexOf('s_mt_11') + 1);
+    expect(mt.slides.map((s) => s.id).indexOf('s_mt_12')).toBe(mt.slides.map((s) => s.id).indexOf('s_mt_q3') + 1);
   });
 
   it('ships its sample illustrations', () => {

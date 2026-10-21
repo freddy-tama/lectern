@@ -22,6 +22,8 @@ interface Block {
   heading: string;
   level: number;
   lines: string[];
+  /** The line of the notes the block starts on. */
+  start: number;
 }
 
 const BULLET = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
@@ -37,7 +39,7 @@ function words(s: string) {
 }
 
 function sentences(text: string): string[] {
-  return text.replace(/\s+/g, ' ').match(/[^.!?。！？]+[.!?。！？]?/g)?.map((s) => s.trim()).filter(Boolean) ?? [];
+  return text.replace(/\s+/g, ' ').match(/[^.!?\u3002\uFF01\uFF1F]+[.!?\u3002\uFF01\uFF1F]?/g)?.map((s) => s.trim()).filter(Boolean) ?? [];
 }
 
 function splitBlocks(text: string): { title: string; subtitle: string; blocks: Block[] } {
@@ -47,7 +49,7 @@ function splitBlocks(text: string): { title: string; subtitle: string; blocks: B
   const blocks: Block[] = [];
   let current: Block | null = null;
   let beforeFirst = true;
-  for (const raw of lines) {
+  for (const [i, raw] of lines.entries()) {
     const line = raw.replace(/\s+$/, '');
     const h = /^(#{1,4})\s+(.*)$/.exec(line);
     if (h && h[1].length === 1 && !title && beforeFirst) {
@@ -56,13 +58,13 @@ function splitBlocks(text: string): { title: string; subtitle: string; blocks: B
     }
     if (h) {
       beforeFirst = false;
-      current = { heading: h[2].trim(), level: h[1].length, lines: [] };
+      current = { heading: h[2].trim(), level: h[1].length, lines: [], start: i };
       blocks.push(current);
       continue;
     }
     if (/^\s*(?:-{3,}|\*{3,})\s*$/.test(line)) {
       beforeFirst = false;
-      current = { heading: '', level: 2, lines: [] };
+      current = { heading: '', level: 2, lines: [], start: i };
       blocks.push(current);
       continue;
     }
@@ -75,7 +77,7 @@ function splitBlocks(text: string): { title: string; subtitle: string; blocks: B
         continue;
       }
       beforeFirst = false;
-      current = { heading: '', level: 2, lines: [] };
+      current = { heading: '', level: 2, lines: [], start: i };
       blocks.push(current);
     }
     current?.lines.push(line);
@@ -83,12 +85,13 @@ function splitBlocks(text: string): { title: string; subtitle: string; blocks: B
   return { title, subtitle, blocks };
 }
 
-/** Plain text without headings: every paragraph becomes a slide. */
-function paragraphsToBlocks(text: string): Block[] {
-  return text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p) => {
+/** Plain text without headings: every paragraph becomes a slide. `firstLine` is the text's first line in the notes. */
+function paragraphsToBlocks(text: string, firstLine = 0): Block[] {
+  const starts = text.split('\n').flatMap((l, i, all) => (l.trim() && (i === 0 || !all[i - 1].trim()) ? [firstLine + i] : []));
+  return text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p, i) => {
     const [first, ...rest] = sentences(p);
     const heading = first && words(first) <= 10 ? first.replace(/[.:]$/, '') : '';
-    return { heading, level: 2, lines: heading ? [rest.join(' ')] : p.split('\n') };
+    return { heading, level: 2, lines: heading ? [rest.join(' ')] : p.split('\n'), start: starts[i] ?? firstLine };
   });
 }
 
@@ -122,7 +125,7 @@ function pipeTable(lines: string[]): { cells: string; rest: string[] } | null {
 
 function blockToSlides(block: Block, index: number): DraftSlide[] {
   const { script, rest } = notesFrom(block.lines);
-  const heading = block.heading.replace(/[:：]\s*$/, '');
+  const heading = block.heading.replace(/[:\uFF1A]\s*$/, '');
   const content = rest.filter((l) => l.trim());
   const bullets = content.filter((l) => BULLET.test(l)).map((l) => BULLET.exec(l)![1].trim());
   const ordered = content.filter((l) => ORDERED.test(l));
@@ -173,7 +176,7 @@ function blockToSlides(block: Block, index: number): DraftSlide[] {
   }
 
   // Vocabulary: one key-term slide per "term: meaning" line.
-  const pairs = content.map((l) => /^\s*(?:[-*•]\s*)?([^:：—–]{1,40}?)\s*(?:[:：]|\s[—–]\s)\s*(.+)$/.exec(l)).filter(Boolean) as RegExpExecArray[];
+  const pairs = content.map((l) => /^\s*(?:[-*•]\s*)?([^:\uFF1A—–]{1,40}?)\s*(?:[:\uFF1A]|\s[—–]\s)\s*(.+)$/.exec(l)).filter(Boolean) as RegExpExecArray[];
   if (is(heading, 'vocabulary', 'key terms?', 'glossary', 'terms', 'definitions?') && pairs.length) {
     return pairs.map((m) => ({ kind: 'term', content: { label: 'Key term', term: m[1].trim(), definition: m[2].trim(), example: '' }, notes: { keyPoints: [`${m[1].trim()}: ${m[2].trim()}`] } }));
   }
@@ -191,7 +194,7 @@ function blockToSlides(block: Block, index: number): DraftSlide[] {
   // Ordered "Label: detail" lists or a process heading become steps.
   if ((ordered.length >= 2 && ordered.length <= 6 && ordered.length === bullets.length) || (is(heading, 'steps', 'process', 'timeline', 'how it works', 'stages') && bullets.length >= 2 && bullets.length <= 6)) {
     const steps = bullets.map((b) => {
-      const m = /^(.{1,40}?)\s*(?:[:：]|\s[—–]\s)\s*(.+)$/.exec(b);
+      const m = /^(.{1,40}?)\s*(?:[:\uFF1A]|\s[—–]\s)\s*(.+)$/.exec(b);
       return m ? { label: m[1].trim(), detail: m[2].trim() } : { label: b, detail: '' };
     });
     if (steps.every((s) => words(s.label) <= 6)) return [{ kind: 'steps', content: { title: heading, steps, reveal: true }, notes }];
@@ -223,19 +226,29 @@ function blockToSlides(block: Block, index: number): DraftSlide[] {
   }];
 }
 
-export function outlineToDraft(source: string, fallbackTitle = 'Untitled deck'): DeckDraft {
+/**
+ * The draft, and for each of its slides the line its text starts on, counted in the trimmed
+ * notes with every line break as one (the title slide starts on line 0).
+ */
+export function outlineSlides(source: string, fallbackTitle = 'Untitled deck'): { draft: DeckDraft; lines: number[] } {
   const text = source.trim();
   const parsed = splitBlocks(text);
   let blocks = parsed.blocks;
   const hasHeadings = /^#{1,4}\s/m.test(text);
-  if (!hasHeadings && blocks.length <= 1) blocks = paragraphsToBlocks(text.split('\n').slice(parsed.title ? 1 : 0).join('\n'));
+  if (!hasHeadings && blocks.length <= 1) blocks = paragraphsToBlocks(text.split('\n').slice(parsed.title ? 1 : 0).join('\n'), parsed.title ? 1 : 0);
   const title = parsed.title || fallbackTitle;
   const slides: DraftSlide[] = [{ kind: 'title', content: { title, subtitle: parsed.subtitle, eyebrow: '', presenter: '' } }];
+  const lines = [0];
   let sectionIndex = 0;
   for (const block of blocks) {
     const made = blockToSlides(block, sectionIndex);
     if (made[0]?.kind === 'section') sectionIndex += 1;
     slides.push(...made);
+    lines.push(...made.map(() => block.start));
   }
-  return { title, slides };
+  return { draft: { title, slides }, lines };
+}
+
+export function outlineToDraft(source: string, fallbackTitle = 'Untitled deck'): DeckDraft {
+  return outlineSlides(source, fallbackTitle).draft;
 }

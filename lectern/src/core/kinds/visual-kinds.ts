@@ -229,7 +229,7 @@ function initials(name: string) {
   const first = (w: string) => Array.from(w)[0] ?? '';
   if (words.length > 1) return (first(words[0]!) + first(words[words.length - 1]!)).toUpperCase();
   const chars = Array.from(words[0]!);
-  return /[⺀-꓏]/.test(chars[0] ?? '') ? chars[0]! : chars.slice(0, 2).join('').toUpperCase();
+  return /[\u2E80-\uA4CF]/.test(chars[0] ?? '') ? chars[0]! : chars.slice(0, 2).join('').toUpperCase();
 }
 
 const people: SlideKindDefinition<C> = {

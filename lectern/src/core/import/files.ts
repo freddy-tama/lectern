@@ -268,7 +268,7 @@ export function pdfLinesToOutline(lines: PdfLine[], title: string): string {
     if (isHeading(l)) { out.push('', `## ${l.text}`); continue; }
     const prev = out[out.length - 1] ?? '';
     // Join wrapped lines of one paragraph.
-    if (prev && !prev.startsWith('#') && !/^[-*•▪◦]|^\d+[.)]/.test(l.text) && !/[.!?:。！？]$/.test(prev) && /^[\p{Ll}(]/u.test(l.text)) {
+    if (prev && !prev.startsWith('#') && !/^[-*•▪◦]|^\d+[.)]/.test(l.text) && !/[.!?:\u3002\uFF01\uFF1F]$/.test(prev) && /^[\p{Ll}(]/u.test(l.text)) {
       out[out.length - 1] = `${prev} ${l.text}`;
     } else out.push(l.text);
   }
@@ -450,7 +450,7 @@ export function subtitlesToText(text: string): string {
   for (const cue of cues) {
     current.push(cue);
     words += cue.split(/\s+/).length;
-    if (words >= 70 && /[.!?。！？]$/.test(cue)) { paras.push(current.join(' ')); current = []; words = 0; }
+    if (words >= 70 && /[.!?\u3002\uFF01\uFF1F]$/.test(cue)) { paras.push(current.join(' ')); current = []; words = 0; }
   }
   if (current.length) paras.push(current.join(' '));
   return paras.join('\n\n');

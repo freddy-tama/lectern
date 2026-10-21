@@ -6,15 +6,9 @@ import { Dialog } from '../../ui/Dialog';
 import { useToast } from '../../ui/Toast';
 import { BackupPanel } from '../backup/BackupPanel';
 
-/** Mods that live in this repository's /plugins folder. */
-const KNOWN = [
-  { id: 'chinese', name: 'Chinese lessons', description: 'Character, word-card and sentence slides with pinyin, a word-list starter, and a P key that hides or shows pinyin while you present.' },
-  { id: 'lesson-plan', name: '教案 · Lesson plan', description: 'Teaching fields on each slide’s key notes, lesson-plan details on the deck, and a Word 教案 export in the thirteen-item course format.' },
-];
-
 export function ModsPage() {
+  // Names and descriptions come from each mod, so this page never names a mod the build doesn't have.
   const mods = installedPlugins();
-  const available = KNOWN.filter((k) => !mods.some((m) => m.id === k.id));
   const toast = useToast();
   const [confirmReset, setConfirmReset] = useState(false);
   return (
@@ -55,25 +49,11 @@ export function ModsPage() {
         ) : (
           <div className="empty">
             <div className="empty-icon"><Puzzle size={22} /></div>
-            <h3>No mods in this build</h3>
+            <h3>This build has no mods.</h3>
             <p>This is the general edition. Every core feature is here.</p>
           </div>
         )}
-      </section>
-
-      <section className="section" aria-labelledby="available-title">
-        <div className="section-head"><h2 id="available-title">Available in the source</h2></div>
-        {available.length === 0 && <p className="muted" style={{ fontSize: 14 }}>Every mod in the source is on in this build.</p>}
-        <div className="course-grid">
-          {available.map((k) => (
-            <article key={k.id} className="card mod-card">
-              <h3 style={{ fontSize: 17 }}>{k.name}</h3>
-              <p className="muted" style={{ fontSize: 14 }}>{k.description}</p>
-              <code className="code-block">LECTERN_PLUGINS={k.id} npm run dev</code>
-            </article>
-          ))}
-        </div>
-        <p className="faint" style={{ fontSize: 13.5, marginTop: 14 }}>Mods are chosen when the app is built. Set <code>LECTERN_PLUGINS</code> to a comma-separated list of folders in <code>/plugins</code>.</p>
+        <p className="faint" style={{ fontSize: 13.5, marginTop: 14 }}>Mods are chosen when the app is built. Set <code>LECTERN_PLUGINS</code> to a comma-separated list of folders in <code>/plugins</code>, for example <code>LECTERN_PLUGINS=my-mod npm run dev</code>. The README lists the mods in the source.</p>
       </section>
 
       <section className="section" aria-labelledby="data-title">

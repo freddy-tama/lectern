@@ -52,7 +52,18 @@ npm test
 npm run build      # type-checks, then builds to dist/
 ```
 
-You need Node 22.12 or newer. The first visit loads three sample courses and four sample decks. You can restore them later from the **Mods** page.
+You need Node 22.12 or newer. The first visit loads three sample courses and six sample decks. You can restore them later from the **Mods** page.
+
+### First visit and sample links
+
+A first visit to `/` opens the front page at `/welcome`. Until the setup is done, its **Open Lectern** buttons go through `/start`, one screen that asks where to start (the sample talk, your notes, a file, a course, or a recording) and opens that page in one click. **Fine-tune first** on that screen holds the full set of preferences, and `/start?tune=1` opens it. Two keys in localStorage remember this:
+
+| Key | What it holds |
+|---|---|
+| `lectern.welcomed` | Set once the front page has been seen, so `/` opens the app next time. |
+| `lectern.profile` | The answers from `/start` and Preferences: what you came to do, the sidebar's parts, and the defaults for new decks. |
+
+`/try/:sample/:view` opens a sample deck in one view, for links from the front page, a demo or a test. `:sample` is `talk`, `report`, `lesson` or `writing`; `:view` is `studio` (the default), `present`, `presenter`, `prompter`, `study` or `print`. If the sample was deleted it's put back first; a sample you edited is left as it is. Present mode takes `?from=` with a 0-based slide index, for example `/try/talk/present?from=3`. `/try/course` opens the sample course. Leaving present mode goes back to the page you came from, or to the deck in the studio when the show was opened straight from a link.
 
 ## Writing an outline
 
@@ -131,6 +142,8 @@ See [docs/mods.md](docs/mods.md) to write your own.
 | `LECTERN_PLUGINS` | Build with mods, for example `chinese,lesson-plan`. Leave it empty for the general edition. |
 | `VITE_PEER_HOST`, `VITE_PEER_PORT`, `VITE_PEER_PATH`, `VITE_PEER_KEY` | Your own [PeerJS server](https://github.com/peers/peerjs-server) for Share to phones. By default PeerJS's free public server introduces devices; slides, state and votes then go straight between them. |
 | `VITE_ICE_SERVERS` | JSON list of your own STUN/TURN servers, for networks that block direct connections. |
+| `VITE_PUBLIC_ORIGIN` | The public address of the site, such as `https://lectern.example.com`. The front page builds its quiz QR code from it, so a code shown on `localhost` or a preview deployment still opens on a phone. Without it, the code uses the address the page was opened at. |
+| `VITE_TESTSPRITE_URL` | A link to the site's TestSprite test results. When it's set, the front page's footer links to it; otherwise the line is left out. |
 
 For local AI drafting, put the same variables in `.env.local`. The dev server serves `api/` itself.
 
@@ -199,6 +212,5 @@ A slide is a list of positioned boxes (text, shapes, images, charts, tables, vid
 
 ## Next
 
-- Classroom notes you can keep, tag and schedule against lessons.
 - Linking a lecture's transcript to the slides it covers.
 - Sharing a deck's study mode with learners.

@@ -6,8 +6,11 @@ import { countWords } from '../../core/deck/words';
 import { getKind } from '../../core/kinds/registry';
 import { useKeys } from '../../ui/hooks';
 import { HelpOverlay } from './HelpOverlay';
-import { useShow } from './sync';
+import { DEFAULT_PROMPTER_WPM } from './prompter-defaults';
+import { leaveShow, useShow } from './sync';
 import { useLiveDeck } from './useLiveDeck';
+
+export { DEFAULT_PROMPTER_WPM };
 
 interface Prefs {
   wpm: number;
@@ -18,9 +21,9 @@ interface Prefs {
 
 function loadPrefs(): Prefs {
   try {
-    return { wpm: 140, size: 48, mirror: false, link: true, ...JSON.parse(localStorage.getItem('lectern.prompter') ?? '{}') };
+    return { wpm: DEFAULT_PROMPTER_WPM, size: 48, mirror: false, link: true, ...JSON.parse(localStorage.getItem('lectern.prompter') ?? '{}') };
   } catch {
-    return { wpm: 140, size: 48, mirror: false, link: true };
+    return { wpm: DEFAULT_PROMPTER_WPM, size: 48, mirror: false, link: true };
   }
 }
 
@@ -126,7 +129,7 @@ export default function Teleprompter() {
     else if (k === 'l' || k === 'L') set({ link: !prefs.link });
     else if (k === 'r' || k === 'R') { setPlaying(false); scroller.current?.scrollTo({ top: 0 }); }
     else if (k === '?') setHelp(true);
-    else if (k === 'Escape') navigate(-1);
+    else if (k === 'Escape') leaveShow(deckId, navigate);
   }, [prefs, section, slides.length, help, playing]);
 
   if (deck === undefined) return <div className="prompter" />;
@@ -164,7 +167,7 @@ export default function Teleprompter() {
       </div>
 
       <div className="prompter-hud" role="toolbar" aria-label="Teleprompter controls">
-        <button type="button" className="pbtn" onClick={() => navigate(-1)} aria-label="Leave teleprompter"><ArrowLeft size={18} /></button>
+        <button type="button" className="pbtn" onClick={() => leaveShow(deckId, navigate)} aria-label="Leave teleprompter"><ArrowLeft size={18} /></button>
         <span className="pbar-sep" />
         <button type="button" className="pbtn play" onClick={() => setPlaying((p) => !p)} aria-label={playing ? 'Pause' : 'Play'}>{playing ? <Pause size={20} /> : <Play size={20} />}</button>
         <button type="button" className="pbtn" onClick={() => { setPlaying(false); scroller.current?.scrollTo({ top: 0, behavior: 'smooth' }); }} aria-label="Back to the start"><RotateCcw size={17} /></button>

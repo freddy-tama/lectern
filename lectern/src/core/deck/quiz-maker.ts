@@ -1,6 +1,6 @@
 // Builds a multiple-choice quiz from a deck's own material, with no AI: each
-// slide's check question and each key term becomes a question, and the other
-// answers in the deck become the wrong choices.
+// slide's check question and each key term becomes a question, and similar
+// answers elsewhere in the deck become the wrong choices.
 
 import { makeSlide } from './draft';
 import type { Deck, Slide } from './types';
@@ -65,6 +65,19 @@ export function quizCandidates(slides: Slide[]): Candidate[] {
   });
 }
 
+const hasDigit = (s: string) => /\d/.test(s);
+
+/**
+ * Whether one answer can stand as a wrong choice for another question: from the same group,
+ * with numbers only where the right answer has one, and of a similar length, so the right
+ * answer doesn't stand out and no choice is plainly about something else.
+ */
+function alike(wrong: Candidate, right: Candidate): boolean {
+  if (wrong.group !== right.group || hasDigit(wrong.answer) !== hasDigit(right.answer)) return false;
+  const ratio = wrong.answer.length / right.answer.length;
+  return ratio >= 0.4 && ratio <= 2.5;
+}
+
 /**
  * Question slides (four choices where the deck has enough material, at least
  * three otherwise), plus a section slide to open the quiz. Empty when the deck
@@ -75,8 +88,8 @@ export function makeQuiz(deck: Pick<Deck, 'id' | 'slides'>, max = 8): Slide[] {
   const questions: Slide[] = [];
   for (const c of all) {
     if (questions.length >= max) break;
-    // Prefer wrong choices from the same group, then any other answers.
-    const pool = [...all.filter((o) => o !== c && o.group === c.group), ...all.filter((o) => o !== c && o.group !== c.group)]
+    const pool = all
+      .filter((o) => o !== c && alike(o, c))
       .map((o) => o.answer)
       .filter((a) => a.toLowerCase() !== c.answer.toLowerCase());
     const wrong = shuffled([...new Set(pool)], hash(c.from + c.answer)).slice(0, 3);

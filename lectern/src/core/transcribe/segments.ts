@@ -82,7 +82,7 @@ export function paragraphs(segments: TranscriptSegment[], o: { pause?: number; m
   let chars = 0;
   segments.forEach((s, i) => {
     const prev = segments[i - 1];
-    const sentenceEnded = prev ? /[.!?。！？…]["')\]]?$/.test(prev.text) : true;
+    const sentenceEnded = prev ? /[.!?\u3002\uFF01\uFF1F…]["')\]]?$/.test(prev.text) : true;
     const breakHere = !current
       || s.start - (prev?.end ?? s.start) > pause
       || (sentenceEnded && (s.end - current.start > maxSeconds || chars > maxChars * 0.6))

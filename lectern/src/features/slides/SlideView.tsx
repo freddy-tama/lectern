@@ -62,7 +62,8 @@ export const SlideView = memo(function SlideView(props: SlideViewProps) {
       ref={ref}
       className={`slide-frame ${framed ? 'framed' : ''} ${className ?? ''}`}
       style={{ background: layout.background }}
-      role="img"
+      // A live slide can hold controls (a timer, a picker, a video), which an img role would hide.
+      role={live ? 'group' : 'img'}
       aria-label={label ?? 'Slide'}
     >
       {scale > 0 && (

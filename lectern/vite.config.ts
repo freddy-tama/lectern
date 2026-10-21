@@ -7,6 +7,7 @@ import react from '@vitejs/plugin-react';
 import { type Plugin, defineConfig, loadEnv } from 'vite';
 
 const VIRTUAL = 'virtual:lectern-plugins';
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
 
 /**
  * Mods are picked at build time from LECTERN_PLUGINS (comma separated folder
@@ -148,6 +149,8 @@ export default defineConfig(({ mode }) => {
   for (const [k, v] of Object.entries(env)) if (process.env[k] === undefined) process.env[k] = v;
   return {
     plugins: [react(), lecternPlugins(), devApi(), serviceWorker()],
+    // The app's version, shown in the front page's footer.
+    define: { __APP_VERSION__: JSON.stringify(pkg.version) },
     server: { port: 5180, host: '127.0.0.1' },
     // The transcription worker imports transformers.js. Pre-bundle it at start-up so the dev
     // server doesn't discover it mid-session and reload the page during a transcription.

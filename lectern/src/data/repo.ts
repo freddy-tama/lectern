@@ -3,7 +3,34 @@ import { uid } from '../core/deck/types';
 import { type Asset, type Course, type CourseColor, COURSE_COLORS, type Lesson, type Note, type Recording, db } from './db';
 import { keepStorage } from './storage';
 
-export async function ensureSeeded() {
+let seeding: Promise<void> | null = null;
+
+/** Loads the samples on a first visit. Every caller shares one run; a failed run can be retried. */
+export function seedOnce(): Promise<void> {
+  seeding ??= seed().catch((error: unknown) => {
+    seeding = null;
+    throw error;
+  });
+  return seeding;
+}
+
+export const ensureSeeded = seedOnce;
+
+/**
+ * Puts one sample deck back if it isn't there, for links that open a sample.
+ * A deck that's still there is left as it is, edits and all. False when there's no such sample.
+ */
+export async function ensureSampleDeck(id: string): Promise<boolean> {
+  await seedOnce();
+  if (await db.decks.get(id)) return true;
+  const { buildSeed } = await import('./seed');
+  const deck = buildSeed(new Date()).decks.find((d) => d.id === id);
+  if (!deck) return false;
+  await db.decks.put(deck);
+  return true;
+}
+
+async function seed() {
   const seeded = await db.settings.get('seeded');
   if (!seeded) {
     const count = await db.courses.count();

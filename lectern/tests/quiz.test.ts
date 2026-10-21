@@ -4,8 +4,10 @@ import { makeSlide } from '../src/core/deck/draft';
 import { makeQuiz, quizCandidates } from '../src/core/deck/quiz-maker';
 import type { Slide } from '../src/core/deck/types';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
+import { encodePack, fitsQr, packUrl } from '../src/core/share/pack';
 import { QuizEngine, points, quizItem, rankRows, resultsCsv, resultsNote } from '../src/core/share/quiz';
 import { buildSeed } from '../src/data/seed';
+import { quizPackFor } from '../src/features/share/offline';
 
 registerCoreKinds();
 
@@ -124,5 +126,50 @@ describe('making a quiz from a deck', () => {
 
   it('returns nothing when there is too little to ask', () => {
     expect(makeQuiz({ id: 'x', slides: [plain('a')] })).toEqual([]);
+  });
+
+  const seed = buildSeed(new Date('2026-10-19T10:00:00'));
+  const deckById = (id: string) => seed.decks.find((d) => d.id === id)!;
+  const digit = (s: string) => /\d/.test(s);
+
+  it('never mixes number answers with word answers', () => {
+    for (const deck of seed.decks) {
+      for (const s of makeQuiz(deck).slice(1)) {
+        const { options, answer } = s.content as { options: string[]; answer: string };
+        for (const o of options) expect(digit(o), `${deck.id}: ${o} for ${answer}`).toBe(digit(answer));
+      }
+    }
+  });
+
+  it('only borrows wrong choices that could pass for the answer', () => {
+    const q3 = makeQuiz(deckById('deck_q3_update')).slice(1);
+    expect(q3.length).toBeGreaterThanOrEqual(5);
+    expect(q3.map((s) => (s.content as { question: string }).question)).toContain('How many users did we add in Q3?');
+    for (const s of q3) {
+      const { question, options } = s.content as { question: string; options: string[] };
+      expect(options.length, question).toBeGreaterThanOrEqual(3);
+      if (question === 'How many users did we add in Q3?') expect(options).not.toContain('High impact for relatively low effort.');
+    }
+    // A key term's meaning is never offered as the answer to a check question, or the other way round.
+    const deck = { id: 'mixed', slides: [
+      { ...makeSlide('bullets', {}, { check: { question: 'Which colour is the sky?', answer: 'Blue on a clear day.' } }), id: 'a' },
+      { ...makeSlide('term', { term: 'Orbit', definition: 'The path one body takes around another.' }), id: 'b' },
+      { ...makeSlide('term', { term: 'Phase', definition: 'The part of the lit half we can see.' }), id: 'c' },
+    ] };
+    expect(makeQuiz(deck)).toEqual([]);
+  });
+
+  it('has a quiz for every sample the landing page offers to try', () => {
+    for (const id of ['deck_meetings_talk', 'deck_q3_update', 'deck_water_cycle', 'deck_main_thing_first']) {
+      expect(quizPackFor(deckById(id))?.pack.items.length ?? 0, id).toBeGreaterThan(0);
+    }
+  });
+
+  it("carries the sample talk's own three questions in a QR-sized link", async () => {
+    const found = quizPackFor(deckById('deck_meetings_talk'));
+    expect(found?.made).toBe(false);
+    expect(found?.pack.items).toHaveLength(3);
+    const url = packUrl('https://lectern-sooty.vercel.app', await encodePack(found!.pack));
+    expect(fitsQr(url), `${url.length} characters`).toBe(true);
   });
 });

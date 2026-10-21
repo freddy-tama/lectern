@@ -1,6 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
 import { FileUp, Layers, Plus, Search } from 'lucide-react';
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PURPOSES, type DeckPurpose, deckPurpose } from '../../core/deck/types';
 import { getKind } from '../../core/kinds/registry';
 import { db } from '../../data/db';
@@ -20,6 +21,15 @@ export function DecksPage() {
   const fileInput = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const openDeck = useOpenDeckFile();
+  const [params, setParams] = useSearchParams();
+
+  // /decks?new=notes (from the setup screen) opens New deck on From notes, then drops the flag
+  // so Back or a reload doesn't open it again.
+  useEffect(() => {
+    if (params.get('new') !== 'notes') return;
+    setOpen(true);
+    setParams((p) => { p.delete('new'); return p; }, { replace: true });
+  }, [params, setParams]);
   const data = useLiveQuery(async () => {
     const [decks, lessons, courses] = await Promise.all([db.decks.orderBy('updatedAt').reverse().toArray(), db.lessons.toArray(), db.courses.toArray()]);
     return { decks, lessons, courses };
