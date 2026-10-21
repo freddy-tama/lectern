@@ -157,3 +157,64 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
   - The suite is still the same 27 tests; flow 12 in the PRD has no test of its own yet.
 - **00:19** #9 was merged as `1e32c71`. GitHub marked #8 as merged too, because its commits were in #9.
 - **00:24** Production hadn't deployed the merge. Vercel's dashboard showed a "GitHub Outage" notice: automatic deployments from GitHub may be delayed. It is probably what delayed GitHub's events the evening before, too.
+- **00:32** Vercel deployed the merge to production on its own (`1e32c71`, ready at 00:33), about 13 minutes after the merge. No hand deploy was needed. The live site's `/api/account` answers `{"accounts":false}`.
+- **00:37** Production now has AI keys: `/api/draft-deck` and `/api/picture-generate` report AI as available, the pictures with `gpt-image-2.5-sunburst`. Accounts and an access code are both off, so AI there is open to anyone. Previews still have AI off.
+  - Two tests assume AI is off and would fail against production: DRF-001 (`/make` with a topic alone) and NTS-002 (the AI tab's setup notice). Pull request runs aren't affected, because they test previews.
+  - Once accounts are on, production shows "Sign in to …" in those places instead. The PRD and those two tests need to accept that state too.
+
+## License and README testing section
+
+**2026-10-22** (China time). These times come from the `TestSprite V3` and Vercel commit statuses on the pull request.
+
+- **00:26** [PR #10](https://github.com/freddy-tama/lectern/pull/10) was opened from `claude/license-readme`: the all-rights-reserved LICENSE, the README's first testing section, and #9's run in this log. No app code changed.
+- **00:31** Vercel's preview was ready. TestSprite queued the run 10 minutes later, at 00:41.
+- **00:41–00:44** **All 27 tests passed** ([run `1cc5186e`](https://www.testsprite.com/dashboard-v3/o/dfe734b3-7442-5019-aa71-fa10706b4f14/projects/4a558259-6d77-449a-bede-151ba58b667a/execution/1cc5186e-11c9-481a-a141-30ab7b112350)), for 13.5 credits.
+- The two log entries above (00:32 and 00:37) were committed after #10's last push and never pushed. They reached `main` with #13.
+
+## Intro page pitch and video
+
+**2026-10-22** (China time)
+
+- **Before the run:** the intro page changed on the branch `claude/pitch-video-dacd59` (25 characters after slugging), PR #11.
+  - An animated pitch now sits beside the `h1`, and a "Watch it run" video (`#tour`) sits under the "At a glance" list.
+  - The playable sample talk moved into "Try it here" (`#try`), under the video. Its region name, status text, buttons and test ids are unchanged.
+  - Names in the new film and the video chapters were chosen to avoid the page's existing control names, such as "Presenter view" and "Slide 4 of 17". Playwright matches names by substring, so a repeat would make a test's locator match two elements.
+  - The PRD's flows 1 and 2 gained the film, the video and `#try`. No test was edited in the portal.
+- **01:57** Commit `5e2744f` was pushed. Vercel started the preview on its own this time, and it was ready at 01:59.
+- **01:59–02:03** TestSprite queued 27 tests on the PR #11 preview and **all 27 passed** ([run `f242796d`](https://www.testsprite.com/dashboard-v3/o/dfe734b3-7442-5019-aa71-fa10706b4f14/projects/4a558259-6d77-449a-bede-151ba58b667a/execution/f242796d-a0c5-4584-a29b-d3dc539db17c)). It cost about 13.5 credits.
+- **After the run:** the preview was checked in headless Chrome.
+  - `/media/lectern-tour.mp4` is served as `video/mp4` with byte ranges.
+  - On screen, the video plays muted. It had reached 6.5 s after 7 s, fully buffered.
+  - With reduced motion it neither loads nor starts.
+- **02:17** #11 was merged as `49cc41b`. Its log entry above was committed after its last push and never pushed; it reached `main` with #13.
+
+## The "compiled grammar is too large" fix
+
+**2026-10-22** (China time)
+
+- **02:07** [PR #12](https://github.com/freddy-tama/lectern/pull/12) was opened from `claude/brave-tharp-957118` (25 characters after slugging). On `/make`, every AI draft had failed with "The compiled grammar is too large". The fix sends each slide's content as one JSON string, so the output schema shrank from about 41 KB to about 2 KB.
+- **02:08** Vercel's preview was ready, and TestSprite queued the run 6 seconds later.
+- **02:08–02:11** **All 27 tests passed** ([run `6b3e289a`](https://www.testsprite.com/dashboard-v3/o/dfe734b3-7442-5019-aa71-fa10706b4f14/projects/4a558259-6d77-449a-bede-151ba58b667a/execution/6b3e289a-5664-46f1-be89-4359bafff4fc)), for 13.5 credits.
+  - Previews have AI off, so the suite couldn't reach the fixed code. It checked that nothing else broke. The fix itself is covered by vitest (`tests/draft-deck.test.ts`).
+- **02:17** #10, #11 and #12 were merged within 20 seconds of each other, as `8cf8b86`, `49cc41b` and `d3ef26e`.
+- **~02:20** Vercel deployed `8cf8b86` and then `d3ef26e` to production on its own. No hand deploy was needed. Its dashboard still showed the "GitHub Outage" notice.
+
+## The repository README
+
+**2026-10-22** (China time)
+
+- **Before the run:** the repository root had only `LICENSE` and `lectern/`, so GitHub's front page showed no README.
+  - The branch `claude/readme-front` (19 characters after slugging) adds a root `README.md` for judges and new users. It covers the problem Lectern solves, links into the live app, how the TestSprite loop is wired, the 27 tests by PRD flow, and this log as a timeline.
+  - `lectern/README.md` now points to it for testing and plans, so the two don't drift apart.
+  - No app code changed. The vitest suite on `main` (`d3ef26e`) passed: 625 tests in 45 files.
+- **Checked for the README:**
+  - `gh api repos/freddy-tama/lectern/branches/main/protection` answers "Branch not protected". The TestSprite merge gate reports a failing status, but GitHub doesn't block the merge on it.
+  - The portal lists 12 runs:
+    - run 1;
+    - five single re-runs at 22:11–22:15;
+    - PRS-006 at 23:22;
+    - the five PR runs, #8 to #12.
+  - The workspace's Usage page shows 90.5 of the 150 monthly credits used, and 59.5 left. The cycle renews on Nov 15.
+    - The sum: setup 6.5 + run 1 13.5 + re-runs 2.5 + PRS-006 0.5 + five PR runs at 13.5 each = 90.5.
+  - Production answers `/api/account` with `{"accounts":false}`, and `/api/draft-deck` with `"available":true`.
+- **This run:** #13 is expected to cost about 13.5 credits, leaving about 46. Its result is on the pull request's `TestSprite V3` check. Pushing the result here would start another full run, so it goes into the next pull request's log entry.
