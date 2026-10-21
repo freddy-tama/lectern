@@ -17,8 +17,11 @@ Prefer roles and accessible names. These `data-testid`s exist where names repeat
 - There is one `h1`: "Slides that know what to say."
 - The "At a glance" list shows "30 slide types" and "6 built-in looks".
 - The page has no horizontal scroll at 1440 px or at 390 px wide.
+- Beside the `h1`, a short animation follows one slide's key notes through five scenes: Notes, On stage, Phones, Study and Share. It plays by itself, and its **Pause the animation** button stops it. Choosing a scene shows that scene and stops there. With reduced motion it doesn't play by itself.
+- Under the "At a glance" list, **Watch it run** (`#tour`) has a muted, looping screen recording of the app with controls and chapter buttons. With reduced motion it doesn't start by itself.
 
 ### 2. The sample talk on the intro page
+- The sample talk is in the **Try it here** section (`#try`), under the video.
 - The region "Sample talk: Designing Meetings People Want to Attend" shows a real slide, "Usefulness rating by meeting size".
 - Its status reads "Slide 4 of 17 · click 0 of 1".
 - **Next slide:** the status becomes "click 1 of 1". A second Next makes it "Slide 5 of 17". **Previous slide** goes back.

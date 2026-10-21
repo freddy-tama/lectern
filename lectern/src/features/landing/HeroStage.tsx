@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, HardDrive, MonitorSpeaker, Play, Presentation } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CirclePlay, HardDrive, MonitorSpeaker, Play, Presentation } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
 import { tryHref } from '../../app/try-samples';
 import { getKind } from '../../core/kinds/registry';
@@ -7,15 +7,18 @@ import { LogoMark } from '../../ui/Logo';
 import { advance, retreat } from '../present/useLiveDeck';
 import { SlideView } from '../slides/SlideView';
 import { Cta } from './Cta';
+import { PitchFilm } from './PitchFilm';
 import { useMedia } from './hooks';
 import { TALK_ID, deckRun, sampleDeck, slideHeading } from './samples';
+import { TOUR_LENGTH } from './Tour';
 
 /** The slide the stage opens on: a chart with a click to reveal its takeaway. */
 const FIRST_SLIDE = 's_mt_04';
 
 type View = 'presenter' | 'audience';
 
-export function Hero({ onNotes }: { onNotes(): void }) {
+/** The top of the page: the pitch, and a film of one slide's key notes going everywhere Lectern uses them. */
+export function Hero({ onNotes, onWatch }: { onNotes(): void; onWatch(e: React.MouseEvent<HTMLAnchorElement>): void }) {
   return (
     <section className="hero" aria-labelledby="hero-title">
       <div className="lp-container hero-grid">
@@ -34,9 +37,33 @@ export function Hero({ onNotes }: { onNotes(): void }) {
             </Cta>
             <button type="button" className="lp-btn lp-btn-quiet lp-btn-lg" onClick={onNotes}>Turn your notes into slides</button>
           </div>
+          <a className="hero-watch" href="#tour" onClick={onWatch}>
+            <CirclePlay size={20} aria-hidden /> <span>Watch Lectern run <span className="hero-watch-len">· {TOUR_LENGTH}</span></span>
+          </a>
           <p className="hero-fine"><HardDrive size={15} aria-hidden /> No sign-up to start. Your decks stay in this browser. Works offline once loaded.</p>
         </div>
-        <HeroStage />
+        <PitchFilm />
+      </div>
+    </section>
+  );
+}
+
+/** The playable sample, under the video: step through the real talk with its notes. */
+export function TrySample() {
+  return (
+    <section id="try" className="lp-section try" aria-labelledby="try-title" tabIndex={-1}>
+      <div className="lp-container">
+        <div className="lp-head lp-head-center">
+          <p className="lp-eyebrow">Try it here</p>
+          <h2 id="try-title" className="lp-h2">Step through the talk. <em>Notes and all.</em></h2>
+          <p className="lp-sub">
+            The sample talk, drawn by Lectern's slide engine. Click through it, check the likely question, and switch to
+            what the room sees.
+          </p>
+        </div>
+        <div className="try-stage">
+          <HeroStage />
+        </div>
       </div>
     </section>
   );

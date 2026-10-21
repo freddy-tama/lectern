@@ -16,7 +16,7 @@
     "api/picture-generate.ts": { "maxDuration": 300 }
   },
   "rewrites": [
-    { "source": "/((?!api/|assets/|samples/|icons/|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }
+    { "source": "/((?!api/|assets/|samples/|icons/|media/|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

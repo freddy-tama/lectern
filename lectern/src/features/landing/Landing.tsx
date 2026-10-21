@@ -12,15 +12,17 @@ import { LogoMark } from '../../ui/Logo';
 import { Brand } from './Brand';
 import { Cta } from './Cta';
 import { FromNotes } from './FromNotes';
-import { Hero } from './HeroStage';
+import { Hero, TrySample } from './HeroStage';
 import { KeyNotes } from './KeyNotes';
 import { PhoneQuiz } from './PhoneQuiz';
 import { SlideTypes } from './SlideTypes';
+import { Tour } from './Tour';
 import { Uses } from './Uses';
 import { type ThemePref, usePrefersReducedMotion, useThemePref } from './hooks';
 import { coreKinds, sampleData } from './samples';
 
 export const NAV = [
+  { id: 'tour', label: 'Watch' },
   { id: 'phone-quiz', label: 'Phone quiz' },
   { id: 'from-notes', label: 'From notes' },
   { id: 'key-notes', label: 'Key notes' },
@@ -143,7 +145,7 @@ export default function Landing() {
       </header>
 
       <main id="main" tabIndex={-1}>
-        <Hero onNotes={() => go('from-notes')} />
+        <Hero onNotes={() => go('from-notes')} onWatch={(e) => jump(e, 'tour')} />
 
         <div className="proof">
           <div className="lp-container">
@@ -155,6 +157,8 @@ export default function Landing() {
           </div>
         </div>
 
+        <Tour reduced={reduced} />
+        <TrySample />
         <PhoneQuiz />
         <FromNotes />
         <KeyNotes reduced={reduced} />
