@@ -112,3 +112,9 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
   - The brief box no longer promises "Lectern drafts from that" when AI is off.
   - A Markdown file with headings still builds a deck. With AI on, a topic alone still goes to the AI.
   - New vitest coverage in `tests/make-page.test.tsx` renders `/make` with AI off and on. Its two bug tests fail on the old code and pass with the fix.
+- **~22:40** Vercel never received the push. There was no deployment, no commit status and no PR comment, and its "Create Deployment" dialog listed only `main` and the old intro-page branch. GitHub and Vercel both reported no incidents.
+  - The project's Git settings still show `freddy-tama/lectern` as connected, and its Ignored Build Step is "Automatic".
+  - This is the same failure as the merge of #7, which didn't start a production deploy.
+  - Checking the Vercel GitHub App's repository access needs GitHub sudo re-authentication, which is left to the user.
+  - The preview was created by hand from the Vercel dashboard ("Create Deployment" → branch `claude/make-no-ai-f4ac9d` → Create Preview Deployment), for commit `7b6bef7`.
+- **~22:48** The manual preview passed the "Vercel" commit status on `7b6bef7`, but the TestSprite trigger stayed at "Active · Never run" and its Activity tab stayed empty. Neither app seems to be getting GitHub's events for this repository. The next commit (this log entry) tests that: if Vercel builds it on its own, the events are arriving again.
