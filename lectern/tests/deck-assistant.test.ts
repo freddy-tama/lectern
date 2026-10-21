@@ -207,6 +207,11 @@ describe('the tool loop', () => {
       expect(t).toMatchObject({ strict: true, eager_input_streaming: true, input_schema: { type: 'object', additionalProperties: false } });
       expect(t.input_schema.required).toEqual(Object.keys(t.input_schema.properties));
     }
+    // The API compiles strict schemas into one grammar and allows at most 20 strict tools and 16
+    // parameters with union types across them, so slide content travels as a JSON string.
+    expect(r.tools.length).toBeLessThanOrEqual(20);
+    const unions = r.tools.flatMap((t: SentRequest) => Object.values(t.input_schema.properties as SentRequest)).filter((p: SentRequest) => p.anyOf || Array.isArray(p.type));
+    expect(unions.length).toBeLessThanOrEqual(16);
   });
 
   it('puts the deck in the user turn as data, and the request after it', async () => {
