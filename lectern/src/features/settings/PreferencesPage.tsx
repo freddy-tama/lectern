@@ -43,7 +43,7 @@ export function PreferencesPage() {
           <p className="eyebrow">Make Lectern yours</p>
           <h1 className="display">Preferences</h1>
         </div>
-        <Link to="/start" className="btn btn-secondary"><RotateCcw size={15} /> Answer the setup questions again</Link>
+        <Link to="/start?tune=1" className="btn btn-secondary"><RotateCcw size={15} /> Answer the setup questions again</Link>
       </div>
 
       <section className="section prefs-section" aria-labelledby="pf-focus">

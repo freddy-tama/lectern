@@ -8,6 +8,9 @@ import { useToast } from '../../ui/Toast';
 import { minutesLabel, plural, timeAgo } from '../../ui/format';
 import { SlideView } from '../slides/SlideView';
 
+/** The decks that come with Lectern have ids that start with deck_; decks people make never do. */
+const isSampleDeck = (deck: Pick<Deck, 'id'>) => deck.id.startsWith('deck_');
+
 export function DeckCard({ deck, course }: { deck: Deck; course?: Course }) {
   const toast = useToast();
   const navigate = useNavigate();
@@ -27,7 +30,11 @@ export function DeckCard({ deck, course }: { deck: Deck; course?: Course }) {
           <span aria-hidden>·</span>
           <span>{minutesLabel(deckMinutes(deck))}</span>
         </div>
-        <div className="deck-card-meta">{purpose && <span className="chip">{purpose.label}</span>}<span>Edited {timeAgo(deck.updatedAt)}</span></div>
+        <div className="deck-card-meta">
+          {isSampleDeck(deck) && <span className="chip chip-brand" title="A sample deck that comes with Lectern">Sample</span>}
+          {purpose && <span className="chip">{purpose.label}</span>}
+          <span>Edited {timeAgo(deck.updatedAt)}</span>
+        </div>
       </div>
       <div className="deck-card-menu">
         <Menu align="end" trigger={(p) => <button type="button" className="icon-btn" aria-label={`More actions for ${deck.title}`} {...p}><MoreHorizontal size={18} /></button>}>

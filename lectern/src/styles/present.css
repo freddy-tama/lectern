@@ -67,8 +67,11 @@
   bottom: 22px;
   transform: translate(-50%, 12px);
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
   gap: 4px;
+  max-width: calc(100vw - 16px);
   padding: 6px;
   border-radius: 14px;
   background: rgb(24 24 22 / 0.86);
@@ -109,6 +112,21 @@
 
 .pbtn[aria-pressed='true'] {
   background: rgb(255 255 255 / 0.18);
+}
+
+/* On a phone the bar has room for icons only; the button keeps its name. */
+@media (max-width: 640px) {
+  .pbtn-label {
+    display: none;
+  }
+
+  .present-bar .pbtn {
+    min-width: 34px;
+  }
+
+  .present-bar .pcount {
+    min-width: 64px;
+  }
 }
 
 .pbar-sep {

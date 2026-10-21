@@ -1,9 +1,11 @@
 import { ChartColumn, FilePlus2, FileText, GraduationCap, Mic, Rocket, Sparkles, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { autoVariants, suggestLook } from '../../core/deck/auto-style';
+import { suggestLook } from '../../core/deck/auto-style';
 import { blankDeck, draftToDeck } from '../../core/deck/draft';
+import { AUTO_LOOK as AUTO, notesToDeck, styleDeck } from '../../core/deck/notes-to-deck';
 import { outlineToDraft } from '../../core/deck/outline';
+import { SAMPLE_LESSON, SAMPLE_TALK } from '../../core/deck/outline-examples';
 import { wording } from '../../core/deck/purpose';
 import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, uid } from '../../core/deck/types';
 import { allThemes } from '../../core/engine/themes';
@@ -25,74 +27,6 @@ import { fitDraft, handOffDraftFit } from './fit-deck';
 
 type Mode = 'notes' | 'ai' | 'blank' | string;
 
-const SAMPLE = `# Why the Moon Has Phases
-Week 2 · Space science
-
-## Today
-- What we see from Earth
-- Why the shape changes
-- The full cycle in 29.5 days
-
-## Key terms
-Orbit: the path the Moon takes around Earth
-Phase: the part of the lit half we can see
-
-## How the cycle goes
-1. New moon: the lit side faces away from us
-2. First quarter: we see half of the lit side
-3. Full moon: the lit side faces us
-4. Last quarter: half again, on the other side
-
-## The big idea
-The Moon is always half lit by the Sun. As it orbits, we see different amounts of that lit half.
-Notes: Use the lamp-and-ball model. Ask students to predict before you move the ball.
-
-## Quick check
-Q: Why do we see a full moon?
-A) Earth's shadow is gone
-B) The lit side faces Earth *
-C) The Moon makes its own light
-Answer: B. The Sun-lit half of the Moon faces us.
-
-## Key takeaways
-- Half the Moon is always lit
-- Its orbit changes how much of that half we see
-- One cycle takes about 29.5 days`;
-
-const SAMPLE_TALK = `# Why small teams ship faster
-A talk for product people
-
-## Today
-- Three short stories
-- What they have in common
-- What to try on Monday
-
-## Key terms
-Cycle time: how long an idea takes to reach a customer
-Handoff: work passing from one person to another
-
-## How a feature ships
-1. Idea: a customer problem is named
-2. Build: a small team makes the smallest useful version
-3. Ship: it reaches customers within days
-4. Learn: usage shows what to do next
-
-## The big idea
-Every handoff adds waiting. Fewer people in the chain means less time lost between steps.
-Notes: Tell the story of the team that cut its release cycle from six weeks to four days.
-
-## Quick check
-Q: Where does your work wait the longest?
-A) For a decision
-B) For a review
-C) For another team *
-Answer: Most waiting hides in decisions and reviews, not in the work itself.
-
-## Key takeaways
-- Waiting costs more than working
-- Fewer handoffs, faster learning
-- Start by ending one handoff this month`;
-
 const PURPOSE_ICONS: Record<DeckPurpose, React.ReactNode> = {
   lesson: <GraduationCap size={18} />,
   talk: <Mic size={18} />,
@@ -109,15 +43,6 @@ function startAudience(purpose: DeckPurpose): Audience {
   const saved = getProfile().deck;
   if (purpose === saved.purpose) return saved.audience;
   return purpose === 'lesson' ? 'teen' : 'adult';
-}
-
-/** The look choice that turns on auto style. */
-const AUTO = 'auto';
-
-/** With Auto chosen, the deck gets the look that suits it and auto style for its layouts. */
-function styled(deck: Deck, themeId: string): Deck {
-  if (themeId !== AUTO) return deck;
-  return autoVariants({ ...deck, themeId: suggestLook(deck), autoStyle: true });
 }
 
 export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean; onClose(): void; lesson?: Lesson; course?: Course }) {
@@ -168,11 +93,14 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
 
   const close = () => { abort.current?.abort(); onClose(); };
 
-  const finish = async (draft: DeckDraft, source?: string) => {
-    let deck = styled(draftToDeck(
-      { ...draft, title: title.trim() || draft.title },
-      { audience, themeId, lessonId: lesson?.id, source, purpose },
-    ), themeId);
+  /** Notes go through notesToDeck, as on the front page; AI and mod drafts come in ready-made. */
+  const finish = (draft: DeckDraft, source?: string) => save(styleDeck(draftToDeck(
+    { ...draft, title: title.trim() || draft.title },
+    { audience, themeId, lessonId: lesson?.id, source, purpose },
+  ), themeId), source);
+
+  const save = async (made: Deck, source?: string) => {
+    let deck = made;
     const first = deck.slides[0];
     if (first?.kind === 'title' && course && lesson && !String(first.content.eyebrow ?? '')) {
       first.content = { ...first.content, eyebrow: `Week ${lesson.week} · ${course.title}` };
@@ -194,7 +122,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const create = async () => {
     setError('');
     if (mode === 'blank') {
-      const deck = styled(blankDeck({ title: title.trim() || lesson?.title || 'Untitled deck', audience, themeId, purpose, lessonId: lesson?.id, eyebrow: lesson && course ? `Week ${lesson.week} · ${course.title}` : '' }), themeId);
+      const deck = styleDeck(blankDeck({ title: title.trim() || lesson?.title || 'Untitled deck', audience, themeId, purpose, lessonId: lesson?.id, eyebrow: lesson && course ? `Week ${lesson.week} · ${course.title}` : '' }), themeId);
       deck.id = uid('d');
       await addDeck(deck);
       onClose();
@@ -203,7 +131,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
     }
     if (mode === 'notes') {
       if (!preview) { setError('Paste your notes or drop a file first.'); return; }
-      await finish(preview);
+      await save(notesToDeck(notes, { audience, purpose, look: themeId, fallbackTitle: title || 'Untitled deck', title, lessonId: lesson?.id, maxSlides: Infinity }));
       return;
     }
     if (mode === 'ai') {
@@ -290,7 +218,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
                   <div className="dropzone-foot">
                     <button type="button" className="btn btn-secondary btn-sm" onClick={() => fileInput.current?.click()}><Upload size={14} /> Open a file</button>
                     <span className="faint">or drop a PDF, Word, PowerPoint, Excel or text file here</span>
-                    {!notes && <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setNotes(purpose === 'lesson' ? SAMPLE : SAMPLE_TALK)}>Try an example</button>}
+                    {!notes && <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 'auto' }} onClick={() => setNotes(purpose === 'lesson' ? SAMPLE_LESSON : SAMPLE_TALK)}>Try an example</button>}
                     <input ref={fileInput} type="file" accept={`${OUTLINE_ACCEPT},.json`} hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) readFile(f); e.target.value = ''; }} />
                   </div>
                   {preview && (

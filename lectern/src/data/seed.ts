@@ -937,6 +937,49 @@ function meetingsSlides(): Slide[] {
       },
     )),
 
+    // Three scored questions: the deck's quiz, on screen or on phones.
+    slide('s_mt_q1', 'question', {
+      question: 'At what size does the usefulness rating fall below six?',
+      options: ['2 to 4 people', '5 to 7 people', '8 to 12 people', '13 or more'],
+      correct: 2,
+      answer: 'Between eight and twelve people.',
+    }, notes(
+      "A quick quiz to check what stuck, three questions, and you can answer on your phone. The first one goes back to the survey chart. People rated every meeting from one to ten, and the score fell as the room got bigger. At what size did the average rating first drop below six? Take a moment, pick one of the four sizes, and then I'll show you the answer.",
+      {
+        min: 0.5,
+        points: ['The rating first falls below six at eight to twelve people'],
+        cues: ['Give everyone time to answer'],
+      },
+    )),
+
+    slide('s_mt_q2', 'question', {
+      question: 'Which three lines go in every invite?',
+      options: ['Purpose, outcome, prep', 'Agenda, attendees, time', 'Topic, room, length', 'Goal, owner, deadline'],
+      correct: 0,
+      answer: 'Purpose, outcome and prep.',
+    }, notes(
+      "Question two is about the invite. We said every invite gets three short lines, and that writing them takes about a minute. Some of these options sound sensible, and plenty of teams use them, but only one is the set we talked about. Which three lines go in every invite? Answer now, and remember the one line that tells you whether to cancel.",
+      {
+        min: 0.5,
+        points: ['Every invite has a purpose, an outcome and prep'],
+        cues: ['Give everyone time to answer'],
+      },
+    )),
+
+    slide('s_mt_q3', 'question', {
+      question: 'A big meeting where nothing needs deciding. What do you do?',
+      options: ['Make it shorter', 'Invite fewer people', 'Cancel it and share the notes', 'Add an agenda'],
+      correct: 2,
+      answer: 'Cancel it and share the notes.',
+    }, notes(
+      "Last question, and it comes from the grid we used to decide whether to meet at all. Picture a large recurring meeting, with lots of people invited, where nothing actually needs to be decided. Shortening it or adding an agenda would help a little. But what does the grid say you should do with it? Pick your answer, then we'll look at your own calendar.",
+      {
+        min: 0.5,
+        points: ['Many people and no decision: cancel and share the notes'],
+        cues: ['Give everyone time to answer'],
+      },
+    )),
+
     slide('s_mt_12', 'question', {
       question: 'Which meeting on your calendar could be a message?',
       options: [],
@@ -1048,6 +1091,7 @@ function q3UpdateSlides(): Slide[] {
         min: 2,
         points: ['Team and Business bring in 79% of revenue', 'Enterprise is small today but growing'],
         cues: ['Point at the largest slice first'],
+        check: ['Which plans bring in most of our revenue?', 'Team and Business.'],
       },
     ), 'doughnut'),
 
@@ -1061,6 +1105,7 @@ function q3UpdateSlides(): Slide[] {
         min: 2,
         points: ['Three of four goals met or ahead', 'Mobile launch slipped by two weeks'],
         cues: ['Say plainly that mobile was late'],
+        check: ['How late did the mobile app ship?', 'Two weeks: Oct 14 instead of Sep 30.'],
       },
     )),
 
@@ -1079,6 +1124,7 @@ function q3UpdateSlides(): Slide[] {
         min: 2.5,
         points: ['Four releases in the quarter', 'Mobile slipped because of a sync bug', 'We chose quality over the date'],
         cues: ['Own the delay without excuses'],
+        check: ['Why did the mobile app slip?', 'A sync bug found in the beta took longer to fix.'],
       },
     )),
 
@@ -1113,6 +1159,7 @@ function q3UpdateSlides(): Slide[] {
         min: 1.5,
         points: ['Mobile users stay twice as long', 'Crash rate is 3.1% against a 0.5% target'],
         cues: ['Let the statement stand alone for a moment'],
+        check: ['How often does the mobile app crash today?', 'In 3.1% of sessions, against a 0.5% target.'],
       },
     ), 'bold'),
 

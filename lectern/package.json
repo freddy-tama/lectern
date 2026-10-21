@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Lectern: plan, present and study lessons. Slides with key notes, a teleprompter, and a course timeline.",
+  "description": "Lectern: presentations with key notes on every slide, a phone teleprompter and quiz, and PowerPoint export.",
   "engines": {
     "node": ">=22.12"
   },

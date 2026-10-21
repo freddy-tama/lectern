@@ -1,13 +1,14 @@
-import { ChevronLeft, ChevronRight, Keyboard, Maximize, NotebookText, PresentationIcon, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Keyboard, Maximize, NotebookText, PresentationIcon, QrCode as QrIcon, X } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { NotFound } from '../../app/App';
 import { toggles } from '../../core/plugins/registry';
 import { useKeys } from '../../ui/hooks';
+import { openShare } from '../share/host';
 import { LiveScreen } from '../share/LiveScreen';
 import { SlideView } from '../slides/SlideView';
 import { HelpOverlay } from './HelpOverlay';
-import { openPresenter, useShow } from './sync';
+import { leaveShow, openPresenter, useShow } from './sync';
 import { advance, retreat, useLiveDeck } from './useLiveDeck';
 
 export default function Present() {
@@ -40,7 +41,7 @@ export default function Present() {
   const exit = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     if (audienceOnly) window.close();
-    else navigate(-1);
+    else leaveShow(deckId, navigate);
   };
   const fullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
@@ -48,7 +49,8 @@ export default function Present() {
   };
 
   useKeys((e) => {
-    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    // The share window is a dialog over the show; its keys, Escape included, belong to it.
+    if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector('dialog[open]')) return;
     const k = e.key;
     if (help && k !== '?') { if (k === 'Escape') setHelp(false); return; }
     if (/^[0-9]$/.test(k)) { setJump((j) => (j + k).slice(-3)); return; }
@@ -106,6 +108,7 @@ export default function Present() {
           <span className="pbar-sep" />
           <button type="button" className="pbtn" aria-pressed={notes} onClick={() => setNotes((x) => !x)} aria-label="Key notes" title="Key notes (N)"><NotebookText size={18} /></button>
           <button type="button" className="pbtn" onClick={() => openPresenter(deck.id, navigate)} aria-label="Presenter view" title="Open presenter view"><PresentationIcon size={18} /></button>
+          <button type="button" className="pbtn" onClick={() => openShare(deck.id)} aria-label="Share to phones" title="Your phone as a remote, slides on theirs" style={{ gridAutoFlow: 'column', gap: 6 }}><QrIcon size={18} /><span className="pbtn-label">Share to phones</span></button>
           <button type="button" className="pbtn" onClick={fullscreen} aria-label="Full screen" title="Full screen (F)"><Maximize size={18} /></button>
           <button type="button" className="pbtn" onClick={() => setHelp(true)} aria-label="Keyboard shortcuts" title="Shortcuts (?)"><Keyboard size={18} /></button>
         </div>

@@ -16,45 +16,34 @@
   padding: 18px 32px;
 }
 
-.ob-progress {
-  display: flex;
+.ob-back {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
-  margin: 0 auto;
-  padding: 0;
-  list-style: none;
+  min-height: 36px;
+  padding: 0 8px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 560;
+  color: var(--ink-2);
+  text-decoration: none;
 }
 
-.ob-progress li {
-  width: 34px;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--line-strong);
-  transition: background var(--t-med);
+.ob-back:hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
 }
 
-.ob-progress li.is-done {
-  background: var(--ink-3);
+.ob-skip {
+  margin-left: auto;
 }
 
-.ob-progress li.is-current {
-  background: var(--brand);
-}
-
-.ob-layout {
-  flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 400px);
-  gap: 48px;
-  width: min(1160px, 100%);
-  margin: 0 auto;
-  padding: 24px 32px 64px;
-  align-items: start;
-}
-
-.ob-step {
+.ob-main {
   display: grid;
   gap: 10px;
-  max-width: 640px;
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 24px 32px 64px;
   animation: ob-in var(--t-med) var(--ease-out);
 }
 
@@ -74,6 +63,110 @@
   font-size: 15.5px;
   max-width: 52ch;
   margin-bottom: 14px;
+}
+
+/* The five ways in: plain buttons, one click each. */
+
+.ob-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ob-tile-first {
+  grid-column: 1 / -1;
+}
+
+.ob-tile {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  height: 100%;
+  min-height: 72px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--panel);
+  color: var(--ink);
+  text-align: left;
+  box-shadow: var(--shadow-1);
+  transition: border-color var(--t-fast), box-shadow var(--t-fast), transform var(--t-fast);
+}
+
+.ob-tile:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--shadow-2);
+}
+
+.ob-tile:active {
+  transform: scale(0.995);
+}
+
+.ob-tile:focus-visible {
+  border-radius: 16px;
+}
+
+.ob-tile-first .ob-tile {
+  min-height: 84px;
+  border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
+  background: color-mix(in srgb, var(--brand-soft) 40%, var(--panel));
+}
+
+.ob-tile-first .ob-card-icon {
+  background: var(--brand);
+  color: var(--brand-ink);
+}
+
+.ob-tile-go {
+  color: var(--ink-2);
+  transition: transform var(--t-fast);
+}
+
+.ob-tile:hover .ob-tile-go {
+  transform: translateX(2px);
+}
+
+.ob-after {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+/* Fine-tune: the full set of preferences, folded away. */
+
+.ob-tune {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.ob-tune > summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 4px;
+  font-weight: 620;
+  cursor: pointer;
+}
+
+.ob-tune-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  gap: 32px;
+  align-items: start;
+  margin-top: 14px;
+}
+
+.ob-field-help {
+  margin: -2px 0 2px;
+  font-size: 13.5px;
 }
 
 .ob-cards {
@@ -152,7 +245,7 @@
 
 .ob-card-text span {
   font-size: 13.5px;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .ob-check {
@@ -210,7 +303,7 @@
 
 .ob-pill span {
   font-size: 12.5px;
-  color: var(--ink-3);
+  color: var(--ink-2);
 }
 
 .ob-pill[aria-checked='true'],
@@ -386,7 +479,7 @@
 .ob-summary {
   margin: 0;
   font-size: 13px;
-  color: var(--ink-3);
+  color: var(--ink-2);
   text-align: center;
 }
 
@@ -395,14 +488,13 @@
     padding: 14px 16px;
   }
 
-  .ob-progress li {
-    width: 18px;
+  .ob-main {
+    padding: 8px 16px 48px;
   }
 
-  .ob-layout {
+  .ob-tune-body {
     grid-template-columns: 1fr;
     gap: 24px;
-    padding: 8px 16px 48px;
   }
 
   .ob-preview {
@@ -430,8 +522,35 @@
   }
 }
 
+@media (max-width: 639px) {
+  .ob-tiles {
+    grid-template-columns: 1fr;
+  }
+
+  .ob-back,
+  .ob-tune > summary {
+    min-height: 44px;
+  }
+}
+
 @media (max-width: 520px) {
   .ob-top .logo-word {
     display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ob,
+  .ob *,
+  .ob *::before,
+  .ob *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  .ob-tile:active,
+  .ob-card:active,
+  .ob-tile:hover .ob-tile-go {
+    transform: none;
   }
 }

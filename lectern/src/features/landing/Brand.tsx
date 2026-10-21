@@ -1,8 +1,11 @@
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useDeferredValue, useEffect, useId, useLayoutEffect, useMemo, useState } from 'react';
 import { AUDIENCES } from '../../core/deck/types';
-import { THEMES, setPreviewTheme } from '../../core/engine/themes';
+import { THEMES, registerTheme, unregisterTheme } from '../../core/engine/themes';
 import { SlideView } from '../slides/SlideView';
 import { BRAND_COLORS, BRAND_SLIDES, BRAND_TYPES, type BrandChoice, brandTheme } from './samples';
+
+/** The id the playground's look is registered under while the page is open. */
+const BRAND_THEME_ID = 'landing-brand';
 
 const TYPE_FONTS: Record<string, string> = {
   editorial: 'var(--font-display)',
@@ -14,31 +17,32 @@ export function Brand() {
   const [choice, setChoice] = useState<BrandChoice>({
     color: 'ocean', type: 'editorial', logo: true, footer: 'Juniper Labs · Board update', audience: 'adult',
   });
-  const theme = useMemo(() => brandTheme(choice), [choice]);
+  // Every slide on the page redraws when a look changes, so the slides follow the controls a beat behind.
+  const shown = useDeferredValue(choice);
+  const theme = useMemo(() => brandTheme(shown), [shown]);
   const ids = useId();
 
-  // The look being tried lives in the preview slot, which getTheme reads first.
-  // It is set before the slides below render, and cleared when the page closes.
-  setPreviewTheme(theme);
-  useEffect(() => { setPreviewTheme(theme); }, [theme]);
-  useEffect(() => () => setPreviewTheme(null), []);
+  // The look being tried is registered under its own id, so only the two slides below use it.
+  // Registered before paint, replaced in place on each change, and removed when the page closes.
+  useLayoutEffect(() => { registerTheme({ ...theme, id: BRAND_THEME_ID, custom: true }); }, [theme]);
+  useEffect(() => () => unregisterTheme(BRAND_THEME_ID), []);
 
   const set = <K extends keyof BrandChoice>(key: K, value: BrandChoice[K]) => setChoice((c) => ({ ...c, [key]: value }));
-  const deck = { title: 'Juniper Labs board update', themeId: theme.id, audience: choice.audience };
+  const deck = { title: 'Juniper Labs board update', themeId: BRAND_THEME_ID, audience: shown.audience };
 
   return (
     <section id="looks" className="lp-section brand" aria-labelledby="brand-title" tabIndex={-1}>
       <div className="lp-container">
-        <div className="lp-head" data-reveal>
+        <div className="lp-head">
           <p className="lp-eyebrow">Looks and audience</p>
           <h2 id="brand-title" className="lp-h2">Your brand, <em>on every slide.</em></h2>
           <p className="lp-sub">
-            Start from {THEMES.length} built-in looks or make your own with your colours, fonts, logo and footer.
-            Then size the deck for the room. Try it here; these slides are live.
+            Here: colours, type, audience, logo and footer. In the app you can also pick fonts and corners and upload
+            your own logo. Start from {THEMES.length} built-in looks or make your own.
           </p>
         </div>
 
-        <div className="brand-layout" data-reveal>
+        <div className="brand-layout">
           <form className="brand-controls" onSubmit={(e) => e.preventDefault()} aria-label="Try a look">
             <fieldset className="bc-group">
               <legend>Colour</legend>
@@ -109,7 +113,7 @@ export function Brand() {
             <div className="brand-slide brand-slide-b">
               <SlideView slide={BRAND_SLIDES[1]} deck={deck} number={5} count={12} framed label="Chart slide in the custom look" />
             </div>
-            <p className="brand-note">Saved looks apply to the whole deck and travel into the PowerPoint file.</p>
+            <p className="brand-note"><span className="lp-tag">Sample brand</span> Saved looks apply to the whole deck and travel into the PowerPoint file.</p>
           </div>
         </div>
       </div>

@@ -54,6 +54,12 @@ export function useShow(deckId: string, start?: Partial<ShowState>) {
   return { state, update, peers };
 }
 
+/** Leaves a show: back where the visitor came from, or to the deck when the tab opened straight on a link. */
+export function leaveShow(deckId: string, navigate: NavigateFunction) {
+  if (((window.history.state as { idx?: number } | null)?.idx ?? 0) === 0) navigate(`/studio/${deckId}`, { replace: true });
+  else navigate(-1);
+}
+
 /** Opens the audience view in a new window and the presenter view here. */
 export function openPresenter(deckId: string, navigate: NavigateFunction) {
   const audience = window.open(`/present/${deckId}?audience=1`, `lectern-audience-${deckId}`, 'popup=yes,width=1280,height=720');

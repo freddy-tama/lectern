@@ -1,10 +1,11 @@
 // Sample content for the front page. Everything shown is drawn by the real slide
 // engine from the same sample decks a first-time visitor finds in the app.
 
-import { type Audience, type Deck, type KeyNotes, type Slide, emptyNotes } from '../../core/deck/types';
-import { THEMES, type Theme } from '../../core/engine/themes';
-import { allKinds } from '../../core/kinds/registry';
-import type { AnyKind } from '../../core/kinds/types';
+import { type Audience, type Deck, type KeyNotes, type Slide, deckMinutes as exactMinutes, emptyNotes } from '../../core/deck/types';
+import { layoutSlide } from '../../core/engine/layout';
+import { THEMES, type Theme, getTheme } from '../../core/engine/themes';
+import { allKinds, getKind } from '../../core/kinds/registry';
+import type { AnyKind, KindGroup } from '../../core/kinds/types';
 import type { Course, Lesson } from '../../data/db';
 import { buildSeed } from '../../data/seed';
 import { mix, readableOn } from '../looks/color';
@@ -26,6 +27,14 @@ export function sampleData() {
   return seed;
 }
 
+/** The sample talk the page is built around. */
+export const TALK_ID = 'deck_meetings_talk';
+
+/** A sample deck by id. */
+export function sampleDeck(id: string): Deck | null {
+  return sampleData().decks.find((d) => d.id === id) ?? null;
+}
+
 /** A slide from the sample decks, with the deck it belongs to. */
 export function sample(slideId: string): Sample | null {
   for (const deck of sampleData().decks) {
@@ -36,56 +45,35 @@ export function sample(slideId: string): Sample | null {
   return null;
 }
 
+/** A deck's visible slides with their click counts, worked out as present mode does. */
+export function deckRun(deck: Deck): { slides: Slide[]; steps: number[] } {
+  const slides = deck.slides.filter((s) => !s.hidden);
+  const theme = getTheme(deck.themeId);
+  const steps = slides.map((s, i) => layoutSlide(s, { theme, audience: deck.audience, slideNumber: i + 1, slideCount: slides.length }).steps);
+  return { slides, steps };
+}
+
+/** The total speaking time of a deck's visible slides, in whole minutes. */
+export function deckMinutes(deck: Pick<Deck, 'slides'>): number {
+  return Math.round(exactMinutes(deck));
+}
+
+/** One line naming a slide. */
+export function slideHeading(slide: Slide): string {
+  return getKind(slide.kind)?.heading(slide.content) ?? '';
+}
+
+/** Where the quiz link and the QR slide point: the public site when one is set, else this one. */
+export function qrOrigin(): string {
+  return import.meta.env.VITE_PUBLIC_ORIGIN || (typeof location === 'undefined' ? '' : location.origin);
+}
+
 function made(slide: Slide, deck: SampleDeck, number = 2, count = 12): Sample {
   return { slide, deck, number, count };
 }
 
 function notes(partial: Partial<KeyNotes>): KeyNotes {
   return emptyNotes(partial);
-}
-
-// ─── Hero ─────────────────────────────────────────────────────────────
-
-const PITCH_DECK: SampleDeck = { title: 'Fieldkit seed round', themeId: 'campus', audience: 'adult' };
-
-const pitchSlide: Slide = {
-  id: 'lp_pitch',
-  kind: 'stats',
-  content: {
-    title: 'Six months of traction',
-    stats: [
-      { value: '1,240', label: 'Teams onboarded', detail: 'From a waitlist of 3,000' },
-      { value: '38%', label: 'Monthly growth', detail: 'Since the March launch' },
-      { value: '96%', label: 'Active at 90 days', detail: 'Across paid plans' },
-    ],
-  },
-  notes: notes({
-    script: 'Six months in, twelve hundred teams use Fieldkit every week. We grow thirty-eight percent a month, and almost nobody leaves.',
-    cues: ['Pause after the growth number', 'Point to the retention figure'],
-    minutes: 2,
-  }),
-};
-
-export interface HeroSlide extends Sample {
-  key: string;
-  purpose: string;
-  look: string;
-}
-
-export function heroSlides(): HeroSlide[] {
-  const picks: { key: string; purpose: string; id?: string; custom?: Sample }[] = [
-    { key: 'report', purpose: 'Report', id: 's_q3_03' },
-    { key: 'pitch', purpose: 'Pitch', custom: made(pitchSlide, PITCH_DECK, 4, 11) },
-    { key: 'talk', purpose: 'Talk', id: 's_mt_02' },
-    { key: 'lesson', purpose: 'Lesson', id: 's_wc_07' },
-    { key: 'kids', purpose: 'Young learners', id: 's_ah_03' },
-  ];
-  return picks.flatMap((p) => {
-    const s = p.custom ?? (p.id ? sample(p.id) : null);
-    if (!s) return [];
-    const look = THEMES.find((t) => t.id === s.deck.themeId)?.name ?? 'Custom';
-    return [{ ...s, key: p.key, purpose: p.purpose, look }];
-  });
 }
 
 // ─── Slide types ──────────────────────────────────────────────────────
@@ -131,21 +119,68 @@ const KIND_SAMPLES: Record<string, string> = {
   code: 's_q3_10',
 };
 
+/**
+ * Kinds whose still frame would be blank or a placeholder, so the page names them
+ * instead of drawing them. Credits is one while no sample slide has credits to list.
+ */
+const TEXT_TILES: Record<string, string> = {
+  video: 'Plays when you present.',
+  web: 'Plays when you present.',
+  activity: 'Plays when you present.',
+  credits: 'Lists where your pictures came from.',
+};
+
+/** The order of the Add slide menu. */
+export const KIND_GROUPS: KindGroup[] = ['Open', 'Explain', 'Data', 'Visual', 'Media', 'Engage', 'Close'];
+
 export interface KindSample extends Sample {
   def: AnyKind;
+  /** Set for a kind shown as words instead of a slide. */
+  tile?: string;
 }
 
-/** Every slide type in this build (mods excluded), each drawn with a real sample. */
+/** Every slide type in this build, mods excluded. */
+export function coreKinds(): AnyKind[] {
+  return allKinds().filter((def) => !def.plugin);
+}
+
+function created(def: AnyKind, content: Record<string, unknown>, themeId = 'paper'): Sample {
+  return made({ id: `lp_${def.kind}`, kind: def.kind, content, notes: notes({}) }, { title: def.label, themeId, audience: 'adult' });
+}
+
+/** A sample slide that lists picture credits, if any sample deck has one. */
+function creditsSample(): Sample | null {
+  for (const deck of sampleData().decks) {
+    const own = deck.slides.find((s) => s.kind === 'credits' && !s.hidden && Array.isArray(s.content.lines) && s.content.lines.length > 0);
+    if (own) return sample(own.id);
+  }
+  return null;
+}
+
+/** Every slide type in this build (mods excluded), each drawn with a real sample or named in words. */
 export function kindSamples(): KindSample[] {
-  return allKinds()
-    .filter((def) => !def.plugin)
-    .map((def) => {
-      if (def.kind === 'gallery') return { ...made(gallerySlide, GALLERY_DECK, 3, 8), def };
-      const id = KIND_SAMPLES[def.kind];
-      const found = id ? sample(id) : null;
-      const s = found ?? made({ id: `lp_${def.kind}`, kind: def.kind, content: def.create(), notes: notes({}) }, { title: def.label, themeId: 'paper', audience: 'adult' });
-      return { ...s, def };
-    });
+  return coreKinds().map((def) => {
+    if (def.kind === 'credits') {
+      const own = creditsSample();
+      return own ? { ...own, def } : { ...created(def, def.create()), def, tile: TEXT_TILES.credits };
+    }
+    if (def.kind === 'gallery') return { ...made(gallerySlide, GALLERY_DECK, 3, 8), def };
+    if (def.kind === 'qr') return { ...created(def, { ...def.create(), url: `${qrOrigin()}/welcome` }), def };
+    if (def.kind === 'cards') return { ...created(def, def.create(), 'minimal'), def };
+    const id = KIND_SAMPLES[def.kind];
+    const found = id ? sample(id) : null;
+    return { ...(found ?? created(def, def.create())), def, tile: TEXT_TILES[def.kind] };
+  });
+}
+
+/** The two slide types that run on the slide itself, set up to try here. */
+export function liveSamples(): { timer: Sample | null; picker: Sample | null } {
+  const timer = getKind('timer');
+  const picker = getKind('picker');
+  return {
+    timer: timer ? created(timer, { ...timer.create(), title: 'Talk it over', minutes: '2:00' }, 'minimal') : null,
+    picker: picker ? created(picker, { ...picker.create(), items: ['Maya', 'Tom', 'Priya', 'Sam', 'Lee', 'Ana'] }, 'minimal') : null,
+  };
 }
 
 // ─── Brand looks ──────────────────────────────────────────────────────
@@ -248,7 +283,7 @@ export const BRAND_SLIDES: Slide[] = [
   },
 ];
 
-// ─── Classroom ────────────────────────────────────────────────────────
+// ─── Course ────────────────────────────────────────────────────────
 
 export interface CourseSample {
   course: Course;
@@ -265,24 +300,4 @@ export function courseSample(courseId = 'course_earth'): CourseSample | null {
     course,
     weeks: weekNumbers.map((week) => ({ week, title: course.weekTitles?.[week] ?? '', lessons: own.filter((l) => l.week === week) })),
   };
-}
-
-/** Local-time ISO date, YYYY-MM-DD. */
-export function isoDay(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-/** Monday to Friday of this week, with the sample lessons on each day. */
-export function weekSample(today = new Date()) {
-  const { courses, lessons } = sampleData();
-  const monday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - ((today.getDay() + 6) % 7));
-  return Array.from({ length: 5 }, (_, i) => {
-    const day = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i);
-    const iso = isoDay(day);
-    const items = lessons
-      .filter((l) => l.date === iso)
-      .sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''))
-      .map((lesson) => ({ lesson, course: courses.find((c) => c.id === lesson.courseId) }));
-    return { iso, day, items };
-  });
 }

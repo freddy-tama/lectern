@@ -17,7 +17,7 @@ function context() {
   return canvasCtx;
 }
 
-const WIDE = /[ᄀ-ᇿ⺀-꓏가-힯豈-﫿︰-﹏＀-｠￠-￦]/;
+const WIDE = /[\u1100-\u11FF\u2E80-\uA4CF\uAC00-\uD7AF\uF900-\uFAFF\uFE30-\uFE4F\uFF00-\uFF60\uFFE0-\uFFE6]/;
 
 /** Rough width in em units, used when no canvas exists. Errs on the wide side. */
 export function estimateEm(text: string): number {
@@ -65,7 +65,7 @@ export function cssFont(family: string, size: number, weight = 400, italic = fal
 /** Splits text into words, keeping CJK characters breakable one by one. */
 function tokens(paragraph: string): string[] {
   const out: string[] = [];
-  const re = /[⺀-꓏가-힯豈-﫿＀-｠]|[^\s⺀-꓏가-힯豈-﫿＀-｠]+|\s+/g;
+  const re = /[\u2E80-\uA4CF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFF60]|[^\s\u2E80-\uA4CF\uAC00-\uD7AF\uF900-\uFAFF\uFF00-\uFF60]+|\s+/g;
   for (const m of paragraph.matchAll(re)) out.push(m[0]);
   return out;
 }

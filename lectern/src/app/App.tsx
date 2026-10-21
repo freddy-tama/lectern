@@ -29,6 +29,7 @@ const MakePage = lazy(() => import('../features/autodeck/MakePage'));
 const JoinPage = lazy(() => import('../features/share/JoinPage'));
 const SavedDeck = lazy(() => import('../features/share/JoinPage').then((m) => ({ default: m.SavedDeck })));
 const PackPage = lazy(() => import('../features/share/PackPage').then((m) => ({ default: m.PackPage })));
+const TrySample = lazy(() => import('./TrySample'));
 
 function Loading() {
   return (
@@ -81,6 +82,7 @@ export function App() {
             </Route>
             <Route path="welcome" element={<Landing />} />
             <Route path="start" element={<Onboarding />} />
+            <Route path="try/:sample/:view?" element={<TrySample />} />
             <Route path="join" element={<JoinPage />} />
             <Route path="join/:code" element={<JoinPage />} />
             <Route path="phone/:deckId" element={<SavedDeck />} />

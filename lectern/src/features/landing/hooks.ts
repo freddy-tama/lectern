@@ -3,22 +3,30 @@ import { useEffect, useState } from 'react';
 const WELCOMED_KEY = 'lectern.welcomed';
 const THEME_KEY = 'lectern.theme';
 
+/** The page colour behind each theme, for the browser's title bar. The same values as the app's Shell. */
+const THEME_COLOR = { light: '#F7F6F3', dark: '#141413' } as const;
+
 /** Remembers that this visitor has seen the front page, so "/" opens the app next time. */
 export function markWelcomed() {
   try { localStorage.setItem(WELCOMED_KEY, '1'); } catch { /* private mode */ }
 }
 
-export function usePrefersReducedMotion(): boolean {
-  const query = '(prefers-reduced-motion: reduce)';
-  const [reduced, setReduced] = useState(() => typeof window !== 'undefined' && window.matchMedia?.(query).matches);
+/** True while a media query matches, following changes. False where matchMedia is missing. */
+export function useMedia(query: string): boolean {
+  const [matches, setMatches] = useState(() => typeof window !== 'undefined' && Boolean(window.matchMedia?.(query).matches));
   useEffect(() => {
     const mq = window.matchMedia?.(query);
     if (!mq) return;
-    const onChange = () => setReduced(mq.matches);
+    const onChange = () => setMatches(mq.matches);
+    onChange();
     mq.addEventListener('change', onChange);
     return () => mq.removeEventListener('change', onChange);
-  }, []);
-  return reduced;
+  }, [query]);
+  return matches;
+}
+
+export function usePrefersReducedMotion(): boolean {
+  return useMedia('(prefers-reduced-motion: reduce)');
 }
 
 export type ThemePref = 'system' | 'light' | 'dark';
@@ -35,50 +43,32 @@ export function useThemePref(): [ThemePref, (t: ThemePref) => void] {
     const root = document.documentElement;
     if (pref === 'system') root.removeAttribute('data-theme');
     else root.setAttribute('data-theme', pref);
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
+      const own = meta.media.includes('dark') ? 'dark' : 'light';
+      meta.content = THEME_COLOR[pref === 'system' ? own : pref];
+    }
     try { localStorage.setItem(THEME_KEY, pref); } catch { /* private mode */ }
   }, [pref]);
   return [pref, setPref];
 }
 
 /**
- * Fades sections in as they scroll into view. Content stays visible when
- * IntersectionObserver is missing or the visitor prefers less motion.
+ * Turns true the first time the element comes near the screen, and stays true, so
+ * heavier parts (iframes, live slides) mount only when someone scrolls to them.
+ * Browsers without IntersectionObserver get them at once.
  */
-export function useReveal(root: React.RefObject<HTMLElement | null>, reduced: boolean) {
-  useEffect(() => {
-    const el = root.current;
-    if (!el || reduced || typeof IntersectionObserver === 'undefined') return;
-    const targets = [...el.querySelectorAll<HTMLElement>('[data-reveal]')];
-    const io = new IntersectionObserver((entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        entry.target.classList.add('is-in');
-        io.unobserve(entry.target);
-      }
-    }, { rootMargin: '0px 0px -40px 0px', threshold: 0 });
-    // Anything already on screen shows at once; the rest waits for the scroll.
-    const fold = window.innerHeight;
-    for (const t of targets) {
-      if (t.getBoundingClientRect().top < fold * 0.92) t.classList.add('is-in');
-      else io.observe(t);
-    }
-    el.classList.add('reveal-on');
-    return () => {
-      io.disconnect();
-      el.classList.remove('reveal-on');
-    };
-  }, [root, reduced]);
-}
-
-/** True while the element is at least partly on screen. Used to pause motion off-screen. */
-export function useOnScreen<T extends HTMLElement>(ref: React.RefObject<T | null>): boolean {
-  const [on, setOn] = useState(true);
+export function useSeen<T extends HTMLElement>(ref: React.RefObject<T | null>, margin = '200px'): boolean {
+  const [seen, setSeen] = useState(() => typeof IntersectionObserver === 'undefined');
   useEffect(() => {
     const el = ref.current;
-    if (!el || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(([entry]) => setOn(entry.isIntersecting));
+    if (seen || !el) return;
+    const io = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      setSeen(true);
+      io.disconnect();
+    }, { rootMargin: margin });
     io.observe(el);
     return () => io.disconnect();
-  }, [ref]);
-  return on;
+  }, [ref, margin, seen]);
+  return seen;
 }
