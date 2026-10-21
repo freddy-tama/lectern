@@ -147,3 +147,13 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
   - ACC-001, open `/signin` in a fresh browser: the page shows one of the two states from flow 12, never a blank page or an error, and Go to Home (accounts off) opens `/`.
   - ACC-002, open `/decks`, a sample deck and present mode without signing in: no step asks for a sign-in.
   - ACC-003, accounts on only: an email address without "@" shows "Enter an email address, like name@example.com." and sends nothing.
+
+**2026-10-22**
+
+- **00:04** [PR #9](https://github.com/freddy-tama/lectern/pull/9) (accounts for AI) was opened from `claude/signin-quota`. It was built on #8, so it carried #8's two commits as well.
+- **00:10** Vercel's preview was ready, about 6 minutes after the push. Its server functions answered: `/api/account` gave `{"accounts":false}`, because the Supabase settings aren't on previews yet, and the AI endpoints reported AI as off, as on production. So this run tested the accounts-off state.
+- **00:14–00:16** TestSprite ran all 27 tests on the preview ([run `3ae71737`](https://www.testsprite.com/dashboard-v3/o/dfe734b3-7442-5019-aa71-fa10706b4f14/projects/4a558259-6d77-449a-bede-151ba58b667a/execution/3ae71737-de1e-4bc7-ae2c-a1b48bddd0d8)): **All 27 tests passed**.
+  - That includes DRF-001 (the `/make` fix from #8) and the rewritten PRS-006, so the loop that #8's run started closed here.
+  - The suite is still the same 27 tests; flow 12 in the PRD has no test of its own yet.
+- **00:19** #9 was merged as `1e32c71`. GitHub marked #8 as merged too, because its commits were in #9.
+- **00:24** Production hadn't deployed the merge. Vercel's dashboard showed a "GitHub Outage" notice: automatic deployments from GitHub may be delayed. It is probably what delayed GitHub's events the evening before, too.

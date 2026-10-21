@@ -4,6 +4,8 @@ Make presentations for anything (talks, pitches, reports and lessons) and run yo
 
 It runs in the browser and saves to the browser (IndexedDB). You don't need an account, and decks aren't stored on a server. Recorded lectures are transcribed in the browser too. The only server features are optional: picture search, AI drafting, AI pictures and AI class notes, and accounts that meter AI use.
 
+**Live:** https://lectern-sooty.vercel.app · **Tests:** every pull request is tested end to end by [TestSprite](#testing).
+
 ## What you can do
 
 | Area | What it does |
@@ -200,6 +202,46 @@ The browser decodes the audio straight to 16 kHz mono. Long recordings are cut i
 | ← / → | Back or forward 10 seconds |
 | Enter in search | Next match (Shift+Enter for the previous one) |
 
+## Testing
+
+### End to end, on every pull request (TestSprite)
+
+The [TestSprite](https://www.testsprite.com) GitHub App tests every pull request against the real app, in TestSprite's cloud browsers:
+
+1. A push to a pull request makes Vercel build a preview at `https://lectern-git-<branch>-freddy-tamas-projects.vercel.app`.
+2. When the preview is ready, TestSprite runs the whole suite against it.
+3. The result shows on the pull request as the `TestSprite V3` check, for example "All 27 tests passed" on [#9](https://github.com/freddy-tama/lectern/pull/9).
+
+The suite was built in the TestSprite 3.0 portal from [`docs/testsprite-prd.md`](docs/testsprite-prd.md). That file lists Lectern's flows with the exact text, URLs and `data-testid`s that count as a pass. It has 27 tests in 11 areas:
+
+| Area | Tests | What they check |
+|---|---|---|
+| Welcome and discovery | 6 | A fresh visit lands on the intro page; the start page; the sample talk by keyboard; the notes, file and recording paths from getting started. |
+| Presentation playback | 7 | Advancing and revealing in the sample talk; presenter and audience views; the sample report and lesson; a shared `/try` link and leaving the show; Home after starting from the sample talk. |
+| Key notes views | 3 | The key-notes tabs, and opening the presenter view and the teleprompter from them. |
+| Phone quiz | 1 | The three-question quiz carried in the link, answered to a score. |
+| Notes to deck | 2 | A deck built from notes for a talk audience; the AI tab's setup notice. |
+| New deck creation | 1 | `/make` with no AI doesn't make an empty deck from a topic alone. |
+| Deck library | 2 | Listing and searching the six sample decks. |
+| Studio editor | 2 | Editing a slide title, which is kept after a reload; adding a slide. |
+| Course workspace | 1 | Opening a lesson's deck from the course schedule. |
+| Review mode | 1 | Reading a deck through in review mode. |
+| Theme | 1 | Cycling through system, light and dark. |
+
+The suite leaves out what needs a second device, a microphone, a large model download, a paid AI key or a real sign-in. Every run, failure and fix is recorded in [`docs/testsprite-log.md`](docs/testsprite-log.md). For example, #8 fixed a bug the suite found on production, its run caught a badly written test, and the rewritten test passed on #9.
+
+### Unit and integration tests (vitest)
+
+`npm test` runs 619 tests in 45 files, in Node and jsdom. They need no keys and no network: the Claude API, Supabase and the picture services are stood in for. They cover, among other things:
+
+- outlines, drafting and the slide types;
+- layout, fitting and PowerPoint export;
+- import from Word, PowerPoint and Markdown;
+- the service worker, sharing and the quiz;
+- each AI endpoint's request and its refusals;
+- AI credits;
+- [`supabase/schema.sql`](supabase/schema.sql), run in a real Postgres (PGlite) to check its row-level security.
+
 ## How it's built
 
 ```text
@@ -217,9 +259,11 @@ src/
   data/            IndexedDB (Dexie): courses, lessons, decks, notes, recordings, assets, study progress
   features/        home, courses, studio, present, study, notes, schedule, share, recordings
   ui/              dialogs, menus, toasts, formatting
-api/               Vercel functions for AI drafting, class notes, picture search, download and AI pictures
+api/               Vercel functions for AI drafting, class notes, picture search, download, AI pictures and accounts
+  _lib/            not a route: sign-in checks and AI credits, shared by the functions
 plugins/           mods, each a folder with an index.ts
-tests/             vitest: seed data, PowerPoint export, mods
+supabase/          the database for accounts: credits and study progress (schema.sql)
+tests/             vitest: core, features, API functions, the database schema, mods
 ```
 
 A slide is a list of positioned boxes (text, shapes, images, charts, tables, videos and embedded pages). The same layout draws the slide in the browser and writes it to PowerPoint, so what you see is what you export. Text is measured and fitted to its box, and the studio warns when a slide holds more than its audience should read.
