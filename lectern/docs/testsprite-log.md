@@ -157,3 +157,7 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
   - The suite is still the same 27 tests; flow 12 in the PRD has no test of its own yet.
 - **00:19** #9 was merged as `1e32c71`. GitHub marked #8 as merged too, because its commits were in #9.
 - **00:24** Production hadn't deployed the merge. Vercel's dashboard showed a "GitHub Outage" notice: automatic deployments from GitHub may be delayed. It is probably what delayed GitHub's events the evening before, too.
+- **00:32** Vercel deployed the merge to production on its own (`1e32c71`, ready at 00:33), about 13 minutes after the merge. No hand deploy was needed. The live site's `/api/account` answers `{"accounts":false}`.
+- **00:37** Production now has AI keys: `/api/draft-deck` and `/api/picture-generate` report AI as available, the pictures with `gpt-image-2.5-sunburst`. Accounts and an access code are both off, so AI there is open to anyone. Previews still have AI off.
+  - Two tests assume AI is off and would fail against production: DRF-001 (`/make` with a topic alone) and NTS-002 (the AI tab's setup notice). Pull request runs aren't affected, because they test previews.
+  - Once accounts are on, production shows "Sign in to …" in those places instead. The PRD and those two tests need to accept that state too.
