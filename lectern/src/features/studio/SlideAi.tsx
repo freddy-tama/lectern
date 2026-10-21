@@ -343,7 +343,7 @@ export function ProposalNotes({ revision, slide, purpose }: { revision: SlideRev
   );
 }
 
-function NotesPreview({ notes, keyPointsLabel, checkLabel }: { notes: KeyNotes; keyPointsLabel: string; checkLabel: string }) {
+export function NotesPreview({ notes, keyPointsLabel, checkLabel }: { notes: KeyNotes; keyPointsLabel: string; checkLabel: string }) {
   return (
     <div className="notes-preview">
       <div className="notes-preview-script">{notes.script.trim() || <span className="faint">No script</span>}</div>

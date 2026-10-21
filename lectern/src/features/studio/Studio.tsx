@@ -2,7 +2,7 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import {
   AlertTriangle, ArrowLeft, BookOpen, ChevronDown, ClipboardList, Copy, Copyright, Download, EyeOff, FileJson, FileText, MonitorPlay,
   Plus, PresentationIcon, Redo2, Scissors, ScrollText, Shapes, Trash2, Undo2,
-  Globe, QrCode as QrIcon, Trophy,
+  Globe, QrCode as QrIcon, Trophy, WandSparkles,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -27,6 +27,7 @@ import { PictureCredits } from '../pictures/PictureCredits';
 import { openPresenter } from '../present/sync';
 import { SlideView } from '../slides/SlideView';
 import { AskAboutThis } from './AskAboutThis';
+import { AssistantBar, AssistantNotes, AssistantPanel, AssistantStage, useDeckAssistant } from './Assistant';
 import { AudienceMenu } from './AudienceMenu';
 import { convertSlide } from './convert';
 import { DeckDetailsDialog } from './DeckDetailsDialog';
@@ -56,12 +57,20 @@ export default function Studio() {
   const [busy, setBusy] = useState('');
   const [details, setDetails] = useState(false);
   const [credits, setCredits] = useState(false);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const context = useLiveQuery(async () => {
     if (!deck?.lessonId) return null;
     const lesson = await db.lessons.get(deck.lessonId);
     const course = lesson ? await db.courses.get(lesson.courseId) : undefined;
     return { lesson, course };
   }, [deck?.lessonId]);
+  const assistant = useDeckAssistant({
+    deck,
+    change,
+    plannedMinutes: context?.lesson?.durationMinutes,
+    select: setSelectedId,
+    notify: useCallback((message: string) => toast.show(message, { action: { label: 'Undo', run: () => undo() } }), [toast, undo]),
+  });
 
   useEffect(() => {
     if (!deck || selectedId && deck.slides.some((s) => s.id === selectedId)) return;
@@ -74,6 +83,16 @@ export default function Studio() {
   const index = deck ? Math.max(0, deck.slides.findIndex((s) => s.id === selectedId)) : 0;
   const slide = deck?.slides[index];
   const revision = useSlideRevision({ deck, slide, change });
+
+  // A proposal from the assistant is previewed where it applies: moving to another slide closes the preview,
+  // and it takes the stage from a one-slide AI suggestion.
+  const previewing = assistant.focused ? assistant.focusedSlideId : null;
+  useEffect(() => {
+    if (previewing && previewing !== selectedId) assistant.preview(null);
+  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (previewing) revision.discard();
+  }, [previewing]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const updateSlide = useCallback((id: string, fn: (s: Slide) => Slide, key?: string) => {
     change((d) => ({ ...d, slides: d.slides.map((s) => (s.id === id ? fn(s) : s)) }), key);
@@ -147,6 +166,9 @@ export default function Studio() {
       if ((e.target as HTMLElement | null)?.closest?.('.ask-pop')) return;
       if (mod && e.key.toLowerCase() === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
       if (mod && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
+      if (e.key === 'Escape' && assistant.focused) { e.preventDefault(); assistant.preview(null); return; }
+      // Keys pressed in the assistant panel (on a change card, say) never delete or move slides.
+      if ((e.target as HTMLElement | null)?.closest?.('.assistant')) return;
       const typing = (e.target as HTMLElement | null)?.closest('input, textarea, select, [contenteditable="true"]');
       if (typing) { if (e.key === 'Escape') (e.target as HTMLElement).blur(); return; }
       const { deck: d, index: i, selectedId: id } = keyState.current;
@@ -290,6 +312,16 @@ export default function Studio() {
           <span className={`chip ${planned && minutes > planned ? 'chip-warn' : ''}`} title="Planned time from the key notes">
             {minutesLabel(minutes)}{planned ? ` of ${planned}` : ''}
           </span>
+          <button
+            type="button"
+            className={`btn btn-ghost btn-sm ${assistantOpen ? 'is-on' : ''}`}
+            aria-pressed={assistantOpen}
+            onClick={() => setAssistantOpen((o) => !o)}
+            title="Ask for changes across the whole deck"
+          >
+            {assistant.working ? <span className="spinner" /> : <WandSparkles size={15} />} Assistant
+            {assistant.pending.length > 0 && <span className="assistant-badge" aria-label={`${assistant.pending.length} changes to review`}>{assistant.pending.length}</span>}
+          </button>
           <LookMenu deck={deck} change={change} />
           <AudienceMenu deck={deck} change={change} />
           {deckFields().length > 0 && (
@@ -348,7 +380,9 @@ export default function Studio() {
         {slide && (
           <>
             <Stage>
-              {revision.proposal ? (
+              {assistant.focused ? (
+                <AssistantStage assistant={assistant} deck={deck} />
+              ) : revision.proposal ? (
                 <ProposalStage revision={revision} slide={slide} deck={deck} number={shownNumber} count={shownCount} />
               ) : (
                 <SlideView
@@ -369,7 +403,7 @@ export default function Studio() {
               )}
             </Stage>
             <div className="stage-bar">
-              {revision.proposal ? <ProposalBar revision={revision} /> : (
+              {assistant.focused ? <AssistantBar assistant={assistant} deck={deck} /> : revision.proposal ? <ProposalBar revision={revision} /> : (
                 <>
                   {layout && layout.steps > 0 ? (
                     <div className="segmented" role="group" aria-label="Preview reveal step">
@@ -388,7 +422,9 @@ export default function Studio() {
                 </>
               )}
             </div>
-            {revision.proposal?.status === 'ready' ? (
+            {assistant.focused ? (
+              <AssistantNotes assistant={assistant} deck={deck} />
+            ) : revision.proposal?.status === 'ready' ? (
               <ProposalNotes revision={revision} slide={slide} purpose={deckPurpose(deck)} />
             ) : (
               <NotesPanel
@@ -398,13 +434,15 @@ export default function Studio() {
                 aside={<SlideNotesButton deckId={deck.id} slideId={slide.id} slideNumber={index + 1} lessonId={context?.lesson?.id} courseId={context?.course?.id} />}
               />
             )}
-            <AskAboutThis deck={deck} slide={slide} disabled={Boolean(revision.proposal)} onInsert={(t) => insertIntoNotes(slide.id, t)} />
+            <AskAboutThis deck={deck} slide={slide} disabled={Boolean(revision.proposal || assistant.focused)} onInsert={(t) => insertIntoNotes(slide.id, t)} />
           </>
         )}
       </div>
 
-      <aside className="inspector" aria-label="Slide content">
-        {slide && (
+      <aside className={`inspector ${assistantOpen ? 'is-assistant' : ''}`} aria-label={assistantOpen ? 'Deck assistant' : 'Slide content'}>
+        {assistantOpen ? (
+          <AssistantPanel assistant={assistant} deck={deck} plannedMinutes={planned} onClose={() => { setAssistantOpen(false); assistant.preview(null); }} />
+        ) : slide && (
           <>
             <div className="inspector-head">
               <Menu width={340} trigger={(p) => (

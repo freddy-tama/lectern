@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "dev:mods": "cross-env LECTERN_PLUGINS=chinese,lesson-plan vite",
+    "dev:mock-ai": "vite --config vite.mock.config.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "icons": "node scripts/make-icons.mjs",
