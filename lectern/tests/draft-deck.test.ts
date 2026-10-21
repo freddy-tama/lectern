@@ -33,7 +33,7 @@ vi.mock('@anthropic-ai/sdk', () => {
 });
 
 const {
-  POST, OUTLINE_TASK, audienceRule, checkBatch, cleanCatalogue, cleanNumbers, cleanOutline, pictureRoom, readInput, slidesTask, stagedRequest, stagedSchema, usageOf,
+  POST, OUTLINE_TASK, audienceRule, checkBatch, cleanCatalogue, cleanNumbers, cleanOutline, pictureRoom, readContent, readInput, slideSchema, slidesTask, stagedRequest, stagedSchema, usageOf,
 } = await import('../api/draft-deck');
 const { POST: askQuestions } = await import('../api/deck-questions');
 
@@ -64,6 +64,35 @@ const post = (data: unknown, headers: Record<string, string> = {}) => POST(new R
   headers: { 'content-type': 'application/json', ...headers },
   body: JSON.stringify(data),
 }));
+
+/** A slide as the model writes it: the content as a JSON string. */
+const written = ({ content, ...rest }: { content: Record<string, unknown> } & Record<string, unknown>) => ({ ...rest, contentJson: JSON.stringify(content) });
+
+/**
+ * What makes a structured-output grammar costly to compile: union types, optional properties,
+ * and the number of objects and properties overall.
+ */
+function complexity(schema: unknown) {
+  const c = { unions: 0, optional: 0, objects: 0, properties: 0 };
+  const walk = (v: unknown): void => {
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (!v || typeof v !== 'object') return;
+    const o = v as Record<string, any>;
+    if (o.anyOf || o.oneOf || Array.isArray(o.type)) c.unions += 1;
+    if (o.type === 'object') {
+      const keys = Object.keys(o.properties ?? {});
+      c.objects += 1;
+      c.properties += keys.length;
+      c.optional += keys.filter((k) => !(o.required ?? []).includes(k)).length;
+    }
+    Object.values(o).forEach(walk);
+  };
+  walk(schema);
+  return c;
+}
+
+/** A schema with its enums emptied, to compare shapes whatever the slide types are. */
+const shape = (schema: unknown) => JSON.stringify(schema, (key, value) => (key === 'enum' ? [] : value));
 
 const message = (answer: unknown, o: { stop?: string; usage?: Record<string, unknown> } = {}) => ({
   model: 'claude-opus-5-5',
@@ -108,23 +137,50 @@ describe('catalogue and schemas', () => {
     expect(item.required).toEqual(['title', 'kind', 'minutes', 'point', 'pictures']);
     expect(item.properties.kind.enum).toContain('bullets');
     expect(item.properties.pictures.items.enum).toEqual(['pic1', 'pic2', 'pic3']);
-    const variants = schema.properties.slides.items.anyOf as Record<string, any>[];
-    expect(variants).toHaveLength(kinds.length);
-    expect(variants[0].required).toEqual(['number', 'kind', 'content', 'notes']);
+    const slide = schema.properties.slides.items;
+    expect(slide.required).toEqual(['number', 'kind', 'contentJson', 'notes']);
+    expect(slide.properties.kind.enum).toEqual(kinds.map((k) => k.kind));
+    expect(slide.properties.contentJson.type).toBe('string');
     // Without pictures there is nothing to assign.
     const plain = stagedSchema(kinds, []) as Record<string, any>;
     expect(plain.properties.outline.items.required).not.toContain('pictures');
     expect(plain.properties.outline.items.properties.pictures).toBeUndefined();
   });
 
-  it('lets picture sub-fields take only a picture id, and leaves them out without pictures', () => {
-    const galleryOf = (s: Record<string, any>) => (s.properties.slides.items.anyOf as Record<string, any>[]).find((v) => v.properties.kind.enum[0] === 'gallery')!.properties.content.properties.images.items;
+  it('keeps the output schemas small, and the same shape however many slide types there are', () => {
+    // The API compiles the schema into a grammar and refuses one that is too large. A variant per
+    // slide type reached that at 30 types: "The compiled grammar is too large" on every Make.
+    expect(kinds.length).toBeGreaterThanOrEqual(30);
+    for (const pics of [pictures as never[], []]) {
+      const all = stagedSchema(kinds, pics);
+      expect(shape(all)).toBe(shape(stagedSchema(kinds.slice(0, 1), pics)));
+      expect(complexity(all)).toEqual({ unions: 0, optional: 0, objects: 4, properties: pics.length ? 18 : 17 });
+    }
+    expect(shape(slideSchema(kinds))).toBe(shape(slideSchema(kinds.slice(0, 1))));
+    expect(complexity(slideSchema(kinds))).toEqual({ unions: 0, optional: 0, objects: 3, properties: 11 });
+  });
+
+  it('lists every field a slide type takes in the system prompt, with picture fields only when there are pictures', () => {
     const input = readInput(body());
-    if (typeof input === 'string') throw new Error(input);
-    expect(galleryOf(stagedSchema(kinds, input.pictures)).properties.image.enum).toEqual(['', 'pic1', 'pic2', 'pic3']);
-    const bare = galleryOf(stagedSchema(kinds, []));
-    expect(Object.keys(bare.properties)).toEqual(['caption']);
-    expect(bare.required).toEqual(['caption']);
+    const bare = readInput(body({ pictures: [] }));
+    if (typeof input === 'string' || typeof bare === 'string') throw new Error('bad input');
+    const line = (system: string, k: string) => system.split('\n').find((l) => l.startsWith(`- ${k} (`))!;
+    const withPictures = stagedRequest(input, OUTLINE_TASK).system;
+    expect(line(withPictures, 'gallery')).toContain('Fields: title [text], images [objects: image (picture), caption]');
+    expect(line(withPictures, 'bullets')).toMatch(/image \[picture\]/);
+    expect(line(withPictures, 'question')).toMatch(/, correct \[number\]/);
+    expect(withPictures).toContain('[picture] fields and (picture) keys take the id of a provided picture');
+    const without = stagedRequest(bare, OUTLINE_TASK).system;
+    expect(line(without, 'gallery')).toContain('Fields: title [text], images [objects: caption]');
+    expect(without).not.toContain('picture]');
+    expect(without).toContain('"contentJson" is a JSON object of its type\'s fields');
+  });
+
+  it('reads content only when it is a JSON object', () => {
+    expect(readContent('{"title":"Hi"}')).toEqual({ title: 'Hi' });
+    expect(readContent('{"title":"Hi"')).toBeNull();
+    expect(readContent('["Hi"]')).toBeNull();
+    expect(readContent({ title: 'Hi' })).toBeNull();
   });
 });
 
@@ -210,7 +266,7 @@ describe('checking a batch', () => {
       { number: 2, kind: 'statement', content: { statement: 'Wrong kind' }, notes },
       { number: 3, kind: 'image', content: { title: 'Again' }, notes },
       { number: 5, kind: 'summary', content: { title: 'Not asked for' }, notes },
-    ], [2, 3], plan, kinds);
+    ].map(written), [2, 3], plan, kinds);
     expect(slides.map((s) => s.number)).toEqual([3]);
     expect(missing).toEqual([2]);
     expect(dropped).toBe(3);
@@ -221,8 +277,18 @@ describe('checking a batch', () => {
 
   it('clears pictures inside lists of pictures too', () => {
     const gallery = cleanOutline([{ title: 'G', kind: 'gallery', minutes: 2, point: '', pictures: ['pic1'] }], kinds, ['pic1', 'pic2']);
-    const { slides } = checkBatch([{ number: 1, kind: 'gallery', content: { title: 'G', images: [{ image: 'pic1', caption: 'A' }, { image: 'pic2', caption: 'B' }] }, notes }], [1], gallery, kinds);
+    const { slides } = checkBatch([written({ number: 1, kind: 'gallery', content: { title: 'G', images: [{ image: 'pic1', caption: 'A' }, { image: 'pic2', caption: 'B' }] }, notes })], [1], gallery, kinds);
     expect(slides[0]!.content.images).toEqual([{ image: 'pic1', caption: 'A' }, { image: '', caption: 'B' }]);
+  });
+
+  it('reports a slide whose content can’t be read as missing, so it is written again', () => {
+    const { slides, missing, dropped } = checkBatch([
+      { number: 2, kind: 'bullets', contentJson: '{"title": "Layers", "bullets": ["Crust"', notes },
+      written({ number: 5, kind: 'summary', content: { title: 'Keep these' }, notes }),
+    ], [2, 5], plan, kinds);
+    expect(slides.map((s) => s.number)).toEqual([5]);
+    expect(missing).toEqual([2]);
+    expect(dropped).toBe(1);
   });
 });
 
@@ -254,11 +320,26 @@ describe('POST', () => {
     expect(params.betas).toEqual(['server-side-fallback-2026-07-01']);
   });
 
+  it('sends a small output schema for the reported request: a report from a spreadsheet', async () => {
+    // From the bug report: an .xlsx of about 2,700 words, Report, Adults, 20 min, Balanced, asked for in Indonesian.
+    const material = Array.from({ length: 900 }, (_, i) => `Wilayah${i}\tPenjualan\t${1200 + i}`).join('\n');
+    sdk.reply = () => message({ title: 'Laporan penjualan', outline, slides: [] });
+    const res = await post({
+      ...body({ purpose: 'report', audience: 'adult', minutes: 20, density: 'balanced', pictures: [], material, answers: [{ question: 'Language?', answer: 'Indonesian' }] }),
+      topic: 'Penjualan per wilayah',
+      mode: 'outline',
+    });
+    expect(res.status).toBe(200);
+    const schema = (sdk.calls[0] as { output_config: { format: { schema: unknown } } }).output_config.format.schema;
+    expect(complexity(schema)).toEqual({ unions: 0, optional: 0, objects: 4, properties: 17 });
+    expect(JSON.stringify(schema).length).toBeLessThan(2_500);
+  });
+
   it('writes a batch and reports the slides that didn’t come back', async () => {
     sdk.reply = () => message({ title: '', outline: [], slides: [
       { number: 4, kind: 'question', content: { title: 'What makes magma rise?', options: ['Heat', 'Ice'], correct: 0, answer: 'Heat' }, notes: {} },
       { number: 1, kind: 'title', content: { title: 'Not this one' }, notes: {} },
-    ] }, { usage: { cache_read_input_tokens: 6000, cache_creation_input_tokens: 0 } });
+    ].map(written) }, { usage: { cache_read_input_tokens: 6000, cache_creation_input_tokens: 0 } });
     const res = await post({ ...body(), mode: 'slides', outline: { title: 'Volcanoes', slides: outline }, numbers: [4, 5] });
     const data = await res.json();
     expect(res.status).toBe(200);
@@ -296,7 +377,7 @@ describe('POST', () => {
     sdk.reply = () => message({ title: 'Volcanoes', slides: [
       { kind: 'bullets', content: { title: 'Layers', bullets: ['Crust', 'Mantle'], reveal: false, image: 'pic2' }, notes: { script: 'Hi', keyPoints: [], cues: [], checkQuestion: '', checkAnswer: '', minutes: 2 } },
       { kind: 'hologram', content: {}, notes: {} },
-    ] });
+    ].map(written) });
     const res = await post(body());
     const data = await res.json();
     expect(res.status).toBe(200);
