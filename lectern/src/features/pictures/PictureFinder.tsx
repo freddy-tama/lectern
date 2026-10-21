@@ -4,6 +4,8 @@ import { type PictureCredit, type PictureRights, RIGHTS_LABEL, licenseLimits, ri
 import { type FoundPicture, type PictureShape, type RankedPicture, rankPictures } from '../../core/pictures/rank';
 import { assetUrl } from '../../data/repo';
 import { Dialog } from '../../ui/Dialog';
+import { AiAccessNotice } from '../account/AccountUi';
+import { useAiAccess } from '../account/session';
 import { saveCode, savedCode } from '../studio/ai';
 import {
   type GenerateStatus, NoServerError, PROVIDER_LABEL, type PictureProvider, type PictureStyle,
@@ -417,6 +419,8 @@ function GeneratePanel({ status, shape, context, onPick }: { status: GenerateSta
   const [error, setError] = useState('');
   const [needsCode, setNeedsCode] = useState(false);
   const [code, setCode] = useState(savedCode());
+  const access = useAiAccess();
+  const locked = access === 'sign_in' || access === 'no_credits';
   const [made, setMade] = useState<{ blob: Blob; url: string; model: string; prompt: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const controller = useRef<AbortController | null>(null);
@@ -449,7 +453,7 @@ function GeneratePanel({ status, shape, context, onPick }: { status: GenerateSta
       setMade({ blob: out.blob, url: URL.createObjectURL(out.blob), model: out.model, prompt: text });
     } catch (e) {
       if ((e as Error).name === 'AbortError') return;
-      if ((e as { status?: number }).status === 401) setNeedsCode(true);
+      if ((e as { status?: number }).status === 401 && (e as { code?: string }).code !== 'sign_in') setNeedsCode(true);
       setError((e as Error).message);
     } finally {
       if (controller.current === c) setBusy(false);
@@ -481,6 +485,7 @@ function GeneratePanel({ status, shape, context, onPick }: { status: GenerateSta
           {STYLES.map((s) => <button key={s.id} type="button" aria-pressed={kind === s.id} onClick={() => setKind(s.id)}>{s.label}</button>)}
         </div>
       </div>
+      <AiAccessNotice access={access} what="make pictures with AI">Searching for a picture works without an account.</AiAccessNotice>
       {needsCode && (
         <label className="field">
           <span className="field-label">Access code</span>
@@ -494,7 +499,7 @@ function GeneratePanel({ status, shape, context, onPick }: { status: GenerateSta
       {error && <p className="pf-error" role="alert">{error}</p>}
       {busy && (
         <div className="pf-making" role="status">
-          <span className="spinner" /> Making your picture. This can take up to a minute.
+          <span className="spinner" /> Making your picture. This can take a minute or two.
           <button type="button" className="btn btn-ghost btn-sm" onClick={() => { controller.current?.abort(); setBusy(false); }}>Cancel</button>
         </div>
       )}
@@ -506,7 +511,7 @@ function GeneratePanel({ status, shape, context, onPick }: { status: GenerateSta
       )}
       <div className="pf-actions">
         {made && !busy && <button type="button" className="btn btn-primary btn-sm" onClick={use} disabled={saving}>{saving ? <span className="spinner" /> : null} Use this picture</button>}
-        <button type="submit" className={`btn btn-sm ${made ? 'btn-secondary' : 'btn-primary'}`} disabled={busy || needsCode}><Sparkles size={14} /> {made ? 'Make another' : 'Make a picture'}</button>
+        <button type="submit" className={`btn btn-sm ${made ? 'btn-secondary' : 'btn-primary'}`} disabled={busy || needsCode || locked}><Sparkles size={14} /> {made ? 'Make another' : 'Make a picture'}</button>
       </div>
       {!made && !busy && <p className="field-help">Your description goes to {status.provider === 'gemini' ? 'Google' : status.provider === 'openai' ? 'OpenAI' : 'an image service'}, and {status.model ?? 'its image model'} makes the picture.</p>}
     </form>

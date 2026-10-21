@@ -1,0 +1,128 @@
+/* ─── Sign-in page and AI credits ───────────────────────── */
+
+.account-page {
+  max-width: 620px;
+}
+
+.account-page h1 {
+  font-size: clamp(30px, 4vw, 42px);
+  margin: 4px 0 10px;
+}
+
+.account-lead {
+  margin: 0 0 24px;
+  max-width: 54ch;
+}
+
+.account-box {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+}
+
+.account-github {
+  justify-content: center;
+}
+
+.account-or {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 13px;
+}
+
+.account-or::before,
+.account-or::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--line);
+}
+
+.account-email {
+  display: grid;
+  gap: 10px;
+}
+
+.account-email .btn {
+  justify-self: start;
+}
+
+.account-sent {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin: 0;
+  color: var(--ink-2);
+}
+
+.account-sent svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--good);
+}
+
+.account-error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--danger);
+  font-size: 14px;
+}
+
+.account-foot {
+  margin-top: 16px;
+  font-size: 13px;
+}
+
+.account-credits {
+  display: grid;
+  gap: 10px;
+  padding: 22px;
+  margin-bottom: 20px;
+}
+
+.account-credits h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.account-credits p {
+  margin: 0;
+}
+
+.account-balance {
+  font-size: 15px;
+  color: var(--ink-2);
+}
+
+.account-balance .tabular {
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--ink);
+  margin-right: 4px;
+}
+
+.account-empty {
+  color: var(--danger);
+}
+
+.account-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.account-nav .nav-count {
+  flex: none;
+}
+
+.account-notice p {
+  margin: 0;
+}
+
+.account-notice .btn {
+  margin-top: 10px;
+}

@@ -14,10 +14,12 @@
 // The browser keeps the conversation exactly as this function returns it, thinking blocks included, and only ever
 // appends to it. The system prompt and the tools never change; the deck travels in each new user turn instead.
 //
-// Environment: ANTHROPIC_API_KEY (required), LECTERN_MODEL, LECTERN_ACCESS_CODE, as for revise-slide.
+// Environment: ANTHROPIC_API_KEY (required), LECTERN_MODEL, LECTERN_ACCESS_CODE, SUPABASE_*, as for revise-slide.
+// With accounts on, each model call is charged to the signed-in person as soon as it finishes.
 
 import Anthropic from '@anthropic-ai/sdk';
 import { betaTool } from '@anthropic-ai/sdk/helpers/beta/json-schema';
+import { type Caller, admit, charge, usageOf } from './_lib/account.js';
 
 const MODEL = process.env.LECTERN_MODEL || 'claude-opus-5-5';
 /** Model calls that may use tools. The call after the last one has to answer. */
@@ -846,6 +848,8 @@ export interface RunOptions {
   signal?: AbortSignal;
   now?: () => number;
   newId?: () => string;
+  /** Called with each finished model call, before the turn goes on: where it's charged for. */
+  onMessage?: (message: Anthropic.Beta.BetaMessage) => Promise<unknown> | void;
 }
 
 const randomId = () => `s_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
@@ -854,7 +858,7 @@ const randomId = () => `s_${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`
  * One turn of the assistant: the tool runner works on an in-memory copy of the deck for at most MAX_STEPS model
  * calls, then must answer. Ends with a "done" event carrying the proposals and the conversation to keep.
  */
-export async function runTurn({ client, input, history, emit, signal, now = Date.now, newId = randomId }: RunOptions): Promise<void> {
+export async function runTurn({ client, input, history, emit, signal, now = Date.now, newId = randomId, onMessage }: RunOptions): Promise<void> {
   const started = now();
   const draft = new DraftDeck(input.deck, input.kinds, newId);
   const abort = new AbortController();
@@ -902,6 +906,7 @@ export async function runTurn({ client, input, history, emit, signal, now = Date
         }
       });
       const message = await stream.finalMessage();
+      await onMessage?.(message);
       last = message;
       if (message.stop_reason !== 'tool_use' || stopped) continue;
       const late = now() - started > SOFT_DEADLINE_MS;
@@ -996,8 +1001,8 @@ export function readRequest(body: Record<string, unknown>): { input: TurnInput; 
   };
 }
 
-/** Runs a turn and streams its events. Split from POST so tests can hand in a client. */
-export function streamTurn(client: Anthropic, turn: { input: TurnInput; history: Anthropic.Beta.BetaMessageParam[] }, signal?: AbortSignal): Response {
+/** Runs a turn and streams its events. Split from POST so tests can hand in a client. Each model call is charged to `caller`. */
+export function streamTurn(client: Anthropic, turn: { input: TurnInput; history: Anthropic.Beta.BetaMessageParam[] }, signal?: AbortSignal, caller: Caller | null = null): Response {
   const encoder = new TextEncoder();
   const abort = new AbortController();
   signal?.addEventListener('abort', () => abort.abort());
@@ -1007,7 +1012,7 @@ export function streamTurn(client: Anthropic, turn: { input: TurnInput; history:
         try { controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`)); } catch { /* the browser went away */ }
       };
       try {
-        await runTurn({ client, ...turn, emit: send, signal: abort.signal });
+        await runTurn({ client, ...turn, emit: send, signal: abort.signal, onMessage: (m) => charge(caller, 'deck-assistant', usageOf(m)) });
       } catch (error) {
         if (!abort.signal.aborted) send({ type: 'error', error: failure(error) });
       } finally {
@@ -1027,6 +1032,8 @@ export async function POST(request: Request) {
   if (code && request.headers.get('x-lectern-code') !== code) return json({ error: 'Enter the access code for this server to use AI.', needsCode: true }, 401);
   const length = Number(request.headers.get('content-length') ?? 0);
   if (length > MAX_BODY) return json({ error: 'This chat has grown too long to send. Start a new one.' }, 413);
+  const caller = await admit(request);
+  if (caller instanceof Response) return caller;
   let body: Record<string, unknown>;
   try {
     body = (await request.json()) as Record<string, unknown>;
@@ -1035,5 +1042,5 @@ export async function POST(request: Request) {
   }
   const turn = readRequest(body);
   if (turn instanceof Response) return turn;
-  return streamTurn(new Anthropic(), turn, request.signal);
+  return streamTurn(new Anthropic(), turn, request.signal, caller);
 }

@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { wording } from '../../core/deck/purpose';
 import { type Deck, type Slide, deckMinutes, deckPurpose } from '../../core/deck/types';
 import { getKind } from '../../core/kinds/registry';
+import { AiAccessNotice } from '../account/AccountUi';
+import { useAiAccess } from '../account/session';
 import { SlideView } from '../slides/SlideView';
 import { saveCode, savedCode } from './ai';
 import { type HistoryMessage, MAX_HISTORY_BYTES, type StepCard, type TurnResult, assistantStatus, runAssistantTurn } from './assistant-api';
@@ -324,6 +326,8 @@ const STOPPED: Record<string, string> = {
 /** The assistant's side panel: the chat, live step cards, and the proposals to review. */
 export function AssistantPanel({ assistant, deck, plannedMinutes, onClose }: { assistant: DeckAssistant; deck: Deck; plannedMinutes?: number; onClose(): void }) {
   const [status, setStatus] = useState<{ available: boolean; needsCode: boolean } | null>(null);
+  const access = useAiAccess();
+  const locked = access === 'sign_in' || access === 'no_credits';
   const [draft, setDraft] = useState('');
   const log = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -365,6 +369,10 @@ export function AssistantPanel({ assistant, deck, plannedMinutes, onClose }: { a
             <strong>The assistant isn’t set up on this server.</strong>
             <p className="faint">Add an <code>ANTHROPIC_API_KEY</code> to the deployment to use it.</p>
           </div>
+        ) : status?.available && locked ? (
+          <div className="assistant-empty">
+            <AiAccessNotice access={access} what="use the assistant" />
+          </div>
         ) : !chat.turns.length ? (
           <div className="assistant-empty">
             <p>Ask for changes across the whole deck. You’ll see each one before anything changes.</p>
@@ -389,7 +397,7 @@ export function AssistantPanel({ assistant, deck, plannedMinutes, onClose }: { a
               className="textarea"
               rows={2}
               value={draft}
-              disabled={blocked || status?.available === false}
+              disabled={blocked || locked || status?.available === false}
               placeholder={full ? 'This chat is full. Start a new one to go on.' : chat.turns.length ? 'Ask for another change' : 'What should change?'}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(draft); } }}
@@ -398,7 +406,7 @@ export function AssistantPanel({ assistant, deck, plannedMinutes, onClose }: { a
             {working ? (
               <button type="button" className="icon-btn ai-send" onClick={assistant.stop} aria-label="Stop the assistant" title="Stop"><Square size={14} /></button>
             ) : (
-              <button type="submit" className="icon-btn ai-send" aria-label="Send to the assistant" disabled={blocked || !draft.trim()}><ArrowUp size={16} /></button>
+              <button type="submit" className="icon-btn ai-send" aria-label="Send to the assistant" disabled={blocked || locked || !draft.trim()}><ArrowUp size={16} /></button>
             )}
           </form>
         )}

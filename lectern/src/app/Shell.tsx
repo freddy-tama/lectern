@@ -7,6 +7,7 @@ import { db } from '../data/db';
 import { DECK_FILE_EXT } from '../data/deck-file';
 import { getProfile, shows, useProfile } from '../data/profile';
 import { createCourse } from '../data/repo';
+import { AccountNavLink } from '../features/account/AccountUi';
 import { dragHasFiles, handOffFiles } from '../features/autodeck/handoff';
 import { useOpenDeckFile } from '../features/backup/actions';
 import { BackupNudge } from '../features/backup/BackupNudge';
@@ -152,6 +153,7 @@ export function Shell() {
           </>
         )}
         <div className="sidebar-foot">
+          <AccountNavLink />
           <NavLink to="/settings" className="nav-link"><SlidersHorizontal size={17} /> Preferences</NavLink>
           <NavLink to="/mods" className="nav-link">
             <Puzzle size={17} /> Mods

@@ -30,6 +30,7 @@ const JoinPage = lazy(() => import('../features/share/JoinPage'));
 const SavedDeck = lazy(() => import('../features/share/JoinPage').then((m) => ({ default: m.SavedDeck })));
 const PackPage = lazy(() => import('../features/share/PackPage').then((m) => ({ default: m.PackPage })));
 const TrySample = lazy(() => import('./TrySample'));
+const SignInPage = lazy(() => import('../features/account/SignInPage'));
 
 function Loading() {
   return (
@@ -79,6 +80,7 @@ export function App() {
               <Route path="mods" element={<ModsPage />} />
               <Route path="make" element={<MakePage />} />
               <Route path="settings" element={<PreferencesPage />} />
+              <Route path="signin" element={<SignInPage />} />
             </Route>
             <Route path="welcome" element={<Landing />} />
             <Route path="start" element={<Onboarding />} />

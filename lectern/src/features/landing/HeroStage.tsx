@@ -34,7 +34,7 @@ export function Hero({ onNotes }: { onNotes(): void }) {
             </Cta>
             <button type="button" className="lp-btn lp-btn-quiet lp-btn-lg" onClick={onNotes}>Turn your notes into slides</button>
           </div>
-          <p className="hero-fine"><HardDrive size={15} aria-hidden /> No account. Your decks stay in this browser. Works offline once loaded.</p>
+          <p className="hero-fine"><HardDrive size={15} aria-hidden /> No sign-up to start. Your decks stay in this browser. Works offline once loaded.</p>
         </div>
         <HeroStage />
       </div>

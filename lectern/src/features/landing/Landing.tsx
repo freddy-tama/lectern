@@ -79,7 +79,7 @@ export default function Landing() {
     { label: 'PowerPoint with editable charts', to: 'key-notes' },
     { label: 'One-file web page', to: 'key-notes' },
     { label: 'Phones join by QR', to: 'phone-quiz' },
-    { label: 'No account', to: 'how-it-works' },
+    { label: 'No sign-up to start', to: 'how-it-works' },
   ];
 
   const WHERE = [
@@ -98,7 +98,7 @@ export default function Landing() {
       icon: Cloud,
       title: 'Only when you use it',
       items: [
-        "AI drafting, the deck assistant and AI pictures send your text to this site's server, which passes it to the AI provider (Anthropic for text; OpenAI or Google for pictures). They work only when the site has an AI key.",
+        "AI drafting, the deck assistant and AI pictures send your text to this site's server, which passes it to the AI provider (Anthropic for text; OpenAI or Google for pictures). They work only when the site has an AI key. Where the site has accounts, they ask you to sign in, and your AI credits and study progress are kept with your account.",
         'Picture search sends your search words to Openverse and Wikimedia Commons (and Pexels, when the site has a Pexels key) through this site.',
         'Transcription downloads its speech model from Hugging Face once; your audio stays on this device.',
         'Live sharing finds phones through a public signalling server, then connects them directly.',
@@ -108,7 +108,7 @@ export default function Landing() {
       icon: Wrench,
       title: 'Not in this build',
       items: [
-        'No accounts or cloud sync: download a backup now and then.',
+        'No cloud sync for decks: download a backup now and then.',
         mods.length
           ? `Mods are chosen when the app is built; this one has ${mods.map((m) => m.name).join(' and ')}.`
           : 'Mods are chosen when the app is built; this one has none.',

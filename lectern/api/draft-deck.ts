@@ -14,11 +14,18 @@
 //   ANTHROPIC_API_KEY     required for AI drafting
 //   LECTERN_MODEL         optional, defaults to claude-opus-5-5
 //   LECTERN_ACCESS_CODE   optional; when set, requests must send it in "x-lectern-code"
+//   SUPABASE_*            optional; turns on accounts, so drafting needs a signed-in person with
+//                         credits left and charges them for it (see api/_lib/account.ts)
 //
 // The request carries "budget": { words, bullets }, the audience's limits from the client's
 // layout rules (src/core/kinds/kit.ts), so the prompt never keeps its own copy of the numbers.
 
 import Anthropic from '@anthropic-ai/sdk';
+import type { CallUsage } from '../src/core/ai/prices.js';
+import { admit, charge, usageOf } from './_lib/account.js';
+
+export type { CallUsage };
+export { usageOf };
 
 const MODEL = process.env.LECTERN_MODEL || 'claude-opus-5-5';
 const MAX_MATERIAL = 60_000;
@@ -550,30 +557,6 @@ export function checkBatch(raw: unknown, numbers: number[], outline: OutlineSlid
   return { slides, missing: numbers.filter((n) => !seen.has(n)), dropped };
 }
 
-/** Tokens one call used, per model. A refusal fallback can add a second model's attempt. */
-export interface CallUsage {
-  model: string;
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-}
-
-export function usageOf(response: Pick<Anthropic.Beta.BetaMessage, 'model' | 'usage'>): CallUsage[] {
-  const u = response.usage;
-  const entry = (model: string | null | undefined, e: { input_tokens?: number | null; output_tokens?: number | null; cache_read_input_tokens?: number | null; cache_creation_input_tokens?: number | null }): CallUsage => ({
-    model: model || response.model,
-    input: e.input_tokens ?? 0,
-    output: e.output_tokens ?? 0,
-    cacheRead: e.cache_read_input_tokens ?? 0,
-    cacheWrite: e.cache_creation_input_tokens ?? 0,
-  });
-  // With a fallback, each attempt is listed in iterations; the top-level figures cover only the last.
-  const attempts = (u.iterations ?? []).filter((it) => it.type === 'message' || it.type === 'fallback_message');
-  if (attempts.length) return attempts.map((it) => entry('model' in it ? it.model : null, it));
-  return [entry(response.model, u)];
-}
-
 /** The text of the answer. If a fallback model took over mid-answer, only the text after the last switch counts. */
 function answerText(response: Anthropic.Beta.BetaMessage): string {
   const lastSwitch = response.content.map((b) => b.type as string).lastIndexOf('fallback');
@@ -608,6 +591,8 @@ export async function POST(request: Request) {
   if (code && request.headers.get('x-lectern-code') !== code) return json({ error: 'Enter the access code for this server to use AI drafting.', code: 'needs_code' }, 401);
   const length = Number(request.headers.get('content-length') ?? 0);
   if (length > 4_000_000) return json({ error: 'The material is too long. Use fewer files or pictures.', code: 'bad_request' }, 413);
+  const caller = await admit(request);
+  if (caller instanceof Response) return caller;
 
   let body: DraftBody;
   try {
@@ -658,6 +643,7 @@ export async function POST(request: Request) {
       messages: [{ role: 'user', content }],
     }).finalMessage();
     const usage = usageOf(response);
+    await charge(caller, `draft-deck:${mode}`, usage);
     if (response.stop_reason === 'refusal') return json({ error: STOPPED[mode].refusal, code: 'refused', usage }, 422);
     if (response.stop_reason === 'max_tokens') return json({ error: STOPPED[mode].long, code: 'too_long', usage }, 422);
     const out = answerText(response);

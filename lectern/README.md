@@ -2,7 +2,7 @@
 
 Make presentations for anything (talks, pitches, reports and lessons) and run your classes week by week. Lectern turns notes into well-designed slides and gives every slide **key notes**: what you'll say, what the audience should take away, and the question you expect. The same notes feed the presenter view, the teleprompter, review mode, the printed handout and the PowerPoint speaker notes.
 
-It runs in the browser and saves to the browser (IndexedDB). There's no account and no server-side storage. Recorded lectures are transcribed in the browser too. The only server features are optional: picture search, AI drafting, AI pictures and AI class notes.
+It runs in the browser and saves to the browser (IndexedDB). You don't need an account, and decks aren't stored on a server. Recorded lectures are transcribed in the browser too. The only server features are optional: picture search, AI drafting, AI pictures and AI class notes, and accounts that meter AI use.
 
 ## What you can do
 
@@ -132,8 +132,10 @@ See [docs/mods.md](docs/mods.md) to write your own.
 |---|---|
 | `ANTHROPIC_API_KEY` | Turns on "With AI" drafting, AI class notes from recordings, AI activities and AI drawings. Without it, each explains that it isn't set up, and everything else works, transcription included. |
 | `LECTERN_MODEL` | The model that drafts decks and writes class notes. Default `claude-opus-5-5`. |
-| `LECTERN_ACCESS_CODE` | People must enter this code before AI drafting, AI pictures or class notes run, so a public site doesn't spend your credit for strangers. Picture search works without it. |
-| `OPENAI_API_KEY` | Turns on **Make with AI** in the picture finder, with OpenAI's `gpt-image-1-mini`. Claude doesn't make pictures, so this is a second provider. Without an image key the tab is hidden. |
+| `LECTERN_ACCESS_CODE` | People must enter this code before AI drafting, AI pictures or class notes run, so a public site doesn't spend your credit for strangers. Picture search works without it. For a public site, [accounts](#accounts-and-ai-credits) are the better guard. |
+| `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` | Turn on [accounts](#accounts-and-ai-credits): AI then needs a signed-in person with credits left. The legacy `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` work too. The secret key stays on the server. |
+| `LECTERN_DAILY_CREDITS` | With accounts on, the most credits everyone together may spend in a UTC day. Default `4000` ($20); `0` turns the cap off. |
+| `OPENAI_API_KEY` | Turns on **Make with AI** in the picture finder, with OpenAI's `gpt-image-2.5-sunburst`. Claude doesn't make pictures, so this is a second provider. Without an image key the tab is hidden. |
 | `GEMINI_API_KEY` | The same with Google's Gemini image model (`gemini-3.1-flash-image`), used when there's no OpenAI key. |
 | `LECTERN_IMAGE_PROVIDER` | `openai`, `gemini` or `off`. Picks one when both keys are set, or turns AI pictures off. |
 | `LECTERN_IMAGE_MODEL` | The image model for that provider, for example `gpt-image-1` or `gemini-3-pro-image`. |
@@ -147,9 +149,21 @@ See [docs/mods.md](docs/mods.md) to write your own.
 
 For local AI drafting, put the same variables in `.env.local`. The dev server serves `api/` itself.
 
+### Accounts and AI credits
+
+Without Supabase settings, Lectern has no accounts and AI works for anyone (behind `LECTERN_ACCESS_CODE`, if set). With them, browsing, presenting, notes and the quiz still need no account, but every AI feature asks people to sign in, with GitHub or an emailed link. Each account starts with 4,000 credits, worth $20 of AI use (one credit is half a US cent). Each request takes what it really cost: the tokens each model used, at its list price ([`src/core/ai/prices.ts`](src/core/ai/prices.ts)). When the credits run out, AI stops for that person and everything else keeps working. Signed-in people's study progress is saved to their account too.
+
+1. Create a [Supabase](https://supabase.com) project. In its SQL editor, run [`supabase/schema.sql`](supabase/schema.sql). It's safe to run again after an update.
+2. Under **Authentication ▸ URL Configuration**, set the Site URL to your site, and add `https://<your-site>/signin` to the redirect URLs. For Vercel previews, also add a pattern such as `https://<project>-git-*-<team>.vercel.app/**`, and for local work `http://localhost:5173/**`.
+3. Email sign-in is on by default. Supabase's built-in email only reaches your project's team members, a few times an hour, so for the public set up your own SMTP under **Authentication ▸ Emails**.
+4. For GitHub sign-in, create a GitHub OAuth app whose callback URL is `https://<project-ref>.supabase.co/auth/v1/callback`. Paste its client ID and secret into **Authentication ▸ Sign In / Providers ▸ GitHub**. The sign-in page shows the GitHub button only when this provider is on.
+5. Copy the project URL and the publishable and secret keys (**Project Settings ▸ API Keys**) into the environment variables above, then redeploy.
+
+[`api/_lib/account.ts`](api/_lib/account.ts) checks the sign-in and the balance before any AI call and charges afterwards. Only the server, with the secret key, can open accounts or spend credits. The database functions are closed to signed-in people, and they can read only their own balance and study marks.
+
 ### Where your data lives
 
-Vercel stores nothing. Decks, pictures and recordings live in the visitor's browser (IndexedDB) and preferences in localStorage, so data belongs to one browser at one address: a preview deployment's URL starts empty. Two things can clear it:
+Vercel stores nothing, and with [accounts](#accounts-and-ai-credits) on, Supabase keeps only each person's credits and study progress. Decks, pictures and recordings live in the visitor's browser (IndexedDB) and preferences in localStorage, so data belongs to one browser at one address: a preview deployment's URL starts empty. Two things can clear it:
 
 - **Safari** deletes a site's data after 7 days of Safari use without a visit. Apps added to the Dock or the Home Screen are exempt, but they have their own storage, separate from Safari's, so data moves across with a backup.
 - **Other browsers** can clear data that isn't persistent when the disk runs low. Lectern asks for persistent storage after the first save; Chrome and Edge give it to installed apps.

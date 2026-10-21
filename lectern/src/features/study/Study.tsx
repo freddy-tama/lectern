@@ -8,14 +8,16 @@ import { deckPurpose } from '../../core/deck/types';
 import { getKind } from '../../core/kinds/registry';
 import { type StudyMark, db } from '../../data/db';
 import { useKeys } from '../../ui/hooks';
+import { saveMark } from '../account/study-sync';
 import { useLiveDeck } from '../present/useLiveDeck';
 import { SlideView } from '../slides/SlideView';
 import { type StudyCard, deckCards } from './cards';
 
 type Mode = 'read' | 'cards' | 'points';
 
+/** Saved in this browser, and to the account of whoever is signed in. */
 async function mark(deckId: string, slideId: string, status: StudyMark['status']) {
-  await db.study.put({ deckId, slideId, status, updatedAt: Date.now() });
+  await saveMark({ deckId, slideId, status, updatedAt: Date.now() });
 }
 
 export default function Study() {

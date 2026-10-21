@@ -1,14 +1,14 @@
 # Lectern: product requirements for end-to-end tests
 
-Lectern is a presentation tool for talks, pitches, reports and lessons. Every slide carries **key notes**: a script, takeaways, a likely question, cues and planned minutes. The same notes feed present mode, the presenter view, the teleprompter, study mode, the printed handout and PowerPoint speaker notes. There are no accounts. Everything is saved in the browser (IndexedDB), and a fresh browser starts with six sample decks.
+Lectern is a presentation tool for talks, pitches, reports and lessons. Every slide carries **key notes**: a script, takeaways, a likely question, cues and planned minutes. The same notes feed present mode, the presenter view, the teleprompter, study mode, the printed handout and PowerPoint speaker notes. Everything is saved in the browser (IndexedDB), and a fresh browser starts with six sample decks. Accounts are optional and only needed for AI: browsing, presenting, notes and the quiz work without signing in.
 
 - Live site: https://lectern-sooty.vercel.app (pull requests get a Vercel preview with the same behaviour)
-- No sign-in. Every test starts in a fresh browser profile, so the sample data is always the same.
+- Tests never sign in. Every test starts in a fresh browser profile, so the sample data is always the same.
 - The public site has no AI key, so AI features answer "isn't set up". That is the expected result, not a failure.
 
 ## Stable hooks
 
-Prefer roles and accessible names. These `data-testid`s exist where names repeat: `nav-open-lectern`, `hero-present`, `finale-present`, `finale-open-lectern`, `quiz-open-here`, `notes-open-deck`, `start-sample`, `start-notes`, `start-file`, `start-course`, `start-record`, `start-look-around`.
+Prefer roles and accessible names. These `data-testid`s exist where names repeat: `nav-open-lectern`, `hero-present`, `finale-present`, `finale-open-lectern`, `quiz-open-here`, `notes-open-deck`, `start-sample`, `start-notes`, `start-file`, `start-course`, `start-record`, `start-look-around`, `nav-sign-in`, `ai-sign-in`.
 
 ## Flows and what counts as a pass
 
@@ -81,6 +81,15 @@ Prefer roles and accessible names. These `data-testid`s exist where names repeat
 - The page must say plainly that AI isn't set up here. It should offer to start from notes or a file instead.
 - Adding a text or Markdown file with headings still builds a deck from that file.
 
+### 12. Sign-in for AI
+A server turns accounts on with its Supabase settings. Check which state the server is in, then hold it to that state:
+
+- **Accounts off:** `/signin` has the `h1` "Sign in" and says "Accounts aren’t set up on this copy of Lectern. Everything here works without signing in." Its **Go to Home** link opens `/`. The sidebar has no "Sign in" link.
+- **Accounts on:** the sidebar has a **Sign in** link (`nav-sign-in`) to `/signin`. That page's `h1` is "Sign in to use AI", and it says every account starts with 4,000 free AI credits. It offers **Email me a sign-in link**, and **Continue with GitHub** when GitHub sign-in is turned on.
+  - Typing `ada` as the email and clicking **Email me a sign-in link** shows "Enter an email address, like name@example.com." and sends nothing.
+  - Where AI is offered on a server that has AI, a signed-out visitor sees a notice starting "Sign in to" (`ai-sign-in`) with a **Sign in** button to `/signin?next=…`. Without AI on the server, the "isn't set up" notices from flows 5 and 11 show instead.
+- **Either way:** nothing outside AI asks for a sign-in. Decks, the studio, present mode, notes and the quiz all work signed out.
+
 ## Out of scope for these tests
 
 These need hardware, a second device, large downloads or paid keys:
@@ -88,6 +97,7 @@ These need hardware, a second device, large downloads or paid keys:
 - **Share to phones and the live quiz** need a second device over WebRTC.
 - **Recording** needs a microphone.
 - **Transcription** downloads a speech model of 40 MB or more.
-- **AI drafting, the deck assistant and AI pictures** need a server key. Only check that they say "isn't set up".
+- **AI drafting, the deck assistant and AI pictures** need a server key and a signed-in account. Only check that they say "isn't set up", or ask to sign in (flow 12).
+- **Signing in** needs a real email inbox or GitHub account. Never submit a real address or follow a sign-in link.
 - **Picture search** depends on Openverse and Wikimedia, which can be slow.
 - **Installing the app and offline use** are also out of scope.

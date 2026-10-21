@@ -20,6 +20,8 @@ import { addDeck } from '../../data/repo';
 import { Dialog } from '../../ui/Dialog';
 import { KindIcon } from '../../ui/KindIcon';
 import { useToast } from '../../ui/Toast';
+import { AiAccessNotice } from '../account/AccountUi';
+import { useAiAccess } from '../account/session';
 import { useOpenDeckFile } from '../backup/actions';
 import { SlideView } from '../slides/SlideView';
 import { type AiStatus, aiStatus, draftWithAI, saveCode, savedCode } from './ai';
@@ -59,6 +61,8 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const [material, setMaterial] = useState('');
   const [minutes, setMinutes] = useState(() => getProfile().deck.minutes);
   const [ai, setAi] = useState<AiStatus | null>(null);
+  const access = useAiAccess();
+  const locked = access === 'sign_in' || access === 'no_credits';
   const [code, setCode] = useState(savedCode);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -186,7 +190,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
         <>
           {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: 13.5, marginRight: 'auto' }}>{error}</span>}
           <button type="button" className="btn btn-ghost" onClick={close}>Cancel</button>
-          <button type="button" className="btn btn-primary" onClick={create} disabled={busy || (mode === 'ai' && ai?.available === false)}>
+          <button type="button" className="btn btn-primary" onClick={create} disabled={busy || (mode === 'ai' && (ai?.available === false || locked))}>
             {busy ? <><span className="spinner" /> {checking ? 'Checking the slides fit…' : 'Drafting slides…'}</> : mode === 'notes' && preview ? `Make ${preview.slides.length} slides` : mode === 'ai' ? 'Draft the deck' : 'Create deck'}
           </button>
         </>
@@ -238,6 +242,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
                       <strong>AI drafting isn’t set up on this server.</strong> Add an <code>ANTHROPIC_API_KEY</code> to the deployment’s environment, or start from your notes. “From notes” works offline.
                     </div>
                   )}
+                  {ai?.available && <AiAccessNotice access={access} what="draft decks with AI">“From notes” works without an account.</AiAccessNotice>}
                   <label className="field">
                     <span className="field-label">{w.topicLabel}</span>
                     <textarea className="textarea" rows={3} value={topic} onChange={(e) => setTopic(e.target.value)} placeholder={w.topicPlaceholder} />

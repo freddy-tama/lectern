@@ -1,26 +1,10 @@
 // What AI drafting used: tokens per model from each call's usage, and a rough cost.
 
+import { type CallUsage, callDollars } from '../../core/ai/prices';
 import type { TokenTally, UsageByModel } from '../../data/draft-jobs';
 
 /** One call's usage for one model, as the drafting API returns it. */
-export interface CallUsage {
-  model: string;
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-}
-
-/** US dollars per million tokens. Cache writes are the 5-minute rate (1.25× input). */
-const PRICES: { prefix: string; input: number; output: number; cacheRead: number; cacheWrite: number }[] = [
-  { prefix: 'claude-opus-5-5', input: 4, output: 20, cacheRead: 0.2, cacheWrite: 5 },
-  { prefix: 'claude-opus-5', input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
-  { prefix: 'claude-opus-4', input: 5, output: 25, cacheRead: 0.5, cacheWrite: 6.25 },
-  { prefix: 'claude-fable-5', input: 10, output: 50, cacheRead: 0.25, cacheWrite: 12.5 },
-  { prefix: 'claude-sonnet-5', input: 2, output: 10, cacheRead: 0.2, cacheWrite: 2.5 },
-  { prefix: 'claude-sonnet-4', input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
-  { prefix: 'claude-haiku-5-5', input: 0.1, output: 0.5, cacheRead: 0.01, cacheWrite: 0.125 },
-];
+export type { CallUsage };
 
 const count = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
 
@@ -64,9 +48,9 @@ export function usageTotals(usage: UsageByModel): TokenTally {
 export function usageCost(usage: UsageByModel): number | null {
   let total = 0;
   for (const [model, t] of Object.entries(usage)) {
-    const p = PRICES.find((x) => model.startsWith(x.prefix));
-    if (!p) return null;
-    total += (t.input * p.input + t.output * p.output + t.cacheRead * p.cacheRead + t.cacheWrite * p.cacheWrite) / 1_000_000;
+    const cost = callDollars({ model, ...t }, true);
+    if (cost === null) return null;
+    total += cost;
   }
   return total;
 }

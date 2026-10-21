@@ -118,3 +118,32 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
   - Checking the Vercel GitHub App's repository access needs GitHub sudo re-authentication, which is left to the user.
   - The preview was created by hand from the Vercel dashboard ("Create Deployment" → branch `claude/make-no-ai-f4ac9d` → Create Preview Deployment), for commit `7b6bef7`.
 - **~22:48** The manual preview passed the "Vercel" commit status on `7b6bef7`, but the TestSprite trigger stayed at "Active · Never run" and its Activity tab stayed empty. Neither app seems to be getting GitHub's events for this repository. The next commit (this log entry) tests that: if Vercel builds it on its own, the events are arriving again.
+- **22:58** Vercel did build `c4e2017` on its own, about 14 minutes after it was pushed. An automatic build of `7b6bef7` had also turned up at 22:43–22:47, after the manual one. GitHub was delivering both apps' events late; neither app was misconfigured.
+- **23:07–23:10** TestSprite queued 9 minutes after the preview was ready, then ran all 27 tests on the PR #8 preview ([run `5376a8a2`](https://www.testsprite.com/dashboard-v3/o/dfe734b3-7442-5019-aa71-fa10706b4f14/projects/4a558259-6d77-449a-bede-151ba58b667a/execution/5376a8a2-29a2-410f-b891-729e47ef7aaa)): 26 passed, 1 failed.
+  - DRF-001, the `/make` bug, passed.
+  - PRS-006 ("Continue using the home page after starting from the sample talk") failed, and the test was at fault, not the app. Its generated steps were loose: the agent went `/` → `/welcome` → Present → Esc and expected Home. For a first visit, going back to `/welcome` is right (PRD flow 3).
+  - What the test meant was checked by hand on the preview: `/start` → "Open the sample talk" → `/studio/deck_meetings_talk`, then `/` shows Home.
+- **~23:20** PRS-006 was rewritten in the portal to follow PRD flow 9 step by step:
+  1. Go to `/start`.
+  2. Click "Open the sample talk" (`data-testid="start-sample"`), not a "Present" link.
+  3. Check that the URL is `/studio/deck_meetings_talk`.
+  4. Go straight to `/`, without the Back button.
+  5. Check that the URL stays `/` and the page doesn't show "Slides that know what to say".
+- **23:22** Save & Run of the new PRS-006 on production passed. Every one of the 27 tests now has a passing latest result.
+- **~23:28** Re-running PRS-006 inside the PR #8 run didn't start.
+  - "Re-Run Failed" on Test Runs answered "unknown environment 'github-pr-8'; use one of: default".
+  - The run page's "Re-run failed (1)" answered "Could not start the run".
+  - A pull request run's tests can only run again in a new GitHub-triggered run, from a new push or a redeploy of the preview. That is a full 27-test run (about 13.5 credits), so the check on #8 stays at 26/27 for now.
+
+## Sign-in for AI
+
+**2026-10-21**
+
+- **~23:35** Accounts were added on the branch `claude/signin-quota`. They gate AI only; browsing, presenting, notes and the quiz stay open. The PRD changed with it:
+  - It no longer says "there are no accounts".
+  - New flow 12 describes `/signin` with accounts off and with accounts on. The tests must check which state the server is in, because a preview has accounts only if the project's Supabase settings apply to previews.
+  - The out-of-scope list now covers signing in: no test submits a real email address or follows a sign-in link.
+- Three tests are planned to be added by hand once that pull request has a preview:
+  - ACC-001, open `/signin` in a fresh browser: the page shows one of the two states from flow 12, never a blank page or an error, and Go to Home (accounts off) opens `/`.
+  - ACC-002, open `/decks`, a sample deck and present mode without signing in: no step asks for a sign-in.
+  - ACC-003, accounts on only: an email address without "@" shows "Enter an email address, like name@example.com." and sends nothing.

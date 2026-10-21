@@ -9,8 +9,11 @@
 //   ANTHROPIC_API_KEY     required for class notes
 //   LECTERN_MODEL         optional, defaults to claude-opus-5-5
 //   LECTERN_ACCESS_CODE   optional; when set, requests must send it in "x-lectern-code"
+//   SUPABASE_*            optional; turns on accounts, so this needs a signed-in person with
+//                         credits left and charges them for it (see api/_lib/account.ts)
 
 import Anthropic from '@anthropic-ai/sdk';
+import { admit, charge, usageOf } from './_lib/account.js';
 
 const MODEL = process.env.LECTERN_MODEL || 'claude-opus-5-5';
 /** About five hours of speech. Longer transcripts are refused rather than cut silently. */
@@ -80,6 +83,8 @@ export async function POST(request: Request) {
   if (code && request.headers.get('x-lectern-code') !== code) return json({ error: 'Enter the access code for this server to use AI class notes.' }, 401);
   const length = Number(request.headers.get('content-length') ?? 0);
   if (length > 1_500_000) return json({ error: 'The transcript is too long for class notes. Select a part of it and try again.' }, 413);
+  const caller = await admit(request);
+  if (caller instanceof Response) return caller;
 
   let body: NotesBody;
   try {
@@ -117,6 +122,7 @@ export async function POST(request: Request) {
       system: SYSTEM,
       messages: [{ role: 'user', content: user }],
     }).finalMessage();
+    await charge(caller, 'lecture-notes', usageOf(response));
     if (response.stop_reason === 'refusal') return json({ error: 'The AI declined to make notes from this transcript. You can still save the transcript as a note.' }, 422);
     if (response.stop_reason === 'max_tokens') return json({ error: 'The notes ran too long. Select a shorter part of the transcript and try again.' }, 422);
     // If a fallback model took over mid-answer, only the text after the last switch is the answer.

@@ -5,16 +5,21 @@
 // Claude doesn't make pictures, so this calls a second provider.
 //
 // Environment:
-//   OPENAI_API_KEY          OpenAI's image model (default gpt-image-1-mini)
+//   OPENAI_API_KEY          OpenAI's image model (default gpt-image-2.5-sunburst)
 //   GEMINI_API_KEY          Google's Gemini image model (default gemini-3.1-flash-image), used when there's no OpenAI key
 //   LECTERN_IMAGE_PROVIDER  optional: "openai", "gemini" or "off" (picks one when both keys are set)
 //   LECTERN_IMAGE_MODEL     optional model id for that provider
 //   LECTERN_ACCESS_CODE     optional; when set, requests must send it in "x-lectern-code"
+//   SUPABASE_*              optional; turns on accounts, so each picture needs a signed-in person
+//                           with credits left and is charged by the tokens the service reports
+
+import { type PictureUsage, pictureDollars } from '../src/core/ai/prices.js';
+import { admit, chargeDollars } from './_lib/account.js';
 
 type Provider = 'openai' | 'gemini';
 type Shape = 'wide' | 'tall' | 'square';
 
-const DEFAULT_MODEL: Record<Provider, string> = { openai: 'gpt-image-1-mini', gemini: 'gemini-3.1-flash-image' };
+const DEFAULT_MODEL: Record<Provider, string> = { openai: 'gpt-image-2.5-sunburst', gemini: 'gemini-3.1-flash-image' };
 
 function provider(): Provider | null {
   const wanted = (process.env.LECTERN_IMAGE_PROVIDER ?? '').trim().toLowerCase();
@@ -78,7 +83,8 @@ export function picturePrompt(subject: string, style: PictureStyle = {}): string
 }
 
 class GenerateError extends Error {
-  constructor(message: string, readonly status = 502) {
+  /** `usage` is what the service billed for an answer that brought no usable picture. */
+  constructor(message: string, readonly status = 502, readonly usage: PictureUsage | null = null) {
     super(message);
   }
 }
@@ -88,13 +94,35 @@ async function readError(res: Response): Promise<{ message: string; code: string
   return { message: String(body.error?.message ?? ''), code: String(body.error?.code ?? body.error?.status ?? '') };
 }
 
+const count = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : 0);
+
+/** The tokens OpenAI's image API reports. Everything it outputs is picture. */
+export function openAiUsage(raw: unknown, model: string): PictureUsage | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const u = raw as { input_tokens?: unknown; output_tokens?: unknown; input_tokens_details?: { text_tokens?: unknown; image_tokens?: unknown } };
+  const imageIn = count(u.input_tokens_details?.image_tokens);
+  const textIn = u.input_tokens_details ? count(u.input_tokens_details.text_tokens) : count(u.input_tokens);
+  return { model, textIn, imageIn, textOut: 0, imageOut: count(u.output_tokens) };
+}
+
+/** The tokens Gemini reports, with the output split into picture and text (thinking counts as text). */
+export function geminiUsage(raw: unknown, model: string): PictureUsage | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const u = raw as { promptTokenCount?: unknown; candidatesTokenCount?: unknown; thoughtsTokenCount?: unknown; candidatesTokensDetails?: { modality?: unknown; tokenCount?: unknown }[] };
+  const details = Array.isArray(u.candidatesTokensDetails) ? u.candidatesTokensDetails : [];
+  const out = count(u.candidatesTokenCount);
+  // Without a breakdown, all of the answer is taken as picture, the dearer rate.
+  const imageOut = details.length ? details.filter((d) => d?.modality === 'IMAGE').reduce((n, d) => n + count(d.tokenCount), 0) : out;
+  return { model, textIn: count(u.promptTokenCount), imageIn: 0, textOut: Math.max(0, out - imageOut) + count(u.thoughtsTokenCount), imageOut };
+}
+
 async function withOpenAI(prompt: string, shape: Shape, model: string) {
   const size = { wide: '1536x1024', tall: '1024x1536', square: '1024x1024' }[shape];
   const res = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { authorization: `Bearer ${process.env.OPENAI_API_KEY}`, 'content-type': 'application/json' },
     body: JSON.stringify({ model, prompt, size, quality: 'medium', output_format: 'jpeg', output_compression: 86, n: 1 }),
-    signal: AbortSignal.timeout(170_000),
+    signal: AbortSignal.timeout(280_000),
   });
   if (!res.ok) {
     const { message, code } = await readError(res);
@@ -103,10 +131,11 @@ async function withOpenAI(prompt: string, shape: Shape, model: string) {
     if (code === 'moderation_blocked' || /safety|moderation/i.test(message)) throw new GenerateError('The picture service declined this description. Try describing it differently.', 422);
     throw new GenerateError(`The picture service returned an error (${res.status}). Try again.`);
   }
-  const data = await res.json() as { data?: { b64_json?: string; revised_prompt?: string }[] };
+  const data = await res.json() as { data?: { b64_json?: string; revised_prompt?: string }[]; usage?: unknown };
+  const usage = openAiUsage(data.usage, model);
   const b64 = data.data?.[0]?.b64_json;
-  if (!b64) throw new GenerateError('The picture service sent no picture. Try again.');
-  return { image: `data:image/jpeg;base64,${b64}`, revisedPrompt: text(data.data?.[0]?.revised_prompt, 2000) };
+  if (!b64) throw new GenerateError('The picture service sent no picture. Try again.', 502, usage);
+  return { image: `data:image/jpeg;base64,${b64}`, revisedPrompt: text(data.data?.[0]?.revised_prompt, 2000), usage };
 }
 
 async function withGemini(prompt: string, shape: Shape, model: string) {
@@ -118,7 +147,7 @@ async function withGemini(prompt: string, shape: Shape, model: string) {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseModalities: ['TEXT', 'IMAGE'], imageConfig: { aspectRatio } },
     }),
-    signal: AbortSignal.timeout(170_000),
+    signal: AbortSignal.timeout(280_000),
   });
   if (!res.ok) {
     const { message } = await readError(res);
@@ -129,17 +158,18 @@ async function withGemini(prompt: string, shape: Shape, model: string) {
     throw new GenerateError(`The picture service returned an error (${res.status}). Try again.`);
   }
   type Part = { text?: string; thought?: boolean; inlineData?: { mimeType?: string; data?: string } };
-  const data = await res.json() as { candidates?: { content?: { parts?: Part[] }; finishReason?: string }[]; promptFeedback?: { blockReason?: string } };
-  if (data.promptFeedback?.blockReason) throw new GenerateError('The picture service declined this description. Try describing it differently.', 422);
+  const data = await res.json() as { candidates?: { content?: { parts?: Part[] }; finishReason?: string }[]; promptFeedback?: { blockReason?: string }; usageMetadata?: unknown };
+  const usage = geminiUsage(data.usageMetadata, model);
+  if (data.promptFeedback?.blockReason) throw new GenerateError('The picture service declined this description. Try describing it differently.', 422, usage);
   // Thinking models can send draft pictures first; the last non-thought picture is the answer.
   const parts = (data.candidates?.[0]?.content?.parts ?? []).filter((p) => !p.thought && p.inlineData?.data);
   const picture = parts.at(-1)?.inlineData;
   if (!picture?.data) {
-    if (/SAFETY|PROHIBITED|BLOCK/i.test(String(data.candidates?.[0]?.finishReason ?? ''))) throw new GenerateError('The picture service declined this description. Try describing it differently.', 422);
-    throw new GenerateError('The picture service sent no picture. Try again.');
+    if (/SAFETY|PROHIBITED|BLOCK/i.test(String(data.candidates?.[0]?.finishReason ?? ''))) throw new GenerateError('The picture service declined this description. Try describing it differently.', 422, usage);
+    throw new GenerateError('The picture service sent no picture. Try again.', 502, usage);
   }
   const mime = /^image\/(png|jpeg|webp)$/.test(String(picture.mimeType)) ? picture.mimeType : 'image/png';
-  return { image: `data:${mime};base64,${picture.data}`, revisedPrompt: '' };
+  return { image: `data:${mime};base64,${picture.data}`, revisedPrompt: '', usage };
 }
 
 export async function GET() {
@@ -153,6 +183,8 @@ export async function POST(request: Request) {
   const code = process.env.LECTERN_ACCESS_CODE;
   if (code && request.headers.get('x-lectern-code') !== code) return json({ error: 'Enter the access code for this server to make AI pictures.' }, 401);
   if (Number(request.headers.get('content-length') ?? 0) > 20_000) return json({ error: 'The description is too long.' }, 413);
+  const caller = await admit(request);
+  if (caller instanceof Response) return caller;
   let body: { prompt?: unknown; shape?: unknown; style?: unknown };
   try {
     body = await request.json() as typeof body;
@@ -166,10 +198,15 @@ export async function POST(request: Request) {
   const prompt = picturePrompt(subject, style);
   const model = modelFor(p);
   try {
-    const out = p === 'openai' ? await withOpenAI(prompt, shape, model) : await withGemini(prompt, shape, model);
+    const { usage, ...out } = p === 'openai' ? await withOpenAI(prompt, shape, model) : await withGemini(prompt, shape, model);
+    await chargeDollars(caller, 'picture-generate', pictureDollars(usage, model), usage ?? { model });
     return json({ ...out, provider: p, model });
   } catch (error) {
-    if (error instanceof GenerateError) return json({ error: error.message }, error.status);
+    if (error instanceof GenerateError) {
+      // A declined or empty answer is charged only for the tokens the service says it billed.
+      if (error.usage) await chargeDollars(caller, 'picture-generate', pictureDollars(error.usage, model), error.usage);
+      return json({ error: error.message }, error.status);
+    }
     if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) return json({ error: 'The picture took too long to make. Try again.' }, 504);
     return json({ error: 'Something went wrong while making the picture. Try again.' }, 500);
   }
