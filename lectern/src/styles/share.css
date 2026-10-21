@@ -1911,3 +1911,51 @@
 .pack-bad p {
   margin: 0 0 8px;
 }
+
+/* Word clouds on phones */
+.phone-word-form {
+  display: flex;
+  gap: 8px;
+}
+
+.phone-word-form .input {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+}
+
+.phone-word-mine {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phone-card .phone-word-mine li + li {
+  margin-top: 0;
+}
+
+.phone-word-top {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phone-word-top li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.share-cloud li {
+  grid-template-columns: minmax(0, 1fr) 28px 28px;
+}
+
+.phone-card .phone-word-note {
+  margin: 8px 0 0;
+  font-size: 14px;
+}

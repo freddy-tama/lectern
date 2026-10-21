@@ -9,6 +9,7 @@ import { toggles } from '../../core/plugins/registry';
 import { formatClock, useKeys, useNow } from '../../ui/hooks';
 import { LOCALE } from '../../ui/format';
 import { PresenterJot } from '../notes/PresenterJot';
+import { useLiveSlide } from '../share/LiveScreen';
 import { SlideView } from '../slides/SlideView';
 import { HelpOverlay } from './HelpOverlay';
 import { useShow } from './sync';
@@ -29,6 +30,7 @@ export default function PresenterView() {
   const count = slides.length;
   const index = Math.min(state.index, Math.max(0, count - 1));
   const slide = slides[index];
+  const shown = useLiveSlide(deckId, slide);
   const nextSlide = slides[index + 1];
 
   useEffect(() => { try { localStorage.setItem('lectern.notesSize', String(size)); } catch { /* ignore */ } }, [size]);
@@ -105,7 +107,7 @@ export default function PresenterView() {
 
       <main className="presenter-main">
         <section className="presenter-current" aria-label="Current slide">
-          <SlideView slide={slide} deck={deck} number={index + 1} count={count} step={state.step} ghostLater flags={state.flags} framed />
+          <SlideView slide={shown ?? slide} deck={deck} number={index + 1} count={count} step={state.step} ghostLater flags={state.flags} framed />
           <div className="presenter-under">
             <button type="button" className="pbtn" onClick={prev} aria-label="Previous"><ChevronLeft size={20} /></button>
             <span className="tabular">Slide {index + 1} of {count}</span>

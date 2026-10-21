@@ -4,7 +4,9 @@ import { type Box, CANVAS_H, CANVAS_W } from '../engine/boxes';
 import { fontWeight } from '../engine/themes';
 import { M, type LayoutContext, card, heightAt, imageSrc, list, read, shape, slideTitle, sz, text } from './kit';
 import { DATA_KINDS } from './data-kinds';
+import { LIVE_KINDS } from './live-kinds';
 import { MEDIA_KINDS } from './media-kinds';
+import { PITCH_KINDS } from './pitch-kinds';
 import { registerKind } from './registry';
 import type { AnyKind, SlideKindDefinition } from './types';
 import { VISUAL_KINDS } from './visual-kinds';
@@ -589,7 +591,7 @@ let registered = false;
 export function registerCoreKinds() {
   if (registered) return;
   registered = true;
-  [...CORE_KINDS, ...DATA_KINDS, ...VISUAL_KINDS, ...MEDIA_KINDS].forEach(registerKind);
+  [...CORE_KINDS, ...DATA_KINDS, ...VISUAL_KINDS, ...MEDIA_KINDS, ...PITCH_KINDS, ...LIVE_KINDS].forEach(registerKind);
 }
 
 /** Weight of the body face, for renderers that need it. */

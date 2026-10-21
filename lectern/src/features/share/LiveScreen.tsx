@@ -2,8 +2,9 @@
 // quiz (timer and answer count, leaderboard, final results).
 
 import { Crown, Timer, Users } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { formatCode } from '../../core/share/protocol';
+import { useEffect, useMemo, useState } from 'react';
+import type { Slide } from '../../core/deck/types';
+import { type CloudResult, formatCode, withLiveWords } from '../../core/share/protocol';
 import type { ScreenMessage, ScreenQuiz } from './host';
 import { QrCode } from './QrCode';
 import { useCountdown } from './QuizPhone';
@@ -36,6 +37,26 @@ function Podium({ rows }: { rows: ScreenQuiz['view']['board'] }) {
     </div>
   );
   return <div className="podium">{place(second, 2)}{place(first, 1)}{place(third, 3)}</div>;
+}
+
+/**
+ * A slide with the live word cloud answers in it, for windows that draw the show.
+ * The sharing session may run in another window, so the answers come over the screen channel.
+ */
+export function useLiveSlide(deckId: string, slide: Slide | undefined): Slide | undefined {
+  const [clouds, setClouds] = useState<Record<string, CloudResult>>({});
+  const watching = slide?.kind === 'wordcloud';
+  useEffect(() => {
+    if (!watching || typeof BroadcastChannel === 'undefined') return;
+    const ch = new BroadcastChannel(`lectern-live:${deckId}`);
+    ch.onmessage = (e: MessageEvent<ScreenMessage>) => {
+      if (e.data?.type === 'screen') setClouds(e.data.clouds ?? {});
+    };
+    ch.postMessage({ type: 'ask' } satisfies ScreenMessage);
+    return () => ch.close();
+  }, [deckId, watching]);
+  const result = slide ? clouds[slide.id] : undefined;
+  return useMemo(() => (slide ? withLiveWords(slide, result) : slide), [slide, result]);
 }
 
 export function LiveScreen({ deckId }: { deckId: string }) {

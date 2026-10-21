@@ -130,6 +130,12 @@ const TEXT_TILES: Record<string, string> = {
   credits: 'Lists where your pictures came from.',
 };
 
+/** Answers a room might give, so the word cloud sample shows a cloud. */
+const SAMPLE_CLOUD = ([
+  ['Agenda', 9], ['Short', 7], ['Decisions', 6], ['Clear goal', 5], ['On time', 4], ['Focus', 4], ['Actions', 3], ['Coffee', 3],
+  ['No laptops', 3], ['Prepared', 2], ['Listening', 2], ['Fewer people', 2], ['Notes', 2], ['Outcome', 1], ['Energy', 1], ['Humour', 1],
+] as const).map(([text, count]) => ({ text, count: String(count) }));
+
 /** The order of the Add slide menu. */
 export const KIND_GROUPS: KindGroup[] = ['Open', 'Explain', 'Data', 'Visual', 'Media', 'Engage', 'Close'];
 
@@ -167,6 +173,8 @@ export function kindSamples(): KindSample[] {
     if (def.kind === 'gallery') return { ...made(gallerySlide, GALLERY_DECK, 3, 8), def };
     if (def.kind === 'qr') return { ...created(def, { ...def.create(), url: `${qrOrigin()}/welcome` }), def };
     if (def.kind === 'cards') return { ...created(def, def.create(), 'minimal'), def };
+    if (def.kind === 'contact') return { ...created(def, { ...def.create(), link: `${qrOrigin()}/welcome` }), def };
+    if (def.kind === 'wordcloud') return { ...created(def, { ...def.create(), answers: SAMPLE_CLOUD }), def };
     const id = KIND_SAMPLES[def.kind];
     const found = id ? sample(id) : null;
     return { ...(found ?? created(def, def.create())), def, tile: TEXT_TILES[def.kind] };

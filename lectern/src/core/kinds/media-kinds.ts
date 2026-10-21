@@ -56,7 +56,7 @@ function embed(ctx: LayoutContext, a: Area, o: Partial<EmbedBox> & { title: stri
 }
 
 /** A QR code on a white card, which every phone camera reads whatever the slide colours. */
-function qrCard(ctx: LayoutContext, value: string, a: Area, id = 'qr', bind?: string): Box[] {
+export function qrCard(ctx: LayoutContext, value: string, a: Area, id = 'qr', bind?: string): Box[] {
   const pad = Math.round(a.w * 0.06);
   return [
     shape({ id: `${id}-card`, shape: 'rect', ...a, fill: '#FFFFFF', radius: Math.min(ctx.theme.radius, 28), stroke: ctx.theme.colors.line, strokeWidth: 2, bind }),

@@ -58,7 +58,7 @@ export function kindCatalogue() {
     kind: k.kind,
     label: k.label,
     description: k.description,
-    fields: k.fields.map((f) => ({
+    fields: k.fields.filter((f) => f.ai !== false).map((f) => ({
       key: f.key,
       type: aiFieldType(f.type),
       label: f.label,

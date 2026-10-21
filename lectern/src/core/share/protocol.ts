@@ -4,6 +4,7 @@
 import type { Deck, Slide } from '../deck/types';
 import { deckPurpose, emptyNotes } from '../deck/types';
 import type { Theme } from '../engine/themes';
+import { type CloudWord, perPerson } from '../kinds/live-kinds';
 import type { PictureCredit } from '../pictures/credits';
 import type { Asset } from '../../data/db';
 import type { PlayerView, QuizStage, QuizView } from './quiz';
@@ -59,12 +60,19 @@ export interface PollResult {
   total: number;
 }
 
+/** A word cloud's answers so far: the words, and how many people sent any. */
+export interface CloudResult {
+  words: CloudWord[];
+  people: number;
+}
+
 /** Host to phone. */
 export type HostMessage =
   | { t: 'welcome'; role: Role; title: string; parts: number; bytes: number; same?: boolean }
   | { t: 'part'; i: number; data: string }
   | { t: 'state'; state: LiveState }
   | { t: 'votes'; slideId: string; result: PollResult }
+  | { t: 'words'; slideId: string; result: CloudResult }
   | { t: 'options'; options: ShareOptions }
   | { t: 'quiz'; quiz: QuizView; stage: QuizStage }
   | { t: 'you'; you: PlayerView }
@@ -74,6 +82,7 @@ export type HostMessage =
 export type GuestMessage =
   | { t: 'state'; state: LiveState }
   | { t: 'vote'; slideId: string; choice: number }
+  | { t: 'word'; slideId: string; text: string }
   | { t: 'answer'; slideId: string; choice: number }
   | { t: 'name'; name: string }
   | { t: 'stage'; stage: QuizStage };
@@ -274,6 +283,69 @@ export function tally(votes: Map<string, number>, choices: number): PollResult {
     if (choice >= 0 && choice < choices) { counts[choice]! += 1; total += 1; }
   }
   return { counts, total };
+}
+
+// ─── Word clouds ──────────────────────────────────────────────────────
+
+/** Most different words a cloud keeps; the rest are too rare to show. */
+export const CLOUD_WORDS = 60;
+
+/** How many answers one phone may send to a word cloud slide, or null when the slide isn't one. */
+export function cloudLimit(slide: Pick<Slide, 'kind' | 'content'> | undefined): number | null {
+  if (!slide || slide.kind !== 'wordcloud') return null;
+  return perPerson(slide.content ?? {});
+}
+
+/** One answer as the cloud shows it: one line, no stray punctuation at the ends, at most 32 characters. */
+export function cleanWord(input: string): string {
+  return String(input ?? '')
+    .replace(/[\u0000-\u001f\u007f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^[\s"'“”‘’.,;:!?()[\]{}<>*_~`-]+|[\s"'“”‘’.,;:!?()[\]{}<>*_~`-]+$/g, '')
+    .slice(0, 32)
+    .trim();
+}
+
+/** The key two answers share when they are the same word: case and Latin accents aside. */
+export function wordKey(word: string): string {
+  return cleanWord(word).toLocaleLowerCase().normalize('NFKD').replace(/(\p{Script=Latin})\p{M}+/gu, '$1').normalize('NFC');
+}
+
+/**
+ * Counts each word once per phone, most common first. The spelling shown is the one
+ * most people used. Hidden words (by key) are left out.
+ */
+export function tallyWords(answers: Map<string, string[]>, hidden: ReadonlySet<string> = new Set()): CloudResult {
+  const words = new Map<string, { count: number; spellings: Map<string, number>; first: number }>();
+  let order = 0;
+  let people = 0;
+  for (const list of answers.values()) {
+    const seen = new Set<string>();
+    for (const raw of list) {
+      const text = cleanWord(raw);
+      const key = wordKey(text);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      if (hidden.has(key)) continue;
+      const w = words.get(key) ?? { count: 0, spellings: new Map<string, number>(), first: order++ };
+      w.count += 1;
+      w.spellings.set(text, (w.spellings.get(text) ?? 0) + 1);
+      words.set(key, w);
+    }
+    if (seen.size) people += 1;
+  }
+  const list = [...words.values()]
+    .sort((a, b) => b.count - a.count || a.first - b.first)
+    .slice(0, CLOUD_WORDS)
+    .map((w) => ({ text: [...w.spellings.entries()].sort((a, b) => b[1] - a[1])[0]![0], count: w.count }));
+  return { words: list, people };
+}
+
+/** The slide with live answers in place of the words it stores, so every screen draws the same cloud. */
+export function withLiveWords<S extends Pick<Slide, 'kind' | 'content'>>(slide: S, result: CloudResult | undefined): S {
+  if (slide.kind !== 'wordcloud' || !result || !result.words.length) return slide;
+  return { ...slide, content: { ...slide.content, answers: result.words.map((w) => ({ text: w.text, count: String(w.count) })) } };
 }
 
 // ─── Devices ──────────────────────────────────────────────────────────

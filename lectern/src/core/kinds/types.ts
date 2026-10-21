@@ -7,6 +7,8 @@ interface FieldCommon {
   help?: string;
   /** Tucked under "More options" in the studio, so the main fields stay short. */
   more?: boolean;
+  /** False keeps the field from AI drafting, for content only people supply (answers from the room). */
+  ai?: false;
 }
 
 /** Describes one editable field. The studio draws its form from these. */
