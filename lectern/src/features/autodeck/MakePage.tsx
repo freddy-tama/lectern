@@ -6,8 +6,10 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { draftToDeck } from '../../core/deck/draft';
+import { fitChanged } from '../../core/deck/fit';
 import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, deckMinutes, uid } from '../../core/deck/types';
 import { allThemes, fontFamily } from '../../core/engine/themes';
+import { DENSITY } from '../../core/kinds/kit';
 import { documentPictures, fileToOutline } from '../../core/import/files';
 import { draftingHints } from '../../core/plugins/registry';
 import { transcriptText } from '../../core/transcribe/segments';
@@ -22,8 +24,9 @@ import { formatBytes, jobLabel } from '../recordings/status';
 import { SlideView } from '../slides/SlideView';
 import { type AiStatus, aiStatus, kindCatalogue, saveCode, savedCode } from '../studio/ai';
 import { exportPptx } from '../studio/download';
+import { fitSummary } from '../studio/fit-deck';
 import { type AiQuestion, draftOutline, fetchQuestions } from './ai';
-import { approveOutline, createJob, finishJob, recover, runJob, runsSnapshot, saveOutline, stopJob, subscribeRuns } from './drafting';
+import { approveOutline, createJob, finishJob, recover, runJob, runsSnapshot, saveOutline, stopJob, subscribeRuns, toggleDraftFit } from './drafting';
 import { DraftingView, ResumeCard, useJobPictures } from './DraftingView';
 import { dragHasFiles, onHandOff, takeHandedOff } from './handoff';
 import { ACCEPT_ALL, type Source, buildMaterial, countWords, fallbackTopic, kindOf, offlineDraft, placePictures, purposeLabel, stem } from './make';
@@ -249,6 +252,7 @@ export default function MakePage() {
         pictures: forAi,
         kinds: kindCatalogue(),
         hints: draftingHints(),
+        budget: DENSITY[audience],
       };
       const startedAt = Date.now();
       const res = await draftOutline(request, controller.signal);
@@ -416,6 +420,7 @@ export default function MakePage() {
           sources={doneSources}
           remembered={profile.remembered.length}
           usage={stage === 'job' ? job?.usage : undefined}
+          fit={stage === 'job' && job ? fitLine(job, shownDeck) : undefined}
           exporting={exporting}
           onDownload={download}
           onOpen={() => navigate(`/studio/${shownDeck.id}`)}
@@ -659,11 +664,31 @@ function UsageNote({ usage }: { usage: UsageByModel }) {
   );
 }
 
-function Result({ deck, sources, remembered, usage, exporting, onDownload, onOpen, onPresent, onAgain }: {
+interface FitLine {
+  text: string;
+  undone: boolean;
+  canUndo: boolean;
+  onToggle(): void;
+}
+
+/** What the check after drafting changed, with Undo back to the draft as the AI wrote it. */
+function fitLine(job: DraftJob, deck: Deck): FitLine | undefined {
+  const fit = job.decks[0]?.fit;
+  if (!fit) return undefined;
+  return {
+    text: fit.undone ? 'Showing the draft as the AI wrote it.' : fitSummary(fit.report, deck.minutes),
+    undone: fit.undone,
+    canUndo: fitChanged(fit.report),
+    onToggle: () => void toggleDraftFit(job.id),
+  };
+}
+
+function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, onOpen, onPresent, onAgain }: {
   deck: Deck;
   sources: Source[];
   remembered: number;
   usage?: UsageByModel;
+  fit?: FitLine;
   exporting: boolean;
   onDownload(): void;
   onOpen(): void;
@@ -680,6 +705,12 @@ function Result({ deck, sources, remembered, usage, exporting, onDownload, onOpe
         <p className="muted">
           {shown.length} slides with speaker notes · about {Math.round(deckMinutes(deck))} min · {purposeLabel(deck.purpose ?? 'talk')} · {AUDIENCES.find((a) => a.id === deck.audience)?.label}
         </p>
+        {fit?.text && (
+          <p className="ad-fit" role="status">
+            {fit.undone || !fit.canUndo ? <AlertCircle size={15} /> : <Check size={15} />} {fit.text}
+            {fit.canUndo && <> <button type="button" className="ad-link" onClick={fit.onToggle}>{fit.undone ? 'Redo' : 'Undo'}</button></>}
+          </p>
+        )}
         {usage && <UsageNote usage={usage} />}
         <div className="ad-result-actions">
           <button type="button" className="btn btn-brand btn-lg" onClick={onDownload} disabled={exporting}>

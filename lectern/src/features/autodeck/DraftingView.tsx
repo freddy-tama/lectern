@@ -66,13 +66,15 @@ export function DraftingView({ job, running, writing, pictures, saving, onStop, 
   const { written, planned } = jobProgress(job);
   const failed = new Set(plan.batches.filter((b) => b.status === 'failed').flatMap((b) => b.numbers));
   const now = [...writing].filter((k) => k.startsWith(`${plan.key}:`)).length;
+  // After the last slide, every slide is checked against the layout before the deck is saved.
+  const checking = running && !!job.checking;
   return (
     <section className="ad-drafting" aria-labelledby="ad-drafting-title">
       <header className="ad-result-head">
-        <p className={`eyebrow ${running ? '' : 'ad-stopped'}`}>{running ? 'Writing the slides' : 'Drafting stopped'}</p>
+        <p className={`eyebrow ${running ? '' : 'ad-stopped'}`}>{checking ? 'Checking every slide fits' : running ? 'Writing the slides' : 'Drafting stopped'}</p>
         <h1 id="ad-drafting-title" className="display">{plan.title}</h1>
         <p className="muted tabular" aria-live="polite">
-          {written} of {planned} slides written{running && now ? ` · writing ${now} now` : ''}
+          {checking ? `${planned} slides written · shortening any that don’t fit` : `${written} of ${planned} slides written${running && now ? ` · writing ${now} now` : ''}`}
         </p>
         <span className="progress ad-drafting-progress" role="progressbar" aria-valuemin={0} aria-valuemax={planned} aria-valuenow={written} aria-label="Slides written">
           <span style={{ width: `${planned ? Math.round((written / planned) * 100) : 0}%` }} />
@@ -125,8 +127,17 @@ export function DraftingView({ job, running, writing, pictures, saving, onStop, 
 
       {running && (
         <div className="ad-result-foot">
-          <p className="faint">You can leave this page. Drafting carries on, and a closed tab can pick up where it stopped.</p>
-          <button type="button" className="btn btn-ghost" onClick={onStop}><Square size={14} /> Stop</button>
+          {checking ? (
+            <>
+              <p className="faint">Skipping the check saves the deck now, with the fixes made so far.</p>
+              <button type="button" className="btn btn-ghost" onClick={onStop}><Square size={14} /> Skip the check</button>
+            </>
+          ) : (
+            <>
+              <p className="faint">You can leave this page. Drafting carries on, and a closed tab can pick up where it stopped.</p>
+              <button type="button" className="btn btn-ghost" onClick={onStop}><Square size={14} /> Stop</button>
+            </>
+          )}
         </div>
       )}
     </section>

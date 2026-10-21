@@ -14,6 +14,9 @@
 //   ANTHROPIC_API_KEY     required for AI drafting
 //   LECTERN_MODEL         optional, defaults to claude-opus-5-5
 //   LECTERN_ACCESS_CODE   optional; when set, requests must send it in "x-lectern-code"
+//
+// The request carries "budget": { words, bullets }, the audience's limits from the client's
+// layout rules (src/core/kinds/kit.ts), so the prompt never keeps its own copy of the numbers.
 
 import Anthropic from '@anthropic-ai/sdk';
 
@@ -63,6 +66,8 @@ interface DraftBody {
   density?: unknown;
   /** Pictures from the person's files: { id, name, mime, data (base64) }. */
   pictures?: unknown;
+  /** How much one slide holds for the audience: { words, bullets }. */
+  budget?: unknown;
   /** "slides" mode: the approved outline, as { title, slides: [{ title, kind, minutes, point, pictures }] }. */
   outline?: unknown;
   /** "slides" mode: which slides to write, numbered from 1 in the outline. */
@@ -220,11 +225,29 @@ export function stagedSchema(kinds: CatalogueKind[], pictures: Picture[]) {
   };
 }
 
-const AUDIENCE_RULES: Record<string, string> = {
-  young: 'Young learners aged 6-11. At most 3 short points per slide and about 25 words on a slide. Simple words, concrete examples, frequent quick checks. Scripts are short and warm.',
-  teen: 'Teenagers aged 12-17. At most 5 points per slide and about 45 words on a slide. Relatable examples; a check for understanding every 8-10 minutes.',
-  adult: 'Adults (university, workshops, talks). At most 6 points per slide and about 70 words on a slide. Precise language; examples from work and everyday life.',
+const AUDIENCE_RULES: Record<string, { who: string; style: string }> = {
+  young: { who: 'Young learners aged 6-11.', style: 'Simple words, concrete examples, frequent quick checks. Scripts are short and warm.' },
+  teen: { who: 'Teenagers aged 12-17.', style: 'Relatable examples; a check for understanding every 8-10 minutes.' },
+  adult: { who: 'Adults (university, workshops, talks).', style: 'Precise language; examples from work and everyday life.' },
 };
+
+export interface Budget {
+  words: number;
+  bullets: number;
+}
+
+export function cleanBudget(raw: unknown): Budget | null {
+  const b = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const words = Math.round(Number(b.words));
+  const bullets = Math.round(Number(b.bullets));
+  if (!(words > 0) || !(bullets > 0)) return null;
+  return { words: Math.min(words, 400), bullets: Math.min(bullets, 20) };
+}
+
+export function audienceRule(audience: string, budget: Budget | null): string {
+  const a = AUDIENCE_RULES[audience] ?? AUDIENCE_RULES.teen;
+  return [a.who, budget ? `At most ${budget.bullets} points per slide and about ${budget.words} words on a slide.` : 'Keep each slide short.', a.style].join(' ');
+}
 
 const PURPOSES = ['lesson', 'talk', 'pitch', 'report'] as const;
 type Purpose = (typeof PURPOSES)[number];
@@ -311,6 +334,8 @@ export interface DraftInput {
   pictures: Picture[];
   density: string;
   answers: { q: string; a: string }[];
+  /** How much one slide holds for the audience, from the client's layout rules. */
+  budget: Budget | null;
 }
 
 /** Reads and cleans the request body. Returns a message for the person when something essential is missing. */
@@ -333,6 +358,7 @@ export function readInput(body: DraftBody): DraftInput | string {
     answers: Array.isArray(body.answers)
       ? (body.answers as Record<string, unknown>[]).slice(0, 16).map((a) => ({ q: text(a?.question, 300), a: text(a?.answer, 300) })).filter((a) => a.a)
       : [],
+    budget: cleanBudget(body.budget),
   };
 }
 
@@ -340,7 +366,7 @@ export function readInput(body: DraftBody): DraftInput | string {
 function briefBlocks(input: DraftInput): Anthropic.Beta.BetaContentBlockParam[] {
   const brief = [
     `Make a ${input.purpose} deck for a ${input.minutes}-minute session.`,
-    `Audience: ${AUDIENCE_RULES[input.audience]}`,
+    `Audience: ${audienceRule(input.audience, input.budget)}`,
     input.density ? `Words on a slide: ${DENSITY_RULES[input.density]}` : '',
     `What the deck is about: ${input.topic}`,
     input.title ? `Deck title: ${input.title}` : '',

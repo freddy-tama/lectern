@@ -5,7 +5,8 @@
 // A job makes a list of decks. Making a deck uses one entry; planning a course would add one
 // entry per lesson and reuse the same batches, status and resume.
 
-import type { Audience, DeckPurpose, KeyNotes } from '../core/deck/types';
+import type { FitReport } from '../core/deck/fit';
+import type { Audience, Deck, DeckPurpose, KeyNotes } from '../core/deck/types';
 import { db } from './db';
 
 /**
@@ -69,6 +70,16 @@ export interface JobDeck {
   slides: WrittenSlide[];
   /** The saved deck, once it is made. */
   deckId?: string;
+  /** What the check after drafting fixed, and the other version of the deck for Undo and Redo. */
+  fit?: DeckFit;
+}
+
+export interface DeckFit {
+  report: FitReport;
+  /** The version not saved now: the draft as the AI wrote it, or, after Undo, the checked one. */
+  other: Deck;
+  /** True when the saved deck is the draft as the AI wrote it. */
+  undone: boolean;
 }
 
 /**
@@ -88,6 +99,8 @@ export interface DraftRequest {
   pictures?: { id: string; name: string; mime: string; data: string }[];
   kinds: unknown[];
   hints: string;
+  /** How much one slide holds for the audience, from the layout rules (DENSITY in core/kinds/kit). */
+  budget?: { words: number; bullets: number };
 }
 
 export interface DraftJob {
@@ -106,6 +119,8 @@ export interface DraftJob {
   lastCallAt?: number;
   /** Why the job stopped, for the person. */
   error?: string;
+  /** Set while the written deck is checked and fixed, before it is saved. */
+  checking?: boolean;
   createdAt: number;
   updatedAt: number;
 }

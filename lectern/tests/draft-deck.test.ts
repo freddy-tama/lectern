@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
+import { DENSITY } from '../src/core/kinds/kit';
 import { kindCatalogue } from '../src/features/studio/ai';
 
 // A stand-in for the Anthropic SDK: records each request and answers with what the test sets.
@@ -32,8 +33,9 @@ vi.mock('@anthropic-ai/sdk', () => {
 });
 
 const {
-  POST, OUTLINE_TASK, checkBatch, cleanCatalogue, cleanNumbers, cleanOutline, pictureRoom, readInput, slidesTask, stagedRequest, stagedSchema, usageOf,
+  POST, OUTLINE_TASK, audienceRule, checkBatch, cleanCatalogue, cleanNumbers, cleanOutline, pictureRoom, readInput, slidesTask, stagedRequest, stagedSchema, usageOf,
 } = await import('../api/draft-deck');
+const { POST: askQuestions } = await import('../api/deck-questions');
 
 registerCoreKinds();
 
@@ -304,5 +306,31 @@ describe('POST', () => {
     const params = sdk.calls[0] as { messages: { content: Record<string, unknown>[] }[]; system: string };
     expect(params.messages[0]!.content.some((b) => 'cache_control' in b)).toBe(false);
     expect(params.system).not.toContain('Task OUTLINE');
+  });
+});
+
+describe('the audience budget', () => {
+  it('writes the budget sent with the request into the brief', () => {
+    expect(audienceRule('young', DENSITY.young)).toContain(`At most ${DENSITY.young.bullets} points per slide and about ${DENSITY.young.words} words on a slide.`);
+    expect(audienceRule('adult', null)).not.toMatch(/\d+ words/);
+    const input = readInput(body({ budget: DENSITY.teen }));
+    if (typeof input === 'string') throw new Error(input);
+    expect(input.budget).toEqual(DENSITY.teen);
+    expect(JSON.stringify(stagedRequest(input, OUTLINE_TASK).content[0])).toContain(`about ${DENSITY.teen.words} words on a slide`);
+    const without = readInput(body());
+    if (typeof without === 'string') throw new Error(without);
+    expect(without.budget).toBeNull();
+  });
+});
+
+describe('deck questions', () => {
+  it('reports questions cut off at max_tokens instead of failing to read them', async () => {
+    sdk.reply = () => ({ stop_reason: 'max_tokens', content: [{ type: 'text', text: '{"title":"De' }] });
+    const res = await askQuestions(new Request('http://localhost/api/deck-questions', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ brief: 'A talk about shipping' }),
+    }));
+    expect(res.status).toBe(422);
   });
 });

@@ -1,8 +1,10 @@
 // Client side of /api/revise-slide: AI help on one slide (revise, key notes, split, ask).
 // Whole-deck drafting lives in ./ai.
 
+import { slideProblems } from '../../core/deck/check';
 import { type Deck, type KeyNotes, type Slide, deckPurpose, emptyNotes, normalizeNotes, uid } from '../../core/deck/types';
 import { getTheme } from '../../core/engine/themes';
+import { DENSITY } from '../../core/kinds/kit';
 import { getKind } from '../../core/kinds/registry';
 import type { AnyKind, FieldSpec } from '../../core/kinds/types';
 import { draftingHints } from '../../core/plugins/registry';
@@ -142,6 +144,7 @@ function context(deck: Deck, slide: Slide) {
     slide: { kind: slide.kind, content: contentForAi(def, slide.content), notes: { ...slide.notes, links: undefined, extra: undefined }, variant: slide.variant },
     kind: kindSpec(def),
     hints: draftingHints(),
+    budget: DENSITY[deck.audience],
   };
 }
 
@@ -205,6 +208,56 @@ export async function reviseSlide(deck: Deck, slide: Slide, preset: PresetId, in
   }
   if (!out.revision) throw new SlideAiError('The AI returned nothing. Try again.');
   return { kind: 'one', slide: applyRevision(slide, out.revision) };
+}
+
+/**
+ * Asks the AI to trim a slide until it fits, given the layout's own warnings. Returns the slide
+ * with the change applied (same id and kind). Whether it now fits is for the caller to check.
+ */
+export async function fitSlide(deck: Deck, slide: Slide, problems: string[], signal?: AbortSignal): Promise<Slide> {
+  const words = slideProblems(slide, deck).words?.count;
+  const out = await post<{ revision?: SlideRevision }>({ mode: 'fit', problems, words, ...context(deck, slide) }, signal);
+  if (!out.revision) throw new SlideAiError('The AI returned nothing. Try again.');
+  return applyRevision(slide, out.revision);
+}
+
+export interface CheckedRevision {
+  result: RevisionResult;
+  /** The suggestion was trimmed by an automatic fit. */
+  fitted: boolean;
+  /** A suggested slide still doesn't fit. */
+  overflow: boolean;
+}
+
+const slidesOf = (r: RevisionResult): Slide[] => (r.kind === 'one' ? [r.slide] : r.slides);
+
+/**
+ * Checks a suggestion before it is shown. A suggested slide that wouldn't fit gets one automatic
+ * fit; code then decides whether the fit worked, and a fit that still overflows is dropped.
+ */
+export async function checkRevision(
+  deck: Deck,
+  result: RevisionResult,
+  o: { signal?: AbortSignal; onFitting?(): void; fit?: typeof fitSlide } = {},
+): Promise<CheckedRevision> {
+  const slides = slidesOf(result);
+  const problems = slides.map((s) => slideProblems(s, deck));
+  if (problems.every((p) => !p.overflow.length)) return { result, fitted: false, overflow: false };
+  o.onFitting?.();
+  const fit = o.fit ?? fitSlide;
+  const next = await Promise.all(slides.map(async (s, i) => {
+    if (!problems[i].overflow.length) return s;
+    try {
+      const trimmed = await fit(deck, s, problems[i].warnings, o.signal);
+      return slideProblems(trimmed, deck).overflow.length ? s : trimmed;
+    } catch (e) {
+      if ((e as Error).name === 'AbortError') throw e;
+      return s;
+    }
+  }));
+  const fitted = next.some((s, i) => s !== slides[i]);
+  const overflow = next.some((s) => slideProblems(s, deck).overflow.length > 0);
+  return { result: result.kind === 'one' ? { kind: 'one', slide: next[0] } : { kind: 'two', slides: [next[0], next[1]] }, fitted, overflow };
 }
 
 export interface ChatMessage {

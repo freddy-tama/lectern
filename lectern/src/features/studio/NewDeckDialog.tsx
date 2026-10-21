@@ -20,6 +20,7 @@ import { useToast } from '../../ui/Toast';
 import { useOpenDeckFile } from '../backup/actions';
 import { SlideView } from '../slides/SlideView';
 import { type AiStatus, aiStatus, draftWithAI, saveCode, savedCode } from './ai';
+import { fitDraft, handOffDraftFit } from './fit-deck';
 
 type Mode = 'notes' | 'ai' | 'blank' | string;
 
@@ -125,6 +126,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const [ai, setAi] = useState<AiStatus | null>(null);
   const [code, setCode] = useState(savedCode);
   const [busy, setBusy] = useState(false);
+  const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
   const abort = useRef<AbortController | null>(null);
@@ -142,6 +144,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
     setMinutes(lesson?.durationMinutes ?? getProfile().deck.minutes);
     setError('');
     setBusy(false);
+    setChecking(false);
     aiStatus().then(setAi);
   }, [open, lesson]);
 
@@ -156,13 +159,21 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const close = () => { abort.current?.abort(); onClose(); };
 
   const finish = async (draft: DeckDraft, source?: string) => {
-    const deck = draftToDeck(
+    let deck = draftToDeck(
       { ...draft, title: title.trim() || draft.title },
       { audience, themeId, lessonId: lesson?.id, source, purpose },
     );
     const first = deck.slides[0];
     if (first?.kind === 'title' && course && lesson && !String(first.content.eyebrow ?? '')) {
       first.content = { ...first.content, eyebrow: `Week ${lesson.week} · ${course.title}` };
+    }
+    if (source === 'ai') {
+      // Check the AI's slides with the real fonts and fix what doesn't fit; the studio offers Undo.
+      const signal = abort.current?.signal;
+      const checked = await fitDraft(deck, { signal, onFixing: () => setChecking(true) });
+      if (signal?.aborted) return;
+      deck = checked.deck;
+      handOffDraftFit(checked);
     }
     await addDeck(deck);
     onClose();
@@ -196,6 +207,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
         if ((e as Error).name !== 'AbortError') setError((e as Error).message);
       } finally {
         setBusy(false);
+        setChecking(false);
       }
     }
   };
@@ -237,7 +249,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
           {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: 13.5, marginRight: 'auto' }}>{error}</span>}
           <button type="button" className="btn btn-ghost" onClick={close}>Cancel</button>
           <button type="button" className="btn btn-primary" onClick={create} disabled={busy || (mode === 'ai' && ai?.available === false)}>
-            {busy ? <><span className="spinner" /> Drafting slides…</> : mode === 'notes' && preview ? `Make ${preview.slides.length} slides` : mode === 'ai' ? 'Draft the deck' : 'Create deck'}
+            {busy ? <><span className="spinner" /> {checking ? 'Checking the slides fit…' : 'Drafting slides…'}</> : mode === 'notes' && preview ? `Make ${preview.slides.length} slides` : mode === 'ai' ? 'Draft the deck' : 'Create deck'}
           </button>
         </>
       )}

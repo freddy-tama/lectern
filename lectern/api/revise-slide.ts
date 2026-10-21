@@ -4,7 +4,11 @@
 //   "revise" → { revision: { content, notes } }       the slide rewritten as asked, same kind
 //   "notes"  → { revision: { notes } }                key notes only; the slide is left alone
 //   "split"  → { split: [{ content, notes }, { content, notes }] }  two slides of the same kind
+//   "fit"    → { revision: { content, notes } }       the slide trimmed until it fits; the client sends its layout warnings
 //   "ask"    → { reply }                              a short answer about selected text; changes nothing
+//
+// Every request may carry "budget": { words, bullets }, the audience's limits from the client's
+// layout rules (src/core/kinds/kit.ts), so the prompts never keep their own copy of the numbers.
 //
 // Environment:
 //   ANTHROPIC_API_KEY     required
@@ -44,8 +48,8 @@ export interface KindSpec {
   fields: KindField[];
 }
 
-export type Mode = 'revise' | 'notes' | 'split' | 'ask';
-const MODES: Mode[] = ['revise', 'notes', 'split', 'ask'];
+export type Mode = 'revise' | 'notes' | 'split' | 'fit' | 'ask';
+const MODES: Mode[] = ['revise', 'notes', 'split', 'fit', 'ask'];
 
 const PURPOSES = ['lesson', 'talk', 'pitch', 'report'] as const;
 type Purpose = (typeof PURPOSES)[number];
@@ -193,11 +197,50 @@ export function cleanNotes(raw: unknown) {
   };
 }
 
-const AUDIENCE_RULES: Record<string, string> = {
-  young: 'Young learners aged 6-11. At most 3 short points on a slide and about 25 words. Simple words and concrete examples.',
-  teen: 'Teenagers aged 12-17. At most 5 points on a slide and about 45 words. Relatable examples.',
-  adult: 'Adults (university, workshops, talks, meetings). At most 6 points on a slide and about 70 words. Precise language.',
+const AUDIENCE_RULES: Record<string, { who: string; style: string }> = {
+  young: { who: 'Young learners aged 6-11.', style: 'Simple words and concrete examples.' },
+  teen: { who: 'Teenagers aged 12-17.', style: 'Relatable examples.' },
+  adult: { who: 'Adults (university, workshops, talks, meetings).', style: 'Precise language.' },
 };
+
+/** How much one slide may hold for the audience, as the client's layout rules set it. */
+export interface Budget {
+  words: number;
+  bullets: number;
+}
+
+export function cleanBudget(raw: unknown): Budget | null {
+  const b = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const words = Math.round(Number(b.words));
+  const bullets = Math.round(Number(b.bullets));
+  if (!(words > 0) || !(bullets > 0)) return null;
+  return { words: Math.min(words, 400), bullets: Math.min(bullets, 20) };
+}
+
+function audienceRule(audience: string, budget: Budget | null) {
+  const a = AUDIENCE_RULES[audience] ?? AUDIENCE_RULES.adult;
+  return [a.who, budget ? `At most ${budget.bullets} points on a slide and about ${budget.words} words.` : 'Keep each slide short.', a.style].join(' ');
+}
+
+/** The layout warnings the client sends with a fit request, word for word. */
+export function cleanProblems(raw: unknown): string[] {
+  return Array.isArray(raw) ? [...new Set(raw.map((p) => text(p, 300)).filter(Boolean))].slice(0, 8) : [];
+}
+
+/**
+ * The fit request: the editor's own warnings and the budget, and "change only what's needed".
+ * Code has already decided the slide doesn't fit; the model only decides how to shorten it.
+ */
+export function fitRequest(problems: string[], budget: Budget | null, words?: number): string {
+  return [
+    'This slide does not fit. The slide editor reported:',
+    ...problems.map((p) => `- ${p}`),
+    budget
+      ? `For this audience a slide holds at most ${budget.bullets} points and about ${budget.words} words${words ? `. This slide has ${words} words now` : ''}.`
+      : '',
+    'Change only what is needed to make the slide fit, and keep its meaning, facts and language. Shorten the longest text first, with tighter wording; drop a point only if that is not enough. Leave fields that already fit as they are. Move detail you cut into notes.script rather than losing it, and keep the rest of the key notes as they are.',
+  ].filter(Boolean).join('\n');
+}
 
 /** What key points and the check question mean for each purpose, matching how the deck was drafted. */
 const PURPOSE_RULES: Record<Purpose, string> = {
@@ -238,6 +281,7 @@ function deckContext(body: Record<string, unknown>) {
   return {
     purpose,
     audience,
+    budget: cleanBudget(body.budget),
     title: text(deck.title, 200),
     look: text(deck.look, 200),
     before: headings(near.before),
@@ -255,7 +299,7 @@ function contextBlock(ctx: ReturnType<typeof deckContext>, kind: KindSpec) {
   return [
     `Deck: ${ctx.title || 'Untitled'}${ctx.look ? ` (look: ${ctx.look})` : ''}`,
     PURPOSE_RULES[ctx.purpose],
-    `Audience: ${AUDIENCE_RULES[ctx.audience]}`,
+    `Audience: ${audienceRule(ctx.audience, ctx.budget)}`,
     ctx.before.length ? `Slides just before: ${ctx.before.map((h) => `“${h}”`).join(', ')}` : 'This is near the start of the deck.',
     ctx.after.length ? `Slides just after: ${ctx.after.map((h) => `“${h}”`).join(', ')}` : 'This is near the end of the deck.',
     `Slide type: ${kind.kind} (${kind.label}). ${kind.description}`,
@@ -345,6 +389,7 @@ export async function POST(request: Request) {
         messages: history,
       }).finalMessage();
       if (response.stop_reason === 'refusal') return json({ error: 'The AI declined to answer that. Try asking another way.' }, 422);
+      if (response.stop_reason === 'max_tokens') return json({ error: 'The answer ran too long. Try a narrower question.' }, 422);
       const lastSwitch = response.content.map((b) => b.type as string).lastIndexOf('fallback');
       const reply = response.content.slice(lastSwitch + 1).map((b) => (b.type === 'text' ? b.text : '')).join('').trim();
       if (!reply) return json({ error: 'The AI returned no answer. Try again.' }, 502);
@@ -353,7 +398,15 @@ export async function POST(request: Request) {
 
     const preset = text(body.preset, 20);
     const instruction = text(body.instruction, 2_000);
-    const wanted = presetRequest(mode === 'notes' ? 'notes' : mode === 'split' ? 'split' : preset, instruction);
+    let wanted: string;
+    if (mode === 'fit') {
+      const problems = cleanProblems(body.problems);
+      if (!problems.length) return json({ error: 'This slide already fits.' }, 400);
+      const words = Math.round(Number(body.words));
+      wanted = fitRequest(problems, ctx.budget, words > 0 ? words : undefined);
+    } else {
+      wanted = presetRequest(mode === 'notes' ? 'notes' : mode === 'split' ? 'split' : preset, instruction);
+    }
     if (!wanted) return json({ error: 'Say what to change.' }, 400);
     const hints = text(body.hints, 4_000);
     const user = [
@@ -367,7 +420,8 @@ export async function POST(request: Request) {
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
       thinking: { type: 'adaptive' },
-      output_config: { effort: 'medium', format: { type: 'json_schema', schema: responseSchema(kind, mode) } },
+      // Fitting is a narrow, checked edit, run on several slides in a row: low effort keeps it quick.
+      output_config: { effort: mode === 'fit' ? 'low' : 'medium', format: { type: 'json_schema', schema: responseSchema(kind, mode) } },
       system: reviseSystem(ctx, kind, hints),
       messages: [{ role: 'user', content: user }],
     }).finalMessage();

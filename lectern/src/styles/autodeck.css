@@ -1209,3 +1209,18 @@
     grid-column: 1 / -1;
   }
 }
+
+/* What the check after drafting fixed, with Undo. */
+.ad-fit {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  color: var(--ink-2);
+  font-size: 14px;
+}
+
+.ad-fit svg {
+  flex: none;
+  color: var(--brand);
+}

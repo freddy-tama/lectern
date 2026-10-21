@@ -1,12 +1,13 @@
 import 'fake-indexeddb/auto';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
 import { getKind } from '../src/core/kinds/registry';
 import { db } from '../src/data/db';
 import { type DraftJob, type DraftRequest, type WrittenSlide, getJob, openJob, saveJob } from '../src/data/draft-jobs';
 import { DraftCallError } from '../src/features/autodeck/ai';
 import {
-  CONCURRENCY, WARM_MS, approveOutline, createJob, finishJob, isRunning, jobDraft, mergeSlides, planBatches, recover, runJob, stopJob, type SlidesApi,
+  CONCURRENCY, WARM_MS, approveOutline, createJob, finishJob, isRunning, jobDraft, mergeSlides, planBatches, recover, runJob, stopJob, toggleDraftFit,
+  type SlidesApi,
 } from '../src/features/autodeck/drafting';
 import { pictureRoom, withKind } from '../src/features/autodeck/outline';
 import { addUsage, usageCost, usageLine } from '../src/features/autodeck/usage';
@@ -240,7 +241,37 @@ describe('finishing', () => {
     expect(after.status).toBe('done');
     expect(after.request.material).toBe('');
     expect(after.decks[0]!.deckId).toBe(id);
+    // Five 2-minute slides for a 30-minute session: the check only retimes them.
+    expect(after.decks[0]!.fit!.report).toMatchObject({ found: 0, retimed: true });
+    expect(saved!.slides.reduce((t, s) => t + s.notes.minutes, 0)).toBe(30);
+    expect(after.checking).toBeUndefined();
     expect(await openJob()).toBeUndefined();
+  });
+
+  describe('a slide that doesn’t fit', () => {
+    // The fit call fails here, so the check falls back to splitting the slide.
+    beforeEach(() => { vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: 'Offline' }, { status: 503 }))); });
+    afterEach(() => { vi.unstubAllGlobals(); });
+
+    it('is fixed before the deck is saved, and Undo swaps back to the draft as written', async () => {
+      const job = await approvedJob(2);
+      const long = Array.from({ length: 16 }, (_, i) => `Point ${i + 1} explains how the moon and the sun pull the sea and make the tides rise`);
+      mergeSlides(job.decks[0]!, [written(1, 'title'), { number: 2, kind: 'bullets', content: { title: 'Why', bullets: long }, notes: { script: '' } }], [1, 2]);
+
+      const [id] = await finishJob(job);
+      const fit = (await getJob(job.id))!.decks[0]!.fit!;
+      expect(fit.report.split).toBe(1);
+      expect(fit.undone).toBe(false);
+      const checked = (await db.decks.get(id!))!;
+      expect(checked.slides.length).toBeGreaterThan(2);
+      expect(fit.other.slides).toHaveLength(2);
+
+      await toggleDraftFit(job.id);
+      expect((await db.decks.get(id!))!.slides).toHaveLength(2);
+      expect((await getJob(job.id))!.decks[0]!.fit!.undone).toBe(true);
+      await toggleDraftFit(job.id);
+      expect((await db.decks.get(id!))!.slides).toHaveLength(checked.slides.length);
+    });
   });
 });
 

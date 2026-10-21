@@ -11,7 +11,10 @@ import {
   type DraftJob, type DraftRequest, type JobBatch, type JobDeck, type PlannedSlide, type WrittenSlide,
   getJob, jobProgress, recoverJobs, replaceJobs, saveJob,
 } from '../../data/draft-jobs';
-import { addDeck, saveAsset } from '../../data/repo';
+import { fitChanged } from '../../core/deck/fit';
+import { db } from '../../data/db';
+import { addDeck, saveAsset, saveDeck } from '../../data/repo';
+import { type DraftFit, fitDraft } from '../studio/fit-deck';
 import { DraftCallError, STOPS_THE_JOB, draftSlides } from './ai';
 import { placePictures } from './make';
 import { pictureForDeck } from './pictures';
@@ -163,7 +166,7 @@ export function recover(): Promise<void> {
  * the same run. When the cached prompt may have gone cold, one batch goes first to write it,
  * and the others follow and read it.
  */
-export function runJob(id: string, o: { api?: SlidesApi; finish?: (job: DraftJob) => Promise<unknown>; now?: () => number } = {}): Promise<void> {
+export function runJob(id: string, o: { api?: SlidesApi; finish?: (job: DraftJob, signal?: AbortSignal) => Promise<unknown>; now?: () => number } = {}): Promise<void> {
   const existing = runs.get(id);
   if (existing) return existing.done;
   const run: Run = { controller: new AbortController(), writing: new Set(), done: Promise.resolve() };
@@ -186,7 +189,7 @@ async function pool<T>(items: T[], size: number, work: (item: T) => Promise<void
 
 const halves = (n: number[]) => [n.slice(0, Math.ceil(n.length / 2)), n.slice(Math.ceil(n.length / 2))];
 
-async function drive(id: string, run: Run, api: SlidesApi, finish: (job: DraftJob) => Promise<unknown>, now: () => number) {
+async function drive(id: string, run: Run, api: SlidesApi, finish: (job: DraftJob, signal?: AbortSignal) => Promise<unknown>, now: () => number) {
   const job = await getJob(id);
   if (!job || job.status === 'done' || job.status === 'outline') return;
   const { signal } = run.controller;
@@ -263,18 +266,31 @@ async function drive(id: string, run: Run, api: SlidesApi, finish: (job: DraftJo
     await saveJob(job);
     return;
   }
-  await finish(job);
+  // Stopping now skips the rest of the check; the deck is still saved.
+  await finish(job, signal);
 }
 
 // ─── Finishing ────────────────────────────────────────────────────────
 
 /**
- * Runs once on each assembled deck, after the last batch and before it is saved. The “check and
- * fix AI drafts” build plugs in here: `(await fitDraft(deck)).deck` from studio/fit-deck, which
- * runs checkDeck and fixes what doesn't fit. Until that lands the deck passes through unchanged.
+ * Runs once on each assembled deck, after the last batch and before it is saved: checks every
+ * slide with the real fonts and fixes what doesn't fit (studio/fit-deck). Stopping keeps the
+ * fixes made so far.
  */
-export async function checkDraft(deck: Deck): Promise<Deck> {
-  return deck;
+export function checkDraft(deck: Deck, signal?: AbortSignal): Promise<DraftFit> {
+  return fitDraft(deck, { signal });
+}
+
+/** Swaps the saved deck with its other version: the draft as the AI wrote it, or the checked one. */
+export async function toggleDraftFit(jobId: string): Promise<void> {
+  const job = await getJob(jobId);
+  const plan = job?.decks[0];
+  if (!job || !plan?.deckId || !plan.fit) return;
+  const current = await db.decks.get(plan.deckId);
+  if (!current) return;
+  await saveDeck(plan.fit.other);
+  plan.fit = { ...plan.fit, other: current, undone: !plan.fit.undone };
+  await saveJob(job);
 }
 
 /** The field a slide type shows as its heading, for slides kept from the outline. */
@@ -298,20 +314,27 @@ export function jobDraft(job: Pick<DraftJob, 'request'>, deck: JobDeck): DeckDra
   };
 }
 
-/** Saves each deck of the job, places its pictures and marks the job done. Returns the new deck ids. */
-export async function finishJob(job: DraftJob): Promise<string[]> {
+/**
+ * Saves each deck of the job, after checking it, places its pictures and marks the job done.
+ * Returns the new deck ids.
+ */
+export async function finishJob(job: DraftJob, signal?: AbortSignal): Promise<string[]> {
   const files = job.pictures.map((p) => new File([p.blob], p.name, { type: p.blob.type }));
   const made: string[] = [];
+  job.checking = true;
+  await saveJob(job);
   for (const deck of job.decks) {
     if (deck.deckId || !deck.outline.length) continue;
     const draft = await placePictures(jobDraft(job, deck), files, async (f) => saveAsset(await pictureForDeck(f), f.name));
-    const result = await checkDraft(draftToDeck(draft, { ...job.settings, source: 'ai' }));
-    await addDeck(result);
-    deck.deckId = result.id;
-    made.push(result.id);
+    const checked = await checkDraft(draftToDeck(draft, { ...job.settings, source: 'ai' }), signal);
+    await addDeck(checked.deck);
+    deck.deckId = checked.deck.id;
+    if (fitChanged(checked.report) || checked.report.left) deck.fit = { report: checked.report, other: checked.before, undone: false };
+    made.push(checked.deck.id);
   }
   // Only the result page needs the job now: drop the material and pictures it kept for resuming.
   job.status = 'done';
+  job.checking = undefined;
   job.error = undefined;
   job.pictures = [];
   job.request = { ...job.request, material: '', pictures: [] };
