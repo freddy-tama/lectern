@@ -161,3 +161,19 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
 - **00:37** Production now has AI keys: `/api/draft-deck` and `/api/picture-generate` report AI as available, the pictures with `gpt-image-2.5-sunburst`. Accounts and an access code are both off, so AI there is open to anyone. Previews still have AI off.
   - Two tests assume AI is off and would fail against production: DRF-001 (`/make` with a topic alone) and NTS-002 (the AI tab's setup notice). Pull request runs aren't affected, because they test previews.
   - Once accounts are on, production shows "Sign in to …" in those places instead. The PRD and those two tests need to accept that state too.
+
+## Intro page pitch and video
+
+**2026-10-22** (China time)
+
+- **Before the run:** the intro page changed on the branch `claude/pitch-video-dacd59` (25 characters after slugging), PR #11.
+  - An animated pitch now sits beside the `h1`, and a "Watch it run" video (`#tour`) sits under the "At a glance" list.
+  - The playable sample talk moved into "Try it here" (`#try`), under the video. Its region name, status text, buttons and test ids are unchanged.
+  - Names in the new film and the video chapters were chosen to avoid the page's existing control names, such as "Presenter view" and "Slide 4 of 17". Playwright matches names by substring, so a repeat would make a test's locator match two elements.
+  - The PRD's flows 1 and 2 gained the film, the video and `#try`. No test was edited in the portal.
+- **01:57** Commit `5e2744f` was pushed. Vercel started the preview on its own this time, and it was ready at 01:59.
+- **01:59–02:03** TestSprite queued 27 tests on the PR #11 preview and **all 27 passed** ([run `f242796d`](https://www.testsprite.com/dashboard-v3/o/dfe734b3-7442-5019-aa71-fa10706b4f14/projects/4a558259-6d77-449a-bede-151ba58b667a/execution/f242796d-a0c5-4584-a29b-d3dc539db17c)). It cost about 13.5 credits.
+- **After the run:** the preview was checked in headless Chrome.
+  - `/media/lectern-tour.mp4` is served as `video/mp4` with byte ranges.
+  - On screen, the video plays muted. It had reached 6.5 s after 7 s, fully buffered.
+  - With reduced motion it neither loads nor starts.
