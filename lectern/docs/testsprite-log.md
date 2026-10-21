@@ -218,3 +218,20 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
     - The sum: setup 6.5 + run 1 13.5 + re-runs 2.5 + PRS-006 0.5 + five PR runs at 13.5 each = 90.5.
   - Production answers `/api/account` with `{"accounts":false}`, and `/api/draft-deck` with `"available":true`.
 - **This run:** #13 is expected to cost about 13.5 credits, leaving about 46. Its result is on the pull request's `TestSprite V3` check. Pushing the result here would start another full run, so it goes into the next pull request's log entry.
+
+## Four new slide types
+
+**2026-10-22** (China time)
+
+- **Before the run:** the branch `claude/lectern-new-kinds` adds Scorecard, Pricing, Contact and Word cloud, which brings the built-in slide types from 30 to 34.
+  - The vitest suite passed on the branch: 667 tests in 47 files, 42 of them new (`tests/pitch-kinds.test.ts`, `tests/word-cloud.test.ts`). `npm run build` passed.
+  - The live word cloud was checked by hand in one browser, with the host on `127.0.0.1` and a phone on `localhost`:
+    - the phone sent three words, refused a repeat that differed only in case, and closed its answer box at the limit;
+    - the big screen redrew the cloud without a reload;
+    - the Share panel's hide button took a word off the big screen;
+    - **Keep** saved the words on the slide.
+- **What the suite may notice:** the intro page's "At a glance" list counts the slide types, so it now reads "34 slide types". The PRD said 30 (flow 1).
+  - The PRD now says 34. It also has a new flow 13 for the four slide types, and the out-of-scope list now covers live word cloud answers.
+  - If WLC-006 checks the number in that list, it fails on this preview until its expected text is changed to "34 slide types" in the portal. That would be the loop doing its job, not a regression.
+  - Flow 13 has no test yet. New tests for it would be added in the portal from the PRD.
+- **This run:** about 13.5 credits for the 27 tests, leaving about 32.5 of the month's 150 if the last count was right.
