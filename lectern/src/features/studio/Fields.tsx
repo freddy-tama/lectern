@@ -1,4 +1,4 @@
-import { Check, ExternalLink, ImagePlus, Plus, Search, Star, Trash2, X } from 'lucide-react';
+import { Check, ChevronRight, ExternalLink, ImagePlus, PenTool, Plus, Search, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FieldSpec } from '../../core/kinds/types';
 import { RIGHTS_LABEL, captionCredit, creditLine, needsCredit, shortCredit } from '../../core/pictures/credits';
@@ -9,6 +9,7 @@ import { NoServerError, downloadPicture } from '../pictures/api';
 import { frameShape, searchesFrom, usePictureContext } from '../pictures/context';
 import { PictureFinder } from '../pictures/PictureFinder';
 import { dismissResult, isStarred, savePicture, starPicture, undismissResult, unstarPicture, useCredit, usePictureMemory } from '../pictures/store';
+import { ActivityField, DrawPanel, VideoField } from './MediaFields';
 
 type Content = Record<string, unknown>;
 
@@ -19,11 +20,30 @@ export interface FieldsProps {
   prefix?: string;
 }
 
-/** Draws the form for a slide kind from its field specs. */
+/**
+ * Draws the form for a slide kind from its field specs. The content fields come first;
+ * switches gather at the end, and fields marked "more" fold away under More options.
+ */
 export function Fields({ fields, content, onChange, prefix = '' }: FieldsProps) {
+  const main = fields.filter((f) => !f.more && f.type !== 'toggle');
+  const toggles = fields.filter((f) => !f.more && f.type === 'toggle');
+  const more = fields.filter((f) => f.more);
+  const draw = (f: FieldSpec) => <Field key={f.key} spec={f} content={content} onChange={onChange} prefix={prefix} />;
+  // Open More options when something in it is already set, so nothing set is hidden.
+  const set = more.some((f) => {
+    const v = content[f.key];
+    return typeof v === 'boolean' ? v : Array.isArray(v) ? v.length > 0 : typeof v === 'string' ? v.trim() !== '' : v != null;
+  });
   return (
     <div className="fields">
-      {fields.map((f) => <Field key={f.key} spec={f} content={content} onChange={onChange} prefix={prefix} />)}
+      {main.map(draw)}
+      {toggles.length > 0 && <div className="field-switches">{toggles.map(draw)}</div>}
+      {more.length > 0 && (
+        <details className="more-options" open={set || undefined}>
+          <summary><ChevronRight size={14} aria-hidden /> More options</summary>
+          <div className="fields">{more.map(draw)}</div>
+        </details>
+      )}
     </div>
   );
 }
@@ -63,11 +83,15 @@ function Field({ spec, content, onChange, prefix }: { spec: FieldSpec; content: 
       );
     case 'toggle':
       return (
-        <label className="switch">
+        <label className="switch" title={spec.help}>
           <input type="checkbox" checked={Boolean(value)} onChange={(e) => onChange(spec.key, e.target.checked)} />
           <span>{spec.label}</span>
         </label>
       );
+    case 'video':
+      return <VideoField spec={spec} value={typeof value === 'string' ? value : ''} onChange={(v) => onChange(spec.key, v)} bind={bind} />;
+    case 'activity':
+      return <ActivityField spec={spec} content={content} onChange={onChange} bind={bind} />;
     case 'list':
       return <ListField spec={spec} content={content} onChange={onChange} bind={bind} />;
     case 'objects':
@@ -191,6 +215,7 @@ function ImageField({ spec, value, onChange, bind, siblings, onSibling, nested }
   const toast = useToast();
   const [url, setUrl] = useState<string | null>(null);
   const [finding, setFinding] = useState(false);
+  const [drawing, setDrawing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [over, setOver] = useState(false);
   const [error, setError] = useState('');
@@ -309,6 +334,7 @@ function ImageField({ spec, value, onChange, bind, siblings, onSibling, nested }
       <div className="image-actions">
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setFinding(true)}><Search size={14} /> {value ? 'Change' : 'Find a picture'}</button>
         <button type="button" className="btn btn-ghost btn-sm" onClick={() => input.current?.click()} disabled={busy}><ImagePlus size={14} /> Upload</button>
+        <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDrawing((v) => !v)} aria-expanded={drawing} title="Draw a picture with AI, or paste SVG code"><PenTool size={14} /> Draw</button>
         {isAsset && (
           <button type="button" className={`icon-btn image-star ${starred ? 'on' : ''}`} onClick={toggleStar} aria-pressed={starred}
             aria-label={starred ? 'Starred: offered first for similar searches. Click to unstar' : 'Star this picture to reuse it in other slides'}
@@ -319,7 +345,15 @@ function ImageField({ spec, value, onChange, bind, siblings, onSibling, nested }
         {value && <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={remove}><Trash2 size={14} /> Remove</button>}
         <input ref={input} type="file" accept="image/*" hidden onChange={(e) => { take(e.target.files?.[0]); e.target.value = ''; }} />
       </div>
-      {error && <span className="field-help" role="alert" style={{ color: 'var(--danger)' }}>{error}</span>}
+      {drawing && (
+        <DrawPanel
+          shape={shape}
+          suggestion={query}
+          onClose={() => setDrawing(false)}
+          onDone={(ref, note) => { onChange(ref); setDrawing(false); if (note) toast.show(note); }}
+        />
+      )}
+      {error && <span className="field-help field-error" role="alert">{error}</span>}
       {spec.help && <span className="field-help">{spec.help}</span>}
       <PictureFinder
         open={finding}

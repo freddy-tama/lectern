@@ -7,6 +7,7 @@ const GROUPS: { id: KindGroup; label: string }[] = [
   { id: 'Explain', label: 'Explain' },
   { id: 'Data', label: 'Data' },
   { id: 'Visual', label: 'Pictures and diagrams' },
+  { id: 'Media', label: 'Video and the web' },
   { id: 'Engage', label: 'Engage the audience' },
   { id: 'Close', label: 'Close' },
 ];

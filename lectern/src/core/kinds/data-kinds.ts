@@ -125,6 +125,22 @@ function chartRows(c: C): ChartRow[] {
     .map((r) => ({ label: r.label, value: toNumber(r.raw), value2: toNumber(r.raw2), hasValue2: r.raw2 !== '' }));
 }
 
+const TIME_LABEL = /^(q[1-4]|h[12]|fy|jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|mon|tue|wed|thu|fri|sat|sun|week|day|month|year|'\d\d|\d{4}|\d{1,2}[/:-]\d)/i;
+
+/**
+ * The chart that suits the numbers: parts of a whole as a doughnut, a series over time as a line,
+ * long labels as bars, everything else as columns.
+ */
+export function autoChart(rows: ChartRow[]): ChartType {
+  if (!rows.length) return 'column';
+  const two = rows.some((r) => r.hasValue2);
+  const total = rows.reduce((sum, r) => sum + r.value, 0);
+  if (!two && rows.length >= 2 && rows.length <= 6 && rows.every((r) => r.value >= 0) && total >= 98 && total <= 102) return 'doughnut';
+  if (rows.length >= 4 && rows.filter((r) => TIME_LABEL.test(r.label)).length >= rows.length - 1) return 'line';
+  if (rows.length > 7 || rows.some((r) => r.label.length > 14)) return 'bar';
+  return 'column';
+}
+
 export function chartTypeOf(variant: string | undefined): ChartType {
   return (CHART_TYPES as readonly string[]).includes(variant ?? '') ? variant as ChartType : 'column';
 }
@@ -181,6 +197,7 @@ const chart: SlideKindDefinition<C> = {
     { id: 'column', label: 'Columns' }, { id: 'bar', label: 'Bars' }, { id: 'line', label: 'Line' },
     { id: 'pie', label: 'Pie' }, { id: 'doughnut', label: 'Doughnut' },
   ],
+  autoVariant: (c) => autoChart(chartRows(c)),
   fields: [
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
     { key: 'rows', label: 'Data', type: 'objects', itemLabel: 'Row', max: 12, min: 1, help: 'Leave the second value empty for a single series. Pie and doughnut use the first value only.', fields: [

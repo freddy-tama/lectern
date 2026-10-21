@@ -129,6 +129,9 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
+/** Largest video file sent to phones. */
+const PHONE_VIDEO_MAX = 8 * 1024 * 1024;
+
 async function packageFor(role: Role): Promise<string | null> {
   if (!deck) return null;
   const key = `${role}:${deck.updatedAt}:${JSON.stringify(snap.options)}`;
@@ -140,7 +143,8 @@ async function packageFor(role: Role): Promise<string | null> {
   const assets: SharePackage['assets'] = [];
   for (const id of assetIds({ shared, custom })) {
     const asset = await db.assets.get(id);
-    if (asset) assets.push(sharedAsset(asset, await blobToDataUrl(asset.blob)));
+    // Big video files stay on the main screen; phones show a still in their place.
+    if (asset && !(asset.mime.startsWith('video/') && asset.blob.size > PHONE_VIDEO_MAX)) assets.push(sharedAsset(asset, await blobToDataUrl(asset.blob)));
   }
   const pkg: SharePackage = { format: 'lectern-share', version: 1, role, deck: shared, theme: custom, assets, options: snap.options };
   const json = JSON.stringify(pkg);

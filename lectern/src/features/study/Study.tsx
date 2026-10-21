@@ -80,7 +80,7 @@ function ReadMode({ deckId, deck, slides, steps, markOf }: {
   return (
     <div className="study-body study-read">
       <div className="study-slide-col">
-        <SlideView slide={slide} deck={deck} number={index + 1} count={slides.length} step={step} framed label={`Slide ${index + 1}`} />
+        <SlideView slide={slide} deck={deck} number={index + 1} count={slides.length} step={step} framed label={`Slide ${index + 1}`} live />
         <div className="study-nav">
           <button type="button" className="btn btn-secondary" onClick={() => go(index - 1)} disabled={index === 0}><ChevronLeft size={16} /> Back</button>
           {max > 0 && (

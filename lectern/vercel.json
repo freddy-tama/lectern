@@ -10,6 +10,7 @@
     "api/lecture-notes.ts": { "maxDuration": 300 },
     "api/revise-slide.ts": { "maxDuration": 300 },
     "api/deck-assistant.ts": { "maxDuration": 300 },
+    "api/make-code.ts": { "maxDuration": 300 },
     "api/picture-search.ts": { "maxDuration": 30 },
     "api/picture-fetch.ts": { "maxDuration": 60 },
     "api/picture-generate.ts": { "maxDuration": 180 }

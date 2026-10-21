@@ -255,7 +255,7 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
       </header>
 
       <div className={`phone-stage ${following ? 'is-following' : ''}`} ref={stageRef} {...swipe}>
-        <SlideView slide={slide} deck={deck} number={index + 1} count={count} step={step} flags={link.state?.flags} label={`Slide ${index + 1} of ${count}`} framed />
+        <SlideView slide={slide} deck={deck} number={index + 1} count={count} step={step} flags={link.state?.flags} label={`Slide ${index + 1} of ${count}`} framed live />
         {following && link.state?.blank && <div className="phone-blank">The presenter paused the slides</div>}
         <button type="button" className="phone-full" onClick={fullscreen} aria-label="Full screen"><Maximize size={16} /></button>
       </div>

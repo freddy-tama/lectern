@@ -1,10 +1,11 @@
 import { ChartColumn, FilePlus2, FileText, GraduationCap, Mic, Rocket, Sparkles, Upload } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { autoVariants, suggestLook } from '../../core/deck/auto-style';
 import { blankDeck, draftToDeck } from '../../core/deck/draft';
 import { outlineToDraft } from '../../core/deck/outline';
 import { wording } from '../../core/deck/purpose';
-import { AUDIENCES, type Audience, type DeckPurpose, PURPOSES, uid } from '../../core/deck/types';
+import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, uid } from '../../core/deck/types';
 import { allThemes } from '../../core/engine/themes';
 import { OUTLINE_ACCEPT, fileToOutline } from '../../core/import/files';
 import { getKind } from '../../core/kinds/registry';
@@ -110,6 +111,15 @@ function startAudience(purpose: DeckPurpose): Audience {
   return purpose === 'lesson' ? 'teen' : 'adult';
 }
 
+/** The look choice that turns on auto style. */
+const AUTO = 'auto';
+
+/** With Auto chosen, the deck gets the look that suits it and auto style for its layouts. */
+function styled(deck: Deck, themeId: string): Deck {
+  if (themeId !== AUTO) return deck;
+  return autoVariants({ ...deck, themeId: suggestLook(deck), autoStyle: true });
+}
+
 export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean; onClose(): void; lesson?: Lesson; course?: Course }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -159,10 +169,10 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const close = () => { abort.current?.abort(); onClose(); };
 
   const finish = async (draft: DeckDraft, source?: string) => {
-    let deck = draftToDeck(
+    let deck = styled(draftToDeck(
       { ...draft, title: title.trim() || draft.title },
       { audience, themeId, lessonId: lesson?.id, source, purpose },
-    );
+    ), themeId);
     const first = deck.slides[0];
     if (first?.kind === 'title' && course && lesson && !String(first.content.eyebrow ?? '')) {
       first.content = { ...first.content, eyebrow: `Week ${lesson.week} · ${course.title}` };
@@ -184,7 +194,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const create = async () => {
     setError('');
     if (mode === 'blank') {
-      const deck = blankDeck({ title: title.trim() || lesson?.title || 'Untitled deck', audience, themeId, purpose, lessonId: lesson?.id, eyebrow: lesson && course ? `Week ${lesson.week} · ${course.title}` : '' });
+      const deck = styled(blankDeck({ title: title.trim() || lesson?.title || 'Untitled deck', audience, themeId, purpose, lessonId: lesson?.id, eyebrow: lesson && course ? `Week ${lesson.week} · ${course.title}` : '' }), themeId);
       deck.id = uid('d');
       await addDeck(deck);
       onClose();
@@ -358,7 +368,15 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
               <div className="field">
                 <span className="field-label">Look</span>
                 <div className="theme-picker" role="radiogroup" aria-label="Look">
-                  {allThemes().map((t) => (
+                  <button type="button" role="radio" aria-checked={themeId === AUTO} className="theme-option theme-auto" onClick={() => setThemeId(AUTO)} title="Lectern picks a look that suits the deck and a layout for every slide">
+                    <SlideView
+                      slide={THEME_SAMPLE}
+                      deck={{ themeId: suggestLook({ audience, purpose, lessonId: lesson?.id, slides: [], title: title || topic }), audience: 'adult', title: '' }}
+                      framed
+                    />
+                    <span><Sparkles size={12} aria-hidden /> Auto</span>
+                  </button>
+                  {allThemes().filter((t) => !t.id.startsWith('auto-')).map((t) => (
                     <button key={t.id} type="button" role="radio" aria-checked={themeId === t.id} className="theme-option" onClick={() => setThemeId(t.id)} title={t.description}>
                       <SlideView
                         slide={THEME_SAMPLE}

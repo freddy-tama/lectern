@@ -57,6 +57,24 @@ export function useKeys(handler: (e: KeyboardEvent) => void, deps: unknown[] = [
   }, deps);
 }
 
+/** An on/off preference kept in this browser, such as a folded panel. */
+export function useStoredFlag(key: string, initial: boolean): [boolean, (next: boolean | ((was: boolean) => boolean)) => void] {
+  const [value, setValue] = useState(() => {
+    try {
+      const v = localStorage.getItem(key);
+      return v === null ? initial : v === '1';
+    } catch {
+      return initial;
+    }
+  });
+  const set = (next: boolean | ((was: boolean) => boolean)) => setValue((was) => {
+    const v = typeof next === 'function' ? next(was) : next;
+    try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* private mode */ }
+    return v;
+  });
+  return [value, set];
+}
+
 export function useNow(intervalMs = 1000) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

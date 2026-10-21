@@ -311,6 +311,15 @@ export async function imageDataUrl(src: string): Promise<string | null> {
   }
 }
 
+/** A stored video as a data URL for export, or null when it is missing or larger than maxBytes. */
+export async function mediaDataUrl(src: string, maxBytes = 150 * 1024 * 1024): Promise<string | null> {
+  if (src.startsWith('data:')) return src;
+  if (!src.startsWith('asset:')) return null;
+  const blob = (await db.assets.get(src.slice(6)))?.blob;
+  if (!blob || blob.size > maxBytes) return null;
+  return blobToDataUrl(blob);
+}
+
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

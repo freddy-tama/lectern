@@ -6,9 +6,12 @@
 import JSZip from 'jszip';
 import PptxGenJS from 'pptxgenjs';
 import type { Deck, KeyNotes } from '../deck/types';
-import { type Box, type ChartBox, type ImageBox, type ShapeBox, type TableBox, type TextBox, PT_PER_PX, PX_PER_INCH } from '../engine/boxes';
+import { type Box, type ChartBox, type EmbedBox, type ImageBox, type ShapeBox, type TableBox, type TextBox, type VideoBox, PT_PER_PX, PX_PER_INCH } from '../engine/boxes';
 import { layoutDeck } from '../engine/layout';
 import { type Theme, fontFamily, fontWeight, getTheme } from '../engine/themes';
+import { displayUrl } from '../media/embed';
+import { qrGifDataUrl } from '../media/qr';
+import { parseVideo, videoThumbnail, videoWatchUrl } from '../media/video';
 
 export type StepMode = 'animate' | 'build' | 'final';
 
@@ -19,6 +22,8 @@ export interface PptxOptions {
   includeNotes?: boolean;
   /** Turns an image source into a data: URL, or null to skip the image. Default: data: URLs pass, others are skipped. */
   resolveImage?: (src: string) => Promise<string | null>;
+  /** Turns a stored video ("asset:<id>") into a data: URL to embed, or null to show a still instead. */
+  resolveMedia?: (src: string) => Promise<string | null>;
   /** Default 'blob' in browsers, 'nodebuffer' otherwise. */
   output?: 'blob' | 'nodebuffer';
   /** A credit line for each picture source. Slides that show a credited picture get it in their speaker notes. */
@@ -158,6 +163,8 @@ interface Ctx {
   theme: Theme;
   warnings: string[];
   images: Map<string, ImageData | null>;
+  /** Embedded videos by source, as "video/mp4;base64,…". */
+  media: Map<string, string | null>;
 }
 
 function textOptions(box: TextBox, theme: Theme, name: string): PptxGenJS.TextPropsOptions {
@@ -255,6 +262,77 @@ function addImage(slide: PptxGenJS.Slide, box: ImageBox, ctx: Ctx, name: string,
     const adj = Math.round(Math.min(0.5, box.radius / Math.min(shapeW, shapeH)) * 100000);
     meta.rounded.set(name, adj);
   }
+}
+
+// ─── Video, activities and web pages ──────────────────────────────────
+
+function position(box: Box) {
+  return { x: round(inches(box.x)), y: round(inches(box.y)), w: round(inches(box.w)), h: round(inches(box.h)) };
+}
+
+/** The still card PowerPoint shows for live content it can't run: a panel, a title, a link and its QR code. */
+function addStill(slide: PptxGenJS.Slide, pptx: PptxGenJS, box: VideoBox | EmbedBox, ctx: Ctx, name: string, o: { mark: string; title: string; detail: string; link: string }) {
+  const radius = box.radius ? round(inches(Math.min(box.radius, Math.min(box.w, box.h) / 2))) : 0;
+  slide.addShape(radius ? pptx.ShapeType.roundRect : pptx.ShapeType.rect, {
+    ...position(box), objectName: name, fill: { color: hex(box.fill, '111111') }, line: { type: 'none' }, ...(radius ? { rectRadius: radius } : {}),
+  });
+  const qr = o.link ? qrGifDataUrl(o.link) : '';
+  const qrSize = qr ? Math.min(box.h * 0.5, 320) : 0;
+  const textW = box.w - (qr ? qrSize + 96 : 0) - 96;
+  const accent = hex(box.type === 'embed' ? box.accent : box.ink);
+  const runs: PptxGenJS.TextProps[] = [
+    { text: o.mark, options: { fontSize: 40, color: accent, breakLine: true } },
+    { text: o.title, options: { fontSize: 28, bold: true, color: hex(box.ink), breakLine: true } },
+  ];
+  if (o.detail) runs.push({ text: o.detail, options: { fontSize: 18, color: hex(box.ink), breakLine: Boolean(o.link) } });
+  if (o.link) runs.push({ text: displayUrl(o.link), options: { fontSize: 18, color: accent, underline: { style: 'sng' }, hyperlink: { url: o.link } } });
+  slide.addText(runs, {
+    x: round(inches(box.x + 48)), y: round(inches(box.y + 48)), w: round(inches(Math.max(200, textW))), h: round(inches(Math.max(100, box.h - 96))),
+    fontFace: fontFamily(ctx.theme, box.type === 'embed' ? box.font ?? 'body' : 'body', 'pptx'),
+    valign: 'middle', align: qr ? 'left' : 'center', margin: 0, objectName: `${name} text`,
+  });
+  if (!qr) return;
+  const parsed = parseDataUrl(qr);
+  if ('error' in parsed) return;
+  slide.addImage({
+    data: parsed.data, objectName: `${name} QR code`, altText: `QR code for ${o.link}`,
+    x: round(inches(box.x + box.w - 48 - qrSize)), y: round(inches(box.y + (box.h - qrSize) / 2)), w: round(inches(qrSize)), h: round(inches(qrSize)),
+  });
+}
+
+function addVideo(slide: PptxGenJS.Slide, pptx: PptxGenJS, box: VideoBox, ctx: Ctx, name: string) {
+  const source = parseVideo(box.src);
+  if (source?.provider === 'youtube') {
+    // PowerPoint 365 plays these in the slide when it is online.
+    const start = box.start || source.start;
+    const cover = ctx.images.get(videoThumbnail(source));
+    slide.addMedia({
+      type: 'online', link: `https://www.youtube.com/embed/${source.id}${start ? `?start=${start}` : ''}`,
+      ...position(box), objectName: name, ...(cover ? { cover: cover.data } : {}),
+    });
+    return;
+  }
+  const data = ctx.media.get(box.src);
+  if (data) {
+    const extn = data.split(';')[0].split('/')[1]?.replace('quicktime', 'mov') || 'mp4';
+    slide.addMedia({ type: 'video', data, extn, ...position(box), objectName: name });
+    return;
+  }
+  const watch = videoWatchUrl(source);
+  if (source?.provider === 'file' && !watch) ctx.warnings.push('A stored video could not be put in the PowerPoint, so its slide shows a placeholder.');
+  addStill(slide, pptx, box, ctx, name, { mark: '▶', title: box.title || 'Video', detail: watch ? 'Watch the video:' : 'Plays when you present from Lectern.', link: watch });
+}
+
+function addEmbed(slide: PptxGenJS.Slide, pptx: PptxGenJS, box: EmbedBox, ctx: Ctx, name: string) {
+  const link = box.openUrl || box.url || '';
+  addStill(slide, pptx, box, ctx, name, {
+    mark: box.html ? '◆' : '↗',
+    title: box.title || (box.html ? 'Activity' : 'Web page'),
+    detail: box.html
+      ? 'An interactive activity. Present from Lectern, or open the deck’s web page copy, to use it.'
+      : link ? 'Open it here, or scan the code:' : '',
+    link: box.html ? '' : link,
+  });
 }
 
 /** An Excel number format for chart values: "$"#,##0 or #,##0.0"%". */
@@ -488,6 +566,17 @@ async function postProcess(buffer: ArrayBuffer, pages: PageMeta[], animate: bool
 
 // ─── Export ───────────────────────────────────────────────────────────
 
+async function loadMedia(sources: string[], options: PptxOptions): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  for (const src of sources) {
+    if (out.has(src)) continue;
+    const url = options.resolveMedia ? await options.resolveMedia(src).catch(() => null) : (src.startsWith('data:') ? src : null);
+    const m = url ? /^data:(video\/[\w.+-]+)(?:;[^,;]*)*;base64,([\s\S]+)$/i.exec(url) : null;
+    out.set(src, m ? `${m[1].toLowerCase()};base64,${m[2]}` : null);
+  }
+  return out;
+}
+
 async function loadImages(sources: string[], options: PptxOptions, warnings: string[]): Promise<Map<string, ImageData | null>> {
   const out = new Map<string, ImageData | null>();
   for (const src of sources) {
@@ -522,9 +611,14 @@ export async function exportDeckToPptx(deck: Deck, options: PptxOptions = {}): P
   const theme = getTheme(deck.themeId);
   const laid = layoutDeck(deck, { target: 'pptx', mode: 'show' });
 
-  const sources = laid.flatMap(({ layout }) => layout.boxes.filter((b): b is ImageBox => b.type === 'image').map((b) => b.src));
+  const sources = laid.flatMap(({ layout }) => layout.boxes.flatMap((b) => (b.type === 'image' ? [b.src] : [])));
   const images = await loadImages(sources, options, warnings);
-  const ctx: Ctx = { theme, warnings, images };
+  // A YouTube still becomes the cover of the online video. Without one PowerPoint shows its own, so a miss isn't a warning.
+  const covers = laid.flatMap(({ layout }) => layout.boxes.flatMap((b) => (b.type === 'video' ? [videoThumbnail(parseVideo(b.src))].filter(Boolean) : [])));
+  for (const [src, data] of await loadImages(covers.filter((src) => !images.has(src)), options, [])) images.set(src, data);
+  const files = laid.flatMap(({ layout }) => layout.boxes.filter((b): b is VideoBox => b.type === 'video' && parseVideo(b.src)?.provider === 'file').map((b) => b.src));
+  const media = await loadMedia(files, options);
+  const ctx: Ctx = { theme, warnings, images, media };
 
   const pptx = new PptxGenJS();
   pptx.defineLayout({ name: 'LECTERN_16x9', width: CANVAS_IN.w, height: CANVAS_IN.h });
@@ -558,6 +652,8 @@ export async function exportDeckToPptx(deck: Deck, options: PptxOptions = {}): P
           else if (box.type === 'image') addImage(page, box, ctx, name, meta);
           else if (box.type === 'chart') addChart(page, pptx, box, ctx, name);
           else if (box.type === 'table') addTable(page, box, ctx, name);
+          else if (box.type === 'video') addVideo(page, pptx, box, ctx, name);
+          else if (box.type === 'embed') addEmbed(page, pptx, box, ctx, name);
         } catch (error) {
           warnings.push(`${label}: a ${box.type} could not be exported (${error instanceof Error ? error.message : String(error)}).`);
         }
