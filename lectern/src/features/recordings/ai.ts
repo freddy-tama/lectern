@@ -1,7 +1,7 @@
 // Client for the optional AI step: class notes from a transcript (api/lecture-notes.ts).
 
 import type { LectureNotes } from '../../core/transcribe/types';
-import { savedCode } from '../studio/ai';
+import { aiPost } from '../account/session';
 
 export interface NotesAiStatus {
   available: boolean;
@@ -31,12 +31,7 @@ export interface NotesRequest {
 export const MAX_TRANSCRIPT = 300_000;
 
 export async function makeClassNotes(req: NotesRequest, signal?: AbortSignal): Promise<LectureNotes> {
-  const res = await fetch('/api/lecture-notes', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-lectern-code': savedCode() },
-    body: JSON.stringify(req),
-    signal,
-  });
+  const res = await aiPost('/api/lecture-notes', JSON.stringify(req), signal);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'Class notes couldn’t be made. Try again.');
   return { ...(body.notes as LectureNotes), createdAt: Date.now() };

@@ -1,5 +1,5 @@
 import {
-  AlertCircle, AudioLines, Check, Download, FileText, Image as ImageIcon, Loader2, MonitorPlay, Pencil,
+  AlertCircle, AudioLines, Check, Download, FileText, Image as ImageIcon, Loader2, MonitorPlay, NotebookPen, Pencil,
   RotateCcw, Sparkles, Upload, Wand2, X,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -19,6 +19,8 @@ import { DENSITIES, type Density, LENGTHS, rememberDeckPrefs, useProfile } from 
 import { addDeck, isoDate, saveAsset } from '../../data/repo';
 import { useToast } from '../../ui/Toast';
 import { addRecordingFile } from '../recordings/actions';
+import { AiAccessNotice } from '../account/AccountUi';
+import { useAiAccess } from '../account/session';
 import { cancelTranscription, loadPrefs, onTranscriptionEnd, transcribe, useTranscriber } from '../recordings/engine';
 import { formatBytes, jobLabel } from '../recordings/status';
 import { SlideView } from '../slides/SlideView';
@@ -29,7 +31,7 @@ import { type AiQuestion, draftOutline, fetchQuestions } from './ai';
 import { approveOutline, createJob, finishJob, recover, runJob, runsSnapshot, saveOutline, stopJob, subscribeRuns, toggleDraftFit } from './drafting';
 import { DraftingView, ResumeCard, useJobPictures } from './DraftingView';
 import { dragHasFiles, onHandOff, takeHandedOff } from './handoff';
-import { ACCEPT_ALL, type Source, buildMaterial, countWords, fallbackTopic, kindOf, offlineDraft, placePictures, purposeLabel, stem } from './make';
+import { ACCEPT_ALL, type Source, buildMaterial, countWords, fallbackTopic, hasMaterial, kindOf, offlineDraft, placePictures, purposeLabel, stem } from './make';
 import { pictureForAi, pictureForDeck } from './pictures';
 import { OutlineEditor } from './OutlineEditor';
 import { type Answer, QuestionDialog } from './QuestionDialog';
@@ -204,7 +206,13 @@ export default function MakePage() {
   const ready = sources.filter((s) => s.status === 'ready');
   const busy = sources.filter((s) => s.status === 'reading' || s.status === 'transcribing');
   const pictures = ready.flatMap((s) => s.pictures).slice(0, 8);
-  const aiOn = ai?.available === true;
+  const access = useAiAccess();
+  // The server has AI, but this person can't use it yet: they need to sign in, or their credits are used up.
+  const blocked = ai?.available === true && (access === 'sign_in' || access === 'no_credits');
+  const aiOn = ai?.available === true && access === 'ok';
+  // Without AI the slides come from the files, so a topic alone can't become a deck.
+  const offlineOnly = ai?.available === false || blocked;
+  const material = hasMaterial(ready);
 
   const draft = async (answers: Answer[], suggestion: { title: string; topic: string } | null) => {
     started.current = Date.now();
@@ -323,8 +331,15 @@ export default function MakePage() {
     if (!ready.length && !brief.trim()) { setError('Add a file, or say what the deck is about.'); return; }
     setError('');
     const status = ai ?? await aiStatus();
+    const canDraft = status.available && access === 'ok';
+    if (!canDraft && !hasMaterial(ready)) {
+      setError(!status.available ? 'AI isn’t set up here, so Lectern can’t draft from a topic alone. Start from your notes, or add a file.'
+        : access === 'no_credits' ? 'You’ve used all your AI credits, so Lectern can’t draft from a topic alone. Start from your notes, or add a file.'
+        : 'Sign in to draft a deck from a topic alone. Or start from your notes, or add a file.');
+      return;
+    }
     abort.current = new AbortController();
-    if (!status.available || !ask) { void draft([], null); return; }
+    if (!canDraft || !ask) { void draft([], null); return; }
     setStage('reading');
     started.current = Date.now();
     try {
@@ -519,18 +534,45 @@ export default function MakePage() {
                 <label className="field ad-brief">
                   <span className="field-label">Anything Lectern should know? <span className="faint" style={{ fontWeight: 400 }}>(optional)</span></span>
                   <textarea className="textarea" rows={3} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder={BRIEF_PLACEHOLDER[purpose]} />
-                  {!sources.length && <span className="field-help">No files? Describe the topic here and Lectern drafts from that.</span>}
+                  {aiOn && !sources.length && <span className="field-help">No files? Describe the topic here and Lectern drafts from that.</span>}
+                  {offlineOnly && <span className="field-help">{!blocked ? 'Without AI' : access === 'sign_in' ? 'Until you sign in' : 'Without AI credits'}, the slides come from your files, not from this note.</span>}
                 </label>
 
-                {ai?.available === false && (
+                {blocked && (
+                  <>
+                    <AiAccessNotice access={access} what="draft decks with AI">
+                      {material || busy.length > 0
+                        ? `${access === 'sign_in' ? 'Without signing in, ' : 'Until then, '}Lectern builds the slides from your files’ headings and points.`
+                        : `${access === 'sign_in' ? 'Without signing in, ' : 'Until then, '}start from your notes, or add a file and Lectern builds the slides from its headings and points.`}
+                    </AiAccessNotice>
+                    {!material && !busy.length && (
+                      <div className="ad-no-ai-actions">
+                        <Link className="btn btn-secondary btn-sm" to="/decks?new=notes"><NotebookPen size={15} /> Start from notes</Link>
+                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileInput.current?.click()}><Upload size={15} /> Choose a file</button>
+                      </div>
+                    )}
+                  </>
+                )}
+                {offlineOnly && !blocked && (material || busy.length > 0 ? (
                   <div className="notice">
                     <strong>AI isn’t set up on this server.</strong> Lectern builds the slides from your files’ headings and points instead. Recordings are still transcribed on this device.
                   </div>
-                )}
+                ) : (
+                  <div className="notice ad-no-ai" data-testid="make-no-ai">
+                    <p>
+                      <strong>AI isn’t set up on this server,</strong> so Lectern can’t draft a deck from a topic alone.
+                      Start from your notes, or add a file and Lectern builds the slides from its headings and points. Recordings are still transcribed on this device.
+                    </p>
+                    <div className="ad-no-ai-actions">
+                      <Link className="btn btn-secondary btn-sm" to="/decks?new=notes"><NotebookPen size={15} /> Start from notes</Link>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileInput.current?.click()}><Upload size={15} /> Choose a file</button>
+                    </div>
+                  </div>
+                ))}
 
                 <div className="ad-go">
                   {error && <span role="alert" className="ad-error"><AlertCircle size={15} /> {error}</span>}
-                  <button type="button" className="btn btn-brand btn-lg" onClick={make} disabled={busy.length > 0 || (!ready.length && !brief.trim()) || ai === null}>
+                  <button type="button" className="btn btn-brand btn-lg" onClick={make} disabled={busy.length > 0 || (!ready.length && !brief.trim()) || ai === null || access === 'loading'}>
                     {busy.length ? <><Loader2 size={17} className="spin" /> Waiting for {busy.length} file{busy.length === 1 ? '' : 's'}…</> : <><Wand2 size={17} /> Make the deck</>}
                   </button>
                 </div>

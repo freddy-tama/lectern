@@ -4,7 +4,7 @@
 import type { FoundPicture, PictureProvider } from '../../../api/picture-search';
 import type { PictureStyle } from '../../../api/picture-generate';
 import type { PictureShape } from '../../core/pictures/rank';
-import { savedCode } from '../studio/ai';
+import { aiPost } from '../account/session';
 
 export type { PictureProvider, PictureStyle };
 
@@ -80,14 +80,9 @@ export interface GenerateResult {
 }
 
 export async function generatePicture(prompt: string, shape: PictureShape, style: PictureStyle, signal?: AbortSignal): Promise<GenerateResult> {
-  const res = await fetch('/api/picture-generate', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-lectern-code': savedCode() },
-    body: JSON.stringify({ prompt, shape, style }),
-    signal,
-  });
-  const body = await res.json().catch(() => ({})) as { image?: string; model?: string; provider?: string; revisedPrompt?: string; error?: string };
-  if (!res.ok || !body.image) throw Object.assign(new Error(body.error ?? 'The picture couldn’t be made. Try again.'), { status: res.status });
+  const res = await aiPost('/api/picture-generate', JSON.stringify({ prompt, shape, style }), signal);
+  const body = await res.json().catch(() => ({})) as { image?: string; model?: string; provider?: string; revisedPrompt?: string; error?: string; code?: string };
+  if (!res.ok || !body.image) throw Object.assign(new Error(body.error ?? 'The picture couldn’t be made. Try again.'), { status: res.status, code: body.code });
   const blob = await (await fetch(body.image)).blob();
   return { blob, model: body.model ?? '', provider: body.provider ?? '', revisedPrompt: body.revisedPrompt ?? '' };
 }

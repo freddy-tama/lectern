@@ -9,6 +9,8 @@ import { updateRecording } from '../../data/recordings';
 import { Menu } from '../../ui/Menu';
 import { useToast } from '../../ui/Toast';
 import { formatDate, timeAgo } from '../../ui/format';
+import { AiAccessNotice } from '../account/AccountUi';
+import { useAiAccess } from '../account/session';
 import { saveCode, savedCode } from '../studio/ai';
 import { makeQuizDeck, saveClassNotesAsNote, stampedTranscript } from './actions';
 import { MAX_TRANSCRIPT, type NotesAiStatus, makeClassNotes, notesAiStatus } from './ai';
@@ -26,6 +28,7 @@ export function ClassNotesPanel({ rec, lesson, course, onSaveTranscript }: Props
   const navigate = useNavigate();
   const toast = useToast();
   const [ai, setAi] = useState<NotesAiStatus | null>(null);
+  const access = useAiAccess();
   const [code, setCode] = useState(savedCode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -112,6 +115,11 @@ export function ClassNotesPanel({ rec, lesson, course, onSaveTranscript }: Props
         ) : !ai.available ? (
           <div className="rc-notes-off">
             <p><strong>AI class notes aren’t set up on this server.</strong> The person who runs it can add an Anthropic API key to turn them on. Everything else works without it.</p>
+            <button type="button" className="btn btn-secondary" onClick={onSaveTranscript}><NotebookPen size={16} /> Save the transcript as a note</button>
+          </div>
+        ) : access === 'sign_in' || access === 'no_credits' ? (
+          <div className="rc-notes-off">
+            <AiAccessNotice access={access} what="make class notes with AI">You can still save the transcript as a note.</AiAccessNotice>
             <button type="button" className="btn btn-secondary" onClick={onSaveTranscript}><NotebookPen size={16} /> Save the transcript as a note</button>
           </div>
         ) : (

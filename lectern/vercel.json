@@ -13,7 +13,7 @@
     "api/make-code.ts": { "maxDuration": 300 },
     "api/picture-search.ts": { "maxDuration": 30 },
     "api/picture-fetch.ts": { "maxDuration": 60 },
-    "api/picture-generate.ts": { "maxDuration": 180 }
+    "api/picture-generate.ts": { "maxDuration": 300 }
   },
   "rewrites": [
     { "source": "/((?!api/|assets/|samples/|icons/|sw\\.js|manifest\\.webmanifest).*)", "destination": "/index.html" }

@@ -12,8 +12,11 @@
 //   ANTHROPIC_API_KEY     required
 //   LECTERN_MODEL         optional, defaults to claude-opus-5-5
 //   LECTERN_ACCESS_CODE   optional; when set, requests must send it in "x-lectern-code"
+//   SUPABASE_*            optional; turns on accounts, so this needs a signed-in person with
+//                         credits left and charges them for it (see api/_lib/account.ts)
 
 import Anthropic from '@anthropic-ai/sdk';
+import { admit, charge, usageOf } from './_lib/account.js';
 
 const MODEL = process.env.LECTERN_MODEL || 'claude-opus-5-5';
 
@@ -152,6 +155,8 @@ export async function POST(request: Request) {
   if (code && request.headers.get('x-lectern-code') !== code) return json({ error: 'Enter the access code for this server to use AI.', needsCode: true }, 401);
   const length = Number(request.headers.get('content-length') ?? 0);
   if (length > 400_000) return json({ error: 'This is too long to send. Start a new one instead.' }, 413);
+  const caller = await admit(request);
+  if (caller instanceof Response) return caller;
 
   let body: Record<string, unknown>;
   try {
@@ -188,6 +193,7 @@ export async function POST(request: Request) {
       system: mode === 'activity' ? activitySystem(look, body) : drawingSystem(look, body, aspect),
       messages: [{ role: 'user', content: parts.join('\n\n') }],
     }).finalMessage();
+    await charge(caller, `make-code:${mode}`, usageOf(response));
     if (response.stop_reason === 'refusal') return json({ error: 'The AI declined to make that. Try describing it another way.' }, 422);
     if (response.stop_reason === 'max_tokens') return json({ error: 'That came out too long. Ask for something simpler.' }, 422);
     const lastSwitch = response.content.map((b) => b.type as string).lastIndexOf('fallback');

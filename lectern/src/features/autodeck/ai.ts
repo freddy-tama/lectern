@@ -4,7 +4,7 @@
 import type { Audience, DeckPurpose } from '../../core/deck/types';
 import type { DraftRequest, PlannedSlide, WrittenSlide } from '../../data/draft-jobs';
 import type { Density, RememberedAnswer } from '../../data/profile';
-import { savedCode } from '../studio/ai';
+import { aiPost } from '../account/session';
 import { type CallUsage, readUsage } from './usage';
 
 export interface AiQuestion {
@@ -36,12 +36,7 @@ export interface QuestionsRequest {
 }
 
 export async function fetchQuestions(req: QuestionsRequest, signal?: AbortSignal): Promise<QuestionsResult> {
-  const res = await fetch('/api/deck-questions', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-lectern-code': savedCode() },
-    body: JSON.stringify({ ...req, remembered: req.remembered.map(({ key, question, answer }) => ({ key, question, answer })) }),
-    signal,
-  });
+  const res = await aiPost('/api/deck-questions', JSON.stringify({ ...req, remembered: req.remembered.map(({ key, question, answer }) => ({ key, question, answer })) }), signal);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'The AI couldn’t read your files.');
   return {
@@ -66,12 +61,7 @@ export const STOPS_THE_JOB = new Set(['off', 'needs_code', 'auth', 'bad_request'
 async function postDraft(body: Record<string, unknown>, signal?: AbortSignal): Promise<Record<string, unknown>> {
   let res: Response;
   try {
-    res = await fetch('/api/draft-deck', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-lectern-code': savedCode() },
-      body: JSON.stringify(body),
-      signal,
-    });
+    res = await aiPost('/api/draft-deck', JSON.stringify(body), signal);
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
     throw new DraftCallError('Lectern couldn’t reach the server. Check your connection, then try again.', 'network', 0);

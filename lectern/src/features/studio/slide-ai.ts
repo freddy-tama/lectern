@@ -8,7 +8,8 @@ import { DENSITY } from '../../core/kinds/kit';
 import { getKind } from '../../core/kinds/registry';
 import type { AnyKind, FieldSpec } from '../../core/kinds/types';
 import { draftingHints } from '../../core/plugins/registry';
-import { aiFieldType, savedCode } from './ai';
+import { aiPost } from '../account/session';
+import { aiFieldType } from './ai';
 
 const ENDPOINT = '/api/revise-slide';
 
@@ -182,18 +183,13 @@ export class SlideAiError extends Error {
 async function post<T>(body: unknown, signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-lectern-code': savedCode() },
-      body: JSON.stringify(body),
-      signal,
-    });
+    res = await aiPost(ENDPOINT, JSON.stringify(body), signal);
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
     throw new SlideAiError('Couldn’t reach the server. Check your connection and try again.');
   }
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new SlideAiError(typeof json.error === 'string' ? json.error : 'The AI request failed. Try again.', res.status === 401);
+  if (!res.ok) throw new SlideAiError(typeof json.error === 'string' ? json.error : 'The AI request failed. Try again.', res.status === 401 && json.code !== 'sign_in');
   return json as T;
 }
 

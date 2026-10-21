@@ -245,6 +245,17 @@
   font-size: 14px;
 }
 
+.ad-no-ai p {
+  margin: 0;
+}
+
+.ad-no-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 /* Settings */
 
 .ad-settings {

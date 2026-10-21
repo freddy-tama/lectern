@@ -4,7 +4,7 @@
 import type { Audience, DeckPurpose } from '../../core/deck/types';
 import { type Theme, THEMES, fontFamily } from '../../core/engine/themes';
 import { cleanSvg, extractHtml, looksLikeHtml, svgAspect } from '../../core/media/embed';
-import { savedCode } from './ai';
+import { aiPost } from '../account/session';
 
 const ENDPOINT = '/api/make-code';
 
@@ -53,18 +53,13 @@ function deckFields(deck: DeckInfo) {
 async function post<T>(body: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(ENDPOINT, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-lectern-code': savedCode() },
-      body: JSON.stringify(body),
-      signal,
-    });
+    res = await aiPost(ENDPOINT, JSON.stringify(body), signal);
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
     throw new CodeAiError('Couldn’t reach the server. Check your connection and try again.');
   }
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new CodeAiError(typeof json.error === 'string' ? json.error : 'The AI request failed. Try again.', res.status === 401);
+  if (!res.ok) throw new CodeAiError(typeof json.error === 'string' ? json.error : 'The AI request failed. Try again.', res.status === 401 && json.code !== 'sign_in');
   return json as T;
 }
 

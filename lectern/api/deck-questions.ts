@@ -3,9 +3,10 @@
 // GET  /api/deck-questions → { available, needsCode }
 // POST /api/deck-questions → { title, topic, purpose, questions } or { error }
 //
-// Environment: the same as api/draft-deck.ts (ANTHROPIC_API_KEY, LECTERN_MODEL, LECTERN_ACCESS_CODE).
+// Environment: the same as api/draft-deck.ts (ANTHROPIC_API_KEY, LECTERN_MODEL, LECTERN_ACCESS_CODE, SUPABASE_*).
 
 import Anthropic from '@anthropic-ai/sdk';
+import { admit, charge, usageOf } from './_lib/account.js';
 
 const MODEL = process.env.LECTERN_MODEL || 'claude-opus-5-5';
 const MAX_EXCERPT = 24_000;
@@ -78,6 +79,8 @@ export async function POST(request: Request) {
   const code = process.env.LECTERN_ACCESS_CODE;
   if (code && request.headers.get('x-lectern-code') !== code) return json({ error: 'Enter the access code for this server to use AI.' }, 401);
   if (Number(request.headers.get('content-length') ?? 0) > 200_000) return json({ error: 'The request is too large.' }, 413);
+  const caller = await admit(request);
+  if (caller instanceof Response) return caller;
 
   let body: QuestionsBody;
   try {
@@ -123,6 +126,7 @@ export async function POST(request: Request) {
       system: SYSTEM,
       messages: [{ role: 'user', content: user }],
     }).finalMessage();
+    await charge(caller, 'deck-questions', usageOf(response));
     if (response.stop_reason === 'refusal') return json({ error: 'The AI declined to read this material.' }, 422);
     if (response.stop_reason === 'max_tokens') return json({ error: 'The AI’s questions ran too long.' }, 422);
     const lastSwitch = response.content.map((b) => b.type as string).lastIndexOf('fallback');

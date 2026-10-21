@@ -3,7 +3,7 @@
 
 import type { Deck } from '../../core/deck/types';
 import { draftingHints } from '../../core/plugins/registry';
-import { savedCode } from './ai';
+import { aiPost, refreshCreditsSoon } from '../account/session';
 import { type DeckOp, assistantKinds, assistantSnapshot } from './deck-ops';
 import { SlideAiError } from './slide-ai';
 
@@ -88,14 +88,14 @@ export async function runAssistantTurn(req: TurnRequest, onEvent: (e: AssistantE
   });
   let res: Response;
   try {
-    res = await fetch(ENDPOINT, { method: 'POST', headers: { 'content-type': 'application/json', 'x-lectern-code': savedCode() }, body, signal });
+    res = await aiPost(ENDPOINT, body, signal);
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
     throw new SlideAiError('Couldn’t reach the server. Check your connection and try again.');
   }
   if (!res.ok || !res.body) {
     const json = await res.json().catch(() => ({}));
-    throw new SlideAiError(typeof json.error === 'string' ? json.error : 'The assistant couldn’t start. Try again.', res.status === 401);
+    throw new SlideAiError(typeof json.error === 'string' ? json.error : 'The assistant couldn’t start. Try again.', res.status === 401 && json.code !== 'sign_in');
   }
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -108,7 +108,11 @@ export async function runAssistantTurn(req: TurnRequest, onEvent: (e: AssistantE
     for (const e of events) {
       if (e.type === 'error') throw new SlideAiError(e.error);
       onEvent(e);
-      if (e.type === 'done') return { ops: e.ops, summary: e.summary, history: e.history, ...(e.stopped ? { stopped: e.stopped } : {}) };
+      if (e.type === 'done') {
+        // Every step was charged as it finished; the balance is read once the turn is over.
+        refreshCreditsSoon();
+        return { ops: e.ops, summary: e.summary, history: e.history, ...(e.stopped ? { stopped: e.stopped } : {}) };
+      }
     }
     if (done) break;
   }

@@ -5,6 +5,8 @@ import { canSplit, splitInDeck } from '../../core/deck/split';
 import type { Deck, DeckPurpose, KeyNotes, Slide } from '../../core/deck/types';
 import { loadSlideFonts } from '../../ui/hooks';
 import { Menu } from '../../ui/Menu';
+import { AiAccessNotice } from '../account/AccountUi';
+import { useAiAccess } from '../account/session';
 import { SlideView } from '../slides/SlideView';
 import { saveCode, savedCode } from './ai';
 import { PRESETS, type PresetId, type RevisionResult, SlideAiError, type SlideAiStatus, TONES, checkRevision, requestLabel, reviseSlide, slideAiStatus } from './slide-ai';
@@ -121,6 +123,10 @@ export function AiMenu({ slide, disabled, onRun, onSplit }: { slide: Slide; disa
   const [code, setCode] = useState(savedCode);
   const splittable = canSplit(slide);
   const ready = status?.available !== false;
+  const access = useAiAccess();
+  const locked = access === 'sign_in' || access === 'no_credits';
+  // AI the person can use now: the server has it, and they're signed in with credits left (or accounts are off).
+  const usable = ready && !locked;
   useEffect(() => { slideAiStatus().then(setStatus); }, []);
 
   return (
@@ -147,6 +153,8 @@ export function AiMenu({ slide, disabled, onRun, onSplit }: { slide: Slide; disa
               <strong>AI isn’t set up on this server.</strong>
               <span>Add an <code>ANTHROPIC_API_KEY</code> to the deployment to revise slides with AI.</span>
             </div>
+          ) : locked ? (
+            <AiAccessNotice access={access} what="revise slides with AI" />
           ) : (
             <>
               <p className="menu-label faint">Revise this slide</p>
@@ -178,14 +186,14 @@ export function AiMenu({ slide, disabled, onRun, onSplit }: { slide: Slide; disa
               <button type="button" className="menu-item" onClick={() => { close(); onSplit(); }}>
                 <Scissors size={16} /><span>Split in two<span className="menu-detail">Moves half the items to a new slide, instantly</span></span>
               </button>
-              {ready && (
+              {usable && (
                 <button type="button" className="menu-item" onClick={() => { close(); onRun('split'); }}>
                   <Sparkles size={16} /><span>Split with AI<span className="menu-detail">Shares out and rewrites the points, with key notes for both</span></span>
                 </button>
               )}
             </>
           )}
-          {ready && (
+          {usable && (
             <>
               <div className="menu-sep" />
               <form

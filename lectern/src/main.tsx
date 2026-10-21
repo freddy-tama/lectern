@@ -13,6 +13,7 @@ import './styles/notes.css';
 import './styles/schedule.css';
 import './styles/share.css';
 import './styles/recordings.css';
+import './styles/account.css';
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -22,6 +23,8 @@ import { initPwa } from './app/pwa';
 import { installPlugin } from './core/plugins/registry';
 import { loadLooks } from './data/looks';
 import { ensureSeeded } from './data/repo';
+import { startAccount } from './features/account/session';
+import { startStudySync } from './features/account/study-sync';
 
 for (const mod of mods) installPlugin(mod);
 initPwa();
@@ -29,6 +32,9 @@ initPwa();
 // Phones joining a shared deck, or opening a handed-out copy, don't need the sample courses.
 if (!/^\/(join|phone|pack)(\/|$)/.test(window.location.pathname)) {
   ensureSeeded().catch((error) => console.error('Could not prepare sample data', error));
+  // Accounts, when this server has them: who is signed in, their AI credits and their study progress.
+  startStudySync();
+  void startAccount();
 }
 
 // Saved looks are registered first so decks that use them draw correctly on first paint.

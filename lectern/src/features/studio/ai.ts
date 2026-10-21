@@ -5,6 +5,7 @@ import type { FieldSpec } from '../../core/kinds/types';
 import type { DeckDraft } from '../../core/plugins/api';
 import { draftingHints } from '../../core/plugins/registry';
 import type { Density } from '../../data/profile';
+import { aiPost } from '../account/session';
 
 export interface AiStatus {
   available: boolean;
@@ -12,15 +13,8 @@ export interface AiStatus {
   needsCode?: boolean;
 }
 
-const CODE_KEY = 'lectern.aiCode';
-
-export function savedCode(): string {
-  try { return localStorage.getItem(CODE_KEY) ?? ''; } catch { return ''; }
-}
-
-export function saveCode(code: string) {
-  try { localStorage.setItem(CODE_KEY, code); } catch { /* private mode */ }
-}
+// The access code lives with the sign-in, which sends it with every AI request.
+export { saveCode, savedCode } from '../account/session';
 
 let status: Promise<AiStatus> | null = null;
 
@@ -78,12 +72,7 @@ export function kindCatalogue() {
 }
 
 export async function draftWithAI(req: DraftRequest, signal?: AbortSignal): Promise<DeckDraft> {
-  const res = await fetch('/api/draft-deck', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-lectern-code': savedCode() },
-    body: JSON.stringify({ ...req, kinds: kindCatalogue(), hints: draftingHints(), budget: DENSITY[req.audience] }),
-    signal,
-  });
+  const res = await aiPost('/api/draft-deck', JSON.stringify({ ...req, kinds: kindCatalogue(), hints: draftingHints(), budget: DENSITY[req.audience] }), signal);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'The AI draft failed. Try again, or start from your notes.');
   return body.draft as DeckDraft;

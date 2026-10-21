@@ -76,6 +76,14 @@ export function fallbackTopic(sources: Pick<Source, 'file' | 'kind'>[]): string 
 }
 
 /**
+ * Whether the files give an offline draft something to build slides from: a file's text,
+ * or pictures. Without AI, a topic typed in the brief isn't enough.
+ */
+export function hasMaterial(sources: Pick<Source, 'kind' | 'text' | 'pictures'>[]): boolean {
+  return sources.some((s) => (s.kind !== 'picture' && s.text.trim() !== '') || s.pictures.length > 0);
+}
+
+/**
  * A deck draft built offline from the files' headings, for servers without AI.
  * One file reads as it is; several become sections of one deck.
  */
