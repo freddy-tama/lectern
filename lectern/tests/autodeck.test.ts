@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
-import { buildMaterial, fallbackTopic, kindOf, offlineDraft, placePictures } from '../src/features/autodeck/make';
+import { buildMaterial, fallbackTopic, hasMaterial, kindOf, offlineDraft, placePictures } from '../src/features/autodeck/make';
 
 registerCoreKinds();
 
@@ -31,6 +31,16 @@ describe('deck maker', () => {
 
   it('names the files when the person wrote no brief', () => {
     expect(fallbackTopic([{ file: file('q3_results.xlsx'), kind: 'doc' }])).toBe('A deck based on “q3 results”.');
+  });
+
+  it('counts only files with text or pictures as something to build an offline deck from', () => {
+    expect(hasMaterial([])).toBe(false);
+    expect(hasMaterial([{ kind: 'doc', text: '  \n ', pictures: [] }])).toBe(false);
+    expect(hasMaterial([{ kind: 'audio', text: '', pictures: [] }])).toBe(false);
+    expect(hasMaterial([{ kind: 'doc', text: '# Plan', pictures: [] }])).toBe(true);
+    expect(hasMaterial([{ kind: 'audio', text: 'We are on track.', pictures: [] }])).toBe(true);
+    expect(hasMaterial([{ kind: 'doc', text: '', pictures: [file('scan.png')] }])).toBe(true);
+    expect(hasMaterial([{ kind: 'picture', text: '', pictures: [file('team.jpg')] }])).toBe(true);
   });
 
   it('builds an offline deck from several files, one section each, with a gallery of pictures', () => {

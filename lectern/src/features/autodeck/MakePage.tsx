@@ -1,5 +1,5 @@
 import {
-  AlertCircle, AudioLines, Check, Download, FileText, Image as ImageIcon, Loader2, MonitorPlay, Pencil,
+  AlertCircle, AudioLines, Check, Download, FileText, Image as ImageIcon, Loader2, MonitorPlay, NotebookPen, Pencil,
   RotateCcw, Sparkles, Upload, Wand2, X,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -29,7 +29,7 @@ import { type AiQuestion, draftOutline, fetchQuestions } from './ai';
 import { approveOutline, createJob, finishJob, recover, runJob, runsSnapshot, saveOutline, stopJob, subscribeRuns, toggleDraftFit } from './drafting';
 import { DraftingView, ResumeCard, useJobPictures } from './DraftingView';
 import { dragHasFiles, onHandOff, takeHandedOff } from './handoff';
-import { ACCEPT_ALL, type Source, buildMaterial, countWords, fallbackTopic, kindOf, offlineDraft, placePictures, purposeLabel, stem } from './make';
+import { ACCEPT_ALL, type Source, buildMaterial, countWords, fallbackTopic, hasMaterial, kindOf, offlineDraft, placePictures, purposeLabel, stem } from './make';
 import { pictureForAi, pictureForDeck } from './pictures';
 import { OutlineEditor } from './OutlineEditor';
 import { type Answer, QuestionDialog } from './QuestionDialog';
@@ -205,6 +205,9 @@ export default function MakePage() {
   const busy = sources.filter((s) => s.status === 'reading' || s.status === 'transcribing');
   const pictures = ready.flatMap((s) => s.pictures).slice(0, 8);
   const aiOn = ai?.available === true;
+  // Without AI the slides come from the files, so a topic alone can't become a deck.
+  const offlineOnly = ai?.available === false;
+  const material = hasMaterial(ready);
 
   const draft = async (answers: Answer[], suggestion: { title: string; topic: string } | null) => {
     started.current = Date.now();
@@ -323,6 +326,10 @@ export default function MakePage() {
     if (!ready.length && !brief.trim()) { setError('Add a file, or say what the deck is about.'); return; }
     setError('');
     const status = ai ?? await aiStatus();
+    if (!status.available && !hasMaterial(ready)) {
+      setError('AI isn’t set up here, so Lectern can’t draft from a topic alone. Start from your notes, or add a file.');
+      return;
+    }
     abort.current = new AbortController();
     if (!status.available || !ask) { void draft([], null); return; }
     setStage('reading');
@@ -519,14 +526,26 @@ export default function MakePage() {
                 <label className="field ad-brief">
                   <span className="field-label">Anything Lectern should know? <span className="faint" style={{ fontWeight: 400 }}>(optional)</span></span>
                   <textarea className="textarea" rows={3} value={brief} onChange={(e) => setBrief(e.target.value)} placeholder={BRIEF_PLACEHOLDER[purpose]} />
-                  {!sources.length && <span className="field-help">No files? Describe the topic here and Lectern drafts from that.</span>}
+                  {aiOn && !sources.length && <span className="field-help">No files? Describe the topic here and Lectern drafts from that.</span>}
+                  {offlineOnly && <span className="field-help">Without AI, the slides come from your files, not from this note.</span>}
                 </label>
 
-                {ai?.available === false && (
+                {offlineOnly && (material || busy.length > 0 ? (
                   <div className="notice">
                     <strong>AI isn’t set up on this server.</strong> Lectern builds the slides from your files’ headings and points instead. Recordings are still transcribed on this device.
                   </div>
-                )}
+                ) : (
+                  <div className="notice ad-no-ai" data-testid="make-no-ai">
+                    <p>
+                      <strong>AI isn’t set up on this server,</strong> so Lectern can’t draft a deck from a topic alone.
+                      Start from your notes, or add a file and Lectern builds the slides from its headings and points. Recordings are still transcribed on this device.
+                    </p>
+                    <div className="ad-no-ai-actions">
+                      <Link className="btn btn-secondary btn-sm" to="/decks?new=notes"><NotebookPen size={15} /> Start from notes</Link>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => fileInput.current?.click()}><Upload size={15} /> Choose a file</button>
+                    </div>
+                  </div>
+                ))}
 
                 <div className="ad-go">
                   {error && <span role="alert" className="ad-error"><AlertCircle size={15} /> {error}</span>}
