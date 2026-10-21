@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto';
+import { existsSync } from 'node:fs';
 import { act, createElement } from 'react';
 import { type Root, createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -8,6 +9,7 @@ import { registerCoreKinds } from '../src/core/kinds/core-kinds';
 import { allKinds } from '../src/core/kinds/registry';
 import { db } from '../src/data/db';
 import Landing, { NAV, PAGE_TITLE } from '../src/features/landing/Landing';
+import { SCENES } from '../src/features/landing/PitchFilm';
 import { TALK_ID, deckRun, sampleDeck } from '../src/features/landing/samples';
 
 registerCoreKinds();
@@ -52,7 +54,7 @@ describe('the front page', () => {
     expect($('h1')?.id).toBe('hero-title');
     expect($('h1')?.textContent).toContain('what to say');
     const sections = $$('section[aria-labelledby]').filter((s) => s.querySelector('h2'));
-    expect(sections).toHaveLength(8);
+    expect(sections).toHaveLength(10);
     for (const s of sections) expect(document.getElementById(s.getAttribute('aria-labelledby')!)?.tagName).toMatch(/^H[12]$/);
     expect(document.title).toBe(PAGE_TITLE);
     expect($('main#main')?.getAttribute('tabindex')).toBe('-1');
@@ -65,7 +67,7 @@ describe('the front page', () => {
     for (const a of [...nav, ...$$<HTMLAnchorElement>('ul[aria-label="At a glance"] a')]) {
       expect(host.querySelector(a.getAttribute('href')!), a.textContent ?? '').not.toBeNull();
     }
-    for (const id of ['sample', 'phone-quiz', 'from-notes', 'key-notes', 'uses', 'slide-types', 'looks', 'how-it-works']) {
+    for (const id of ['tour', 'try', 'sample', 'phone-quiz', 'from-notes', 'key-notes', 'uses', 'slide-types', 'looks', 'how-it-works']) {
       expect(document.getElementById(id), id).not.toBeNull();
     }
   });
@@ -90,6 +92,41 @@ describe('the front page', () => {
     expect($('[data-testid="hero-present"]')?.getAttribute('href')).toBe('/try/talk/present');
     expect($('[data-testid="nav-open-lectern"]')?.getAttribute('href')).toMatch(/^\/start\?next=%2F$|^\/$/);
     expect($('[data-testid="quiz-open-here"]')?.getAttribute('href')).toMatch(/\/pack#./);
+  });
+
+  it('plays the pitch film from the sample talk, and lets you pick a scene and pause', async () => {
+    const chapters = $$<HTMLButtonElement>('ol[aria-label="Scenes"] button');
+    expect(chapters.map((b) => b.textContent?.replace(/^\d+\s*/, ''))).toEqual(SCENES.map((s) => s.label));
+    expect(chapters[0].getAttribute('aria-current')).toBe('step');
+    expect($('.pf-caption')?.textContent).toBe(SCENES[0].caption);
+    // The words in the film are the sample talk's own.
+    const slide = sampleDeck(TALK_ID)!.slides.find((s) => s.id === 's_mt_04')!;
+    expect($('.pf-kn-script')?.textContent).toBe(slide.notes.script);
+    expect($('.pf-quiz-count')?.textContent).toBe('Question 1 of 3');
+
+    expect($('button[aria-label="Pause the animation"]')).not.toBeNull();
+    await act(async () => chapters[2].click());
+    expect(chapters[2].getAttribute('aria-current')).toBe('step');
+    expect(chapters[0].getAttribute('aria-current')).toBeNull();
+    expect($('.pf-caption')?.textContent).toBe(SCENES[2].caption);
+    // Picking a scene stops the film on it.
+    expect($('button[aria-label="Play the animation"]')).not.toBeNull();
+    expect($('.pf')?.getAttribute('data-playing')).toBe('false');
+  });
+
+  it('embeds the tour video muted and looping, with controls, a poster and chapters', () => {
+    const video = $<HTMLVideoElement>('#tour video')!;
+    expect(video.muted).toBe(true);
+    expect(video.loop).toBe(true);
+    expect(video.controls).toBe(true);
+    expect(video.playsInline).toBe(true);
+    expect(video.getAttribute('preload')).toBe('none');
+    for (const url of [video.getAttribute('src')!, video.getAttribute('poster')!]) {
+      expect(url).toMatch(/^\/media\/lectern-tour\.(mp4|jpg)$/);
+      expect(existsSync(`public${url}`), url).toBe(true);
+    }
+    expect($$('#tour ol button').length).toBeGreaterThan(3);
+    expect($('a.hero-watch')?.getAttribute('href')).toBe('#tour');
   });
 
   it('steps the sample talk the way present mode does', async () => {

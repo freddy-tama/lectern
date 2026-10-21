@@ -65,6 +65,10 @@ A first visit to `/` opens the front page at `/welcome`. Until the setup is done
 
 `/try/:sample/:view` opens a sample deck in one view, for links from the front page, a demo or a test. `:sample` is `talk`, `report`, `lesson` or `writing`; `:view` is `studio` (the default), `present`, `presenter`, `prompter`, `study` or `print`. If the sample was deleted it's put back first; a sample you edited is left as it is. Present mode takes `?from=` with a 0-based slide index, for example `/try/talk/present?from=3`. `/try/course` opens the sample course. Leaving present mode goes back to the page you came from, or to the deck in the studio when the show was opened straight from a link.
 
+### The front-page video
+
+The **Watch it run** video on `/welcome` (`public/media/lectern-tour.mp4`, 75 seconds) is a screen recording of the app itself, with the sample data. `scripts/tour/record.mjs` plays it in headless Chrome: a director page shows the real app in frames, adds the captions and the pointer, and drives the app with real clicks and keys. `scripts/tour/assemble.mjs` turns the frames into that 720p video, its poster, and a 1080p copy for uploading. The page loads the video only when you scroll near it, plays it muted and looping while it's on screen, and doesn't start it on its own for reduced motion.
+
 ## Writing an outline
 
 "From notes" turns plain text into slides without AI. Short lines go on the slide and longer prose goes into the key notes.

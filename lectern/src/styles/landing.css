@@ -515,7 +515,7 @@
 
 .hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  grid-template-columns: minmax(0, 9fr) minmax(0, 15fr);
   gap: 48px;
   align-items: center;
 }
@@ -3046,8 +3046,1042 @@
   color: var(--ink);
 }
 
+/* ─── Pitch film ────────────────────────────────────────── */
+/* The animation beside the headline. Sizes inside the canvas are in --u, a share of the film's
+   width, so the scene scales like a picture. Three actors (the slide, its notes, and a second
+   screen) move between five arrangements; each scene's geometry is set below by data-scene. */
+
+.pf {
+  --u: 1cqw;
+  --pf-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --pf-move: 820ms;
+  --pf-canvas: color-mix(in srgb, var(--panel) 62%, var(--bg));
+  --pf-dark: #161514;
+  --pf-phone: #0b0b0c;
+  --pf-bezel: #2b2a28;
+  --pf-good: #2f9e63;
+  position: relative;
+  container: pf / inline-size;
+  min-width: 0;
+}
+
+.pf-glow {
+  position: absolute;
+  inset: 10% 6% 18%;
+  z-index: -1;
+  border-radius: 40px;
+  background: linear-gradient(120deg, var(--lp-glow-a), var(--lp-glow-b));
+  filter: blur(70px);
+  opacity: var(--lp-glow-opacity);
+  pointer-events: none;
+}
+
+.pf-canvas {
+  position: relative;
+  aspect-ratio: 16 / 11;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background:
+    radial-gradient(70% 55% at 18% 0%, color-mix(in srgb, var(--brand) 10%, transparent), transparent 70%),
+    radial-gradient(55% 50% at 100% 100%, color-mix(in srgb, var(--c-indigo) 10%, transparent), transparent 70%),
+    var(--pf-canvas);
+  box-shadow: var(--shadow-2), 0 40px 80px -48px rgb(0 0 0 / 0.35);
+  font-size: calc(var(--u) * 1.75);
+  line-height: 1.42;
+  color: var(--ink);
+}
+
+.pf-dots {
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(color-mix(in srgb, var(--ink) 14%, transparent) 1px, transparent 1.4px);
+  background-size: calc(var(--u) * 3) calc(var(--u) * 3);
+  -webkit-mask-image: radial-gradient(ellipse 75% 70% at 50% 45%, black 10%, transparent 80%);
+  mask-image: radial-gradient(ellipse 75% 70% at 50% 45%, black 10%, transparent 80%);
+  opacity: 0.55;
+}
+
+/* Actors */
+
+.pf-actor {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--w);
+  height: var(--h);
+  transition:
+    left var(--pf-move) var(--pf-ease),
+    top var(--pf-move) var(--pf-ease),
+    width var(--pf-move) var(--pf-ease),
+    height var(--pf-move) var(--pf-ease),
+    transform var(--pf-move) var(--pf-ease),
+    border-radius var(--pf-move) var(--pf-ease),
+    background-color var(--pf-move) var(--pf-ease),
+    box-shadow var(--pf-move) var(--pf-ease),
+    opacity 450ms ease 220ms;
+}
+
+/* Out of the scene: fade first, then jump to where it next appears, unseen. */
+.pf-actor.is-hidden {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 240ms ease, left 0s 260ms, top 0s 260ms, width 0s 260ms, height 0s 260ms, transform 0s 260ms;
+}
+
+.pf-slide {
+  z-index: 2;
+  width: 64%;
+  height: auto;
+  transform: scale(var(--s));
+  transform-origin: 0 0;
+}
+
+.pf-slide.is-hidden {
+  transform: scale(calc(var(--s) * 0.96));
+}
+
+.pf-slide .slide-frame {
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.08), 0 calc(var(--u) * 3) calc(var(--u) * 6) calc(var(--u) * -2.5) rgb(0 0 0 / 0.35);
+}
+
+.pf-notes {
+  z-index: 3;
+  border-radius: calc(var(--u) * 1.6);
+  background-color: var(--panel);
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-3);
+}
+
+.pf-aside {
+  z-index: 1;
+  border-radius: calc(var(--u) * 4);
+  background-color: var(--pf-phone);
+  box-shadow: 0 0 0 calc(var(--u) * 0.55) var(--pf-bezel), var(--shadow-3);
+  transform: none;
+}
+
+.pf-aside.is-hidden {
+  transform: scale(0.94);
+}
+
+/* Scene geometry. Scene 0: key notes beside the slide. */
+.pf-canvas[data-scene='0'] .pf-slide { --x: 4%; --y: 28%; --s: 0.84; }
+.pf-canvas[data-scene='0'] .pf-notes { --x: 54%; --y: 10%; --w: 42%; --h: 80%; }
+
+/* Scene 1: the slide on the big screen, presenter view on the laptop. */
+.pf-canvas[data-scene='1'] .pf-slide,
+.pf-canvas[data-scene='2'] .pf-slide { --x: 3%; --y: 10%; --s: 0.84; }
+.pf-canvas[data-scene='1'] .pf-notes { --x: 46%; --y: 50%; --w: 51%; --h: 45%; }
+.pf-canvas[data-scene='1'] .pf-notes { background-color: var(--pf-dark); }
+
+/* Scene 2: two phones. */
+.pf-canvas[data-scene='0'] .pf-aside,
+.pf-canvas[data-scene='1'] .pf-aside,
+.pf-canvas[data-scene='2'] .pf-aside { --x: 60%; --y: 15%; --w: 25%; --h: 78%; }
+.pf-canvas[data-scene='2'] .pf-notes {
+  --x: 14%; --y: 12%; --w: 25%; --h: 80%;
+  border-radius: calc(var(--u) * 4);
+  background-color: var(--pf-phone);
+  box-shadow: 0 0 0 calc(var(--u) * 0.55) var(--pf-bezel), var(--shadow-3);
+}
+
+/* Scene 3: a flashcard. The card's own sides carry the colour, so it can turn over. */
+.pf-canvas[data-scene='3'] .pf-notes {
+  --x: 16%; --y: 13%; --w: 68%; --h: 70%;
+  background-color: transparent;
+  box-shadow: none;
+}
+
+/* Scene 4: a printed handout, and the .pptx with the slide in it. */
+.pf-canvas[data-scene='3'] .pf-slide,
+.pf-canvas[data-scene='4'] .pf-slide { --x: 49%; --y: 21.5%; --s: 0.6875; z-index: 3; }
+.pf-canvas[data-scene='4'] .pf-notes {
+  --x: 4%; --y: 10%; --w: 40%; --h: 84%;
+  z-index: 1;
+  border-radius: calc(var(--u) * 0.4);
+  background-color: #ffffff;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.06), var(--shadow-3);
+  transform: rotate(-2deg);
+}
+.pf-canvas[data-scene='3'] .pf-aside,
+.pf-canvas[data-scene='4'] .pf-aside {
+  --x: 46%; --y: 12%; --w: 50%; --h: 76%;
+  z-index: 2;
+  border-radius: calc(var(--u) * 1);
+  background-color: #f1f0ee;
+  box-shadow: 0 0 0 1px rgb(0 0 0 / 0.08), var(--shadow-3);
+}
+
+/* Faces: what an actor shows in each scene. The old one fades out, the new one fades in once the move is mostly done. */
+
+.pf-face {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 180ms ease, visibility 0s 180ms;
+}
+
+.pf-face.is-on {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 420ms ease 380ms, visibility 0s;
+}
+
+.pf-tag {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + var(--u) * 0.9);
+  padding: calc(var(--u) * 0.35) calc(var(--u) * 1.1);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+  font-size: calc(var(--u) * 1.4);
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+/* Inside the scaled slide, the tag is scaled back to its normal size. */
+.pf-tag-slide {
+  font-size: calc(var(--u) * 1.4 / var(--s));
+  padding: calc(var(--u) * 0.35 / var(--s)) calc(var(--u) * 1.1 / var(--s));
+  bottom: calc(100% + var(--u) * 0.9 / var(--s));
+  transition: opacity 300ms ease;
+}
+
+.pf-canvas[data-scene='4'] .pf-tag-slide {
+  opacity: 0;
+}
+
+.pf-label {
+  display: block;
+  font-size: calc(var(--u) * 1.25);
+  font-weight: 680;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.pf-eyebrow {
+  font-size: calc(var(--u) * 1.3);
+  font-weight: 720;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--lp-accent-ink);
+}
+
+.pf-cue {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  padding: calc(var(--u) * 0.3) calc(var(--u) * 1);
+  border-radius: 999px;
+  background: var(--lp-cue-bg);
+  color: var(--lp-cue-ink);
+  font-size: calc(var(--u) * 1.4);
+  font-weight: 640;
+}
+
+/* Key notes card */
+
+.pf-kn {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 1.5);
+  padding: calc(var(--u) * 2.2);
+}
+
+.pf-kn-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: calc(var(--u) * 1.2);
+  border-bottom: 1px solid var(--line);
+}
+
+.pf-min {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: calc(var(--u) * 1.4);
+  font-weight: 620;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-min svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.pf-kn-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--u) * 0.5);
+}
+
+.pf-face.is-on .pf-kn-row {
+  animation: pf-in 520ms var(--pf-ease) both;
+  animation-delay: calc(560ms + var(--i) * 150ms);
+}
+
+.pf-kn-script {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  line-clamp: 5;
+  padding-left: calc(var(--u) * 1);
+  border-left: calc(var(--u) * 0.3) solid var(--brand);
+  color: var(--ink);
+}
+
+.pf-kn-points li,
+.pf-paper-points li {
+  position: relative;
+  padding-left: 1em;
+}
+
+.pf-kn-points li::before,
+.pf-paper-points li::before {
+  content: '';
+  position: absolute;
+  left: 0.15em;
+  top: 0.62em;
+  width: 0.36em;
+  height: 0.36em;
+  border-radius: 50%;
+  background: var(--brand);
+}
+
+.pf-kn-q {
+  font-weight: 600;
+}
+
+/* Presenter view */
+
+.pf-pv {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: calc(var(--u) * 1.2);
+  padding: calc(var(--u) * 1.8) calc(var(--u) * 2.2);
+  border-radius: inherit;
+  color: #f4f2ee;
+  --lp-cue-bg: rgb(234 179 8 / 0.16);
+  --lp-cue-ink: #f7d27a;
+}
+
+.pf-pv-top {
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  justify-content: space-between;
+  font-size: calc(var(--u) * 1.35);
+  font-weight: 650;
+  color: rgb(244 242 238 / 0.62);
+}
+
+.pf-pv-clock {
+  font-size: calc(var(--u) * 2.1);
+  font-weight: 650;
+  color: #f4f2ee;
+  font-variant-numeric: tabular-nums;
+}
+
+.pf-pv-clock span {
+  font-size: 0.62em;
+  font-weight: 560;
+  color: rgb(244 242 238 / 0.55);
+}
+
+.pf-pv-script {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  font-size: calc(var(--u) * 1.95);
+  line-height: 1.38;
+}
+
+.pf-pv-next {
+  margin-top: auto;
+  font-size: calc(var(--u) * 1.35);
+  color: rgb(244 242 238 / 0.6);
+}
+
+/* The click on the cue: a ring that spreads once. */
+.pf-ripple {
+  position: absolute;
+  right: 12%;
+  top: 50%;
+  width: calc(var(--u) * 3);
+  height: calc(var(--u) * 3);
+  margin: calc(var(--u) * -1.5) 0 0;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--brand) 55%, transparent);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.pf-canvas[data-scene='1'][data-beat='true'] .pf-ripple {
+  animation: pf-ripple 700ms ease-out both;
+}
+
+/* Phones */
+
+.pf-phone {
+  display: flex;
+  flex-direction: column;
+  padding: calc(var(--u) * 3.6) calc(var(--u) * 1.6) calc(var(--u) * 1.8);
+  border-radius: inherit;
+  color: #f4f2ee;
+}
+
+.pf-notch {
+  position: absolute;
+  left: 50%;
+  top: calc(var(--u) * 1.2);
+  width: 30%;
+  height: calc(var(--u) * 1.1);
+  border-radius: 999px;
+  background: #000000;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+  transform: translateX(-50%);
+}
+
+.pf-phone-top {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: calc(var(--u) * 1.2);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: rgb(244 242 238 / 0.55);
+}
+
+.pf-phone-top svg {
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.pf-phone .pf-tag {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.pf-tp-window {
+  position: relative;
+  flex: 1;
+  margin-top: calc(var(--u) * 1.2);
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(transparent, black 22%, black 70%, transparent);
+  mask-image: linear-gradient(transparent, black 22%, black 70%, transparent);
+}
+
+/* The reading line. */
+.pf-tp-window::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 38%;
+  height: 2px;
+  background: color-mix(in srgb, var(--brand) 70%, transparent);
+}
+
+.pf-tp-text {
+  padding-top: calc(var(--u) * 11);
+  font-size: calc(var(--u) * 2.5);
+  font-weight: 620;
+  line-height: 1.32;
+}
+
+.pf-face.is-on .pf-tp-text {
+  animation: pf-scroll 9s linear 500ms both;
+}
+
+.pf[data-playing='false'] .pf-tp-text {
+  animation-play-state: paused;
+}
+
+.pf-quiz {
+  gap: calc(var(--u) * 1);
+  background: linear-gradient(180deg, #1d1b26, var(--pf-phone) 60%);
+}
+
+.pf-quiz-count {
+  margin-top: calc(var(--u) * 0.6);
+  font-size: calc(var(--u) * 1.25);
+  font-weight: 680;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #b9b4ff;
+}
+
+.pf-quiz-q {
+  font-size: calc(var(--u) * 1.75);
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.pf-quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.7);
+  margin-top: calc(var(--u) * 0.4);
+}
+
+.pf-quiz-options li {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: calc(var(--u) * 0.75) calc(var(--u) * 1);
+  border-radius: calc(var(--u) * 1);
+  background: rgb(255 255 255 / 0.08);
+  font-size: calc(var(--u) * 1.4);
+  font-weight: 560;
+  transition: background 300ms ease, box-shadow 300ms ease;
+}
+
+.pf-quiz-options li > span {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 1.6em;
+  height: 1.6em;
+  border-radius: 50%;
+  background: rgb(255 255 255 / 0.12);
+  font-size: 0.85em;
+  font-weight: 700;
+}
+
+.pf-quiz-tick {
+  width: 1.2em;
+  height: 1.2em;
+  margin-left: auto;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+.pf-quiz-result {
+  margin-top: auto;
+  font-size: calc(var(--u) * 1.5);
+  font-weight: 700;
+  color: #7ee2a8;
+  opacity: 0;
+  transition: opacity 300ms ease 200ms;
+}
+
+.pf-canvas[data-scene='2'][data-beat='true'] .pf-quiz-options li.is-right {
+  background: var(--pf-good);
+  box-shadow: 0 0 0 calc(var(--u) * 0.35) rgb(47 158 99 / 0.3);
+}
+
+.pf-canvas[data-scene='2'][data-beat='true'] .pf-quiz-tick,
+.pf-canvas[data-scene='2'][data-beat='true'] .pf-quiz-result {
+  opacity: 1;
+}
+
+/* Study mode flashcard */
+
+.pf-card {
+  perspective: 1400px;
+}
+
+.pf-card-inner {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition: transform 760ms var(--pf-ease);
+}
+
+.pf-canvas[data-scene='3'][data-beat='true'] .pf-card-inner {
+  transform: rotateY(180deg);
+}
+
+.pf-card-side {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: calc(var(--u) * 1.6);
+  padding: calc(var(--u) * 3);
+  border-radius: calc(var(--u) * 1.8);
+  background: var(--panel);
+  box-shadow: 0 0 0 1px var(--line), var(--shadow-3);
+  text-align: center;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+.pf-card-back {
+  background:
+    linear-gradient(160deg, color-mix(in srgb, var(--brand) 9%, transparent), transparent 60%),
+    var(--panel);
+  transform: rotateY(180deg);
+}
+
+.pf-card-text {
+  max-width: 26ch;
+  font-family: var(--font-display);
+  font-size: calc(var(--u) * 3);
+  font-weight: 520;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.pf-card-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: calc(var(--u) * 0.45) calc(var(--u) * 1.3);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: calc(var(--u) * 1.35);
+  font-weight: 620;
+  color: var(--ink-2);
+}
+
+.pf-card-actions {
+  display: flex;
+  gap: calc(var(--u) * 1);
+}
+
+.pf-card-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: calc(var(--u) * 0.6) calc(var(--u) * 1.6);
+  border: 1px solid var(--line-strong);
+  border-radius: calc(var(--u) * 0.9);
+  font-size: calc(var(--u) * 1.45);
+  font-weight: 640;
+  color: var(--ink-2);
+}
+
+.pf-card-btn svg {
+  width: 1.1em;
+  height: 1.1em;
+}
+
+.pf-card-got {
+  border-color: transparent;
+  background: var(--primary);
+  color: var(--primary-ink);
+}
+
+/* Handout: paper, light in both themes. */
+
+.pf-paper {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 1);
+  padding: calc(var(--u) * 2.2);
+  color: #1c1b19;
+}
+
+.pf-paper-title {
+  font-family: var(--font-display);
+  font-size: calc(var(--u) * 1.7);
+  font-weight: 560;
+  line-height: 1.2;
+}
+
+.pf-paper-slide {
+  aspect-ratio: 16 / 9;
+  border: 1px solid #e6e3dc;
+}
+
+.pf-paper .pf-label {
+  margin-top: calc(var(--u) * 0.4);
+  color: #8a857c;
+}
+
+.pf-paper-points {
+  font-size: calc(var(--u) * 1.45);
+}
+
+.pf-paper-points li::before {
+  background: #1c1b19;
+}
+
+.pf-paper-lines {
+  flex: 1;
+  margin-top: calc(var(--u) * 0.6);
+  background-image: linear-gradient(transparent calc(100% - 1px), #e6e3dc calc(100% - 1px));
+  background-size: 100% calc(var(--u) * 2.6);
+}
+
+/* The .pptx window: light in both themes, like the program it opens in. */
+
+.pf-pptx {
+  --stage-top: 12.5%;
+  --stage-h: 47.4%;
+  --notes-top: 63.2%;
+  border-radius: inherit;
+  overflow: hidden;
+  color: #1c1b19;
+}
+
+.pf-pptx-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  height: 9%;
+  padding: 0 calc(var(--u) * 1.4);
+  background: #2b2a28;
+  font-size: calc(var(--u) * 1.3);
+  font-weight: 620;
+  color: #f4f2ee;
+}
+
+.pf-pptx-bar svg {
+  flex: none;
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.pf-pptx-bar span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.pf-pptx-stage {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: var(--stage-top);
+  height: var(--stage-h);
+  background: #ffffff;
+}
+
+.pf-pptx-notes {
+  position: absolute;
+  left: 6%;
+  right: 6%;
+  top: var(--notes-top);
+  bottom: 5%;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--u) * 0.5);
+  padding: calc(var(--u) * 1.1) calc(var(--u) * 1.3);
+  border: 1px solid #dcd9d2;
+  background: #ffffff;
+  font-size: calc(var(--u) * 1.4);
+  overflow: hidden;
+}
+
+.pf-pptx-notes .pf-label {
+  color: #8a857c;
+}
+
+.pf-pptx-notes p {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+}
+
+/* Caption and scene picker */
+
+.pf-caption {
+  min-height: 3em;
+  margin-top: 20px;
+  font-size: 16px;
+  line-height: 1.5;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+
+.pf-caption-text {
+  display: block;
+  animation: lp-fade-up 450ms var(--ease-out) both;
+}
+
+.pf-rail {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  margin-top: 14px;
+}
+
+.pf-chapters {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.pf-chapter {
+  display: block;
+  width: 100%;
+  min-height: 40px;
+  padding: 0 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  text-align: left;
+  color: var(--lp-fine);
+  transition: color var(--t-fast);
+}
+
+.pf-chapter:hover,
+.pf-chapter[aria-current] {
+  color: var(--ink);
+}
+
+.pf-chapter-bar {
+  display: block;
+  height: 3px;
+  margin-bottom: 10px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--line);
+}
+
+.pf-chapter-fill {
+  display: block;
+  height: 100%;
+  background: var(--brand);
+  transform-origin: left center;
+  animation: pf-fill var(--ms) linear both;
+}
+
+.pf[data-playing='false'] .pf-chapter-fill {
+  animation-play-state: paused;
+}
+
+.pf-chapter-num {
+  margin-right: 4px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-3);
+}
+
+.pf-toggle {
+  margin-bottom: 4px;
+}
+
+/* Narrow: a taller canvas, with the actors stacked rather than side by side. */
+@container pf (max-width: 520px) {
+  .pf-canvas {
+    --u: 1.8cqw;
+    aspect-ratio: 3 / 4;
+  }
+  .pf-slide { width: 92%; }
+  .pf-canvas[data-scene='0'] .pf-slide,
+  .pf-canvas[data-scene='1'] .pf-slide,
+  .pf-canvas[data-scene='2'] .pf-slide { --x: 4%; --y: 8%; --s: 1; }
+  .pf-canvas[data-scene='0'] .pf-notes { --x: 4%; --y: 50%; --w: 92%; --h: 46%; }
+  .pf-canvas[data-scene='1'] .pf-notes { --x: 4%; --y: 51%; --w: 92%; --h: 44%; }
+  .pf-canvas[data-scene='2'] .pf-notes { --x: 5%; --y: 9%; --w: 43%; --h: 86%; }
+  .pf-canvas[data-scene='0'] .pf-aside,
+  .pf-canvas[data-scene='1'] .pf-aside,
+  .pf-canvas[data-scene='2'] .pf-aside { --x: 52%; --y: 11%; --w: 43%; --h: 84%; }
+  .pf-canvas[data-scene='3'] .pf-notes { --x: 6%; --y: 14%; --w: 88%; --h: 70%; }
+  .pf-canvas[data-scene='4'] .pf-notes { --x: 4%; --y: 7%; --w: 52%; --h: 48%; }
+  .pf-canvas[data-scene='3'] .pf-aside,
+  .pf-canvas[data-scene='4'] .pf-aside { --x: 32%; --y: 42%; --w: 64%; --h: 55%; }
+  .pf-canvas[data-scene='3'] .pf-slide,
+  .pf-canvas[data-scene='4'] .pf-slide { --x: 35%; --y: 48.5%; --s: 0.63; }
+  .pf-canvas[data-scene='4'] .pf-notes { transform: rotate(-3deg); }
+  .pf-pptx { --stage-top: 11.8%; --stage-h: 44.5%; --notes-top: 60%; }
+  .pf-kn { gap: calc(var(--u) * 1.2); padding: calc(var(--u) * 1.8); }
+  .pf-kn-row:has(.pf-kn-points) { display: none; }
+  .pf-kn-script { -webkit-line-clamp: 3; line-clamp: 3; }
+  .pf-paper-slide ~ * { display: none; }
+  .pf-pptx-notes p { -webkit-line-clamp: 2; line-clamp: 2; }
+  .pf-card-text { font-size: calc(var(--u) * 3.2); }
+}
+
+@media (pointer: coarse) {
+  .pf-chapter { min-height: 44px; }
+}
+
+@media (max-width: 639px) {
+  .pf-caption { min-height: 4.5em; font-size: 15px; }
+  .pf-rail { gap: 10px; }
+  .pf-chapters { gap: 6px; }
+  .pf-chapter { font-size: 12px; }
+  .pf-chapter-num { display: none; }
+}
+
+@keyframes pf-in {
+  from { opacity: 0; transform: translateY(calc(var(--u) * 1)); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pf-scroll {
+  from { transform: none; }
+  to { transform: translateY(-58%); }
+}
+
+@keyframes pf-ripple {
+  0% { opacity: 0.9; transform: scale(0.4); }
+  100% { opacity: 0; transform: scale(3.2); }
+}
+
+@keyframes pf-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+/* The link to the video, under the hero's buttons. */
+.hero-watch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 20px;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.hero-watch svg {
+  flex: none;
+  color: var(--lp-accent-ink);
+  transition: transform var(--t-med) var(--ease-out);
+}
+
+.hero-watch:hover span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hero-watch:hover svg {
+  transform: scale(1.08);
+}
+
+.hero-watch-len {
+  font-weight: 500;
+  color: var(--lp-fine);
+}
+
+@media (max-width: 1099px) {
+  .hero-grid > .pf { width: 100%; max-width: 760px; }
+}
+
+/* ─── Tour video ────────────────────────────────────────── */
+
+.tour {
+  padding-top: clamp(56px, 7vw, 96px);
+  padding-bottom: clamp(40px, 5vw, 64px);
+}
+
+.tour-frame {
+  position: relative;
+  isolation: isolate;
+  max-width: 1040px;
+  margin: 40px auto 0;
+}
+
+.tour-glow {
+  position: absolute;
+  inset: 8% 4% -4%;
+  z-index: -1;
+  border-radius: 48px;
+  background: linear-gradient(120deg, var(--lp-glow-a), var(--lp-glow-b));
+  filter: blur(80px);
+  opacity: var(--lp-glow-opacity);
+  pointer-events: none;
+}
+
+.tour-video {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 18px;
+  background: #141413;
+  box-shadow: 0 0 0 1px var(--lp-stage-ring), var(--shadow-3), 0 40px 80px -48px rgb(0 0 0 / 0.45);
+}
+
+.tour-chapters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  max-width: 1040px;
+  margin: 20px auto 0;
+}
+
+.tour-chapter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+
+.tour-chapter:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--sunk);
+}
+
+.tour-chapter[aria-current] {
+  border-color: transparent;
+  background: var(--lp-chip-active);
+  color: var(--lp-chip-active-ink);
+}
+
+.tour-chapter:disabled {
+  cursor: default;
+}
+
+.tour-time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  color: var(--lp-fine);
+}
+
+.tour-chapter[aria-current] .tour-time {
+  color: inherit;
+  opacity: 0.72;
+}
+
+@media (max-width: 639px) {
+  .tour-frame { margin-top: 28px; }
+  .tour-video { border-radius: 12px; }
+  .tour-chapter { height: 34px; padding: 0 12px; font-size: 13px; }
+}
+
+@media (pointer: coarse) {
+  .tour-chapter { height: 44px; }
+}
+
+/* ─── Try the sample ────────────────────────────────────── */
+
+.try {
+  padding-top: clamp(40px, 5vw, 64px);
+}
+
+.try-stage {
+  max-width: 900px;
+  margin: 44px auto 0;
+}
+
 /* ─── Motion ────────────────────────────────────────────── */
-/* Everything here follows a click; nothing moves on its own. */
+/* Everything here follows a click, except the pitch film, which can be paused and stays still for reduced motion. */
 
 @keyframes lp-fade {
   from { opacity: 0; }
