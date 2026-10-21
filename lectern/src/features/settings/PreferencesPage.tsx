@@ -1,5 +1,6 @@
 import { AudioLines, BookOpen, Bookmark, CalendarDays, GraduationCap, LayoutGrid, Mic, NotebookPen, RotateCcw, Trash2, Wand2 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { AUDIENCES, type Audience, type DeckPurpose, PURPOSES } from '../../core/deck/types';
 import { allThemes } from '../../core/engine/themes';
 import {
@@ -26,6 +27,11 @@ const FEATURE_LABELS: Record<Feature, { label: string; icon: React.ReactNode }> 
 export function PreferencesPage() {
   const profile = useProfile();
   const toast = useToast();
+  const { hash } = useLocation();
+  // Links such as the backup reminder's open straight at Your data.
+  useEffect(() => {
+    if (hash === '#your-data') document.getElementById('your-data')?.scrollIntoView({ block: 'start' });
+  }, [hash]);
   const deck = profile.deck;
   const setDeck = (patch: Partial<typeof deck>) => updateProfile((p) => ({ deck: { ...p.deck, ...patch } }));
   const toggle = (f: Feature) => updateProfile((p) => ({ features: p.features.includes(f) ? p.features.filter((x) => x !== f) : FEATURES.filter((x) => x === f || p.features.includes(x)) }));
@@ -131,7 +137,7 @@ export function PreferencesPage() {
         )}
       </section>
 
-      <section className="section prefs-section" aria-labelledby="pf-data">
+      <section className="section prefs-section" id="your-data" aria-labelledby="pf-data">
         <div className="section-head"><h2 id="pf-data">Your data</h2></div>
         <BackupPanel />
       </section>

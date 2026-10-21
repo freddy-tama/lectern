@@ -18,11 +18,13 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import mods from 'virtual:lectern-plugins';
 import { App } from './app/App';
+import { initPwa } from './app/pwa';
 import { installPlugin } from './core/plugins/registry';
 import { loadLooks } from './data/looks';
 import { ensureSeeded } from './data/repo';
 
 for (const mod of mods) installPlugin(mod);
+initPwa();
 
 // Phones joining a shared deck, or opening a handed-out copy, don't need the sample courses.
 if (!/^\/(join|phone|pack)(\/|$)/.test(window.location.pathname)) {

@@ -11,6 +11,7 @@ import { StorageGuard } from '../features/backup/StorageGuard';
 import { SharePanel } from '../features/share/SharePanel';
 import { ErrorBoundary } from './ErrorBoundary';
 import { Shell } from './Shell';
+import { UpdateToast } from './UpdateToast';
 
 const Studio = lazy(() => import('../features/studio/Studio'));
 const Present = lazy(() => import('../features/present/Present'));
@@ -94,6 +95,7 @@ export function App() {
           </Routes>
         </Guarded>
         <SharePanel />
+        <UpdateToast />
       </BrowserRouter>
     </ToastProvider>
   );

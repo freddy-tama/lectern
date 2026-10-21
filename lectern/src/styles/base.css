@@ -625,6 +625,22 @@ dialog.dialog::backdrop {
   font-size: 13px;
 }
 
+.toast button.toast-close {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-left: -6px;
+  padding: 0;
+  background: transparent;
+  opacity: 0.75;
+}
+
+.toast button.toast-close:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--primary-ink) 14%, transparent);
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;
