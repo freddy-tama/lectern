@@ -235,3 +235,29 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
   - If WLC-006 checks the number in that list, it fails on this preview until its expected text is changed to "34 slide types" in the portal. That would be the loop doing its job, not a regression.
   - Flow 13 has no test yet. New tests for it would be added in the portal from the PRD.
 - **This run:** about 13.5 credits for the 27 tests, leaving about 32.5 of the month's 150 if the last count was right.
+- **03:08** TestSprite ran the 27 tests on the #14 preview ([run `6fb0f65c`](https://www.testsprite.com/dashboard-v3/o/dfe734b3-7442-5019-aa71-fa10706b4f14/projects/4a558259-6d77-449a-bede-151ba58b667a/execution/6fb0f65c-2c73-416d-904d-c7b511519db0)): 26 passed, 1 blocked, none failed.
+  - The blocked test, "Build a deck from notes with the talk audience", stalled while the test agent was typing. The app was fine.
+  - The `TestSprite V3` check shows as failing because of the blocked test. The branch isn't protected, and a run with only blocked tests has been treated as fine to merge.
+- **09:53** #14 was merged as `34bfe4e`, and Vercel deployed it to production.
+
+## Layouts, three slide types and editing on the slide
+
+**2026-10-22** (China time)
+
+- **Before the run:** the branch `claude/lectern-layouts-canvas-d2cc05` makes four changes:
+  - **Layouts** for existing types, each with an auto style rule:
+    - Points: Picture right, Picture left, Two columns;
+    - Quote: Testimonial;
+    - Big numbers: One big number;
+    - Steps: Top to bottom;
+    - Agenda: You are here.
+  - **Three new types:** Text, Roadmap and Screenshot. The built-in slide types go from 34 to 37.
+  - **Editing on the slide.** Click to type, drag to move, handles to resize, and a toolbar beside the selection. The fields panel starts folded away.
+  - **Positions people choose.** Moved boxes are stored per slide by box id, and the layout engine applies them. The studio, present mode, phones, thumbnails and PowerPoint all match, and **Reset layout** clears them. A new layout or type clears them too. Auto style leaves a hand-arranged slide alone.
+  - The vitest suite and `npm run build` passed on the branch. The editor was checked by hand in the browser pane: typing, dragging with the marker following, corner scaling, dragging a screenshot callout, and Delete on a selected point.
+- **What the suite may notice:**
+  - The "At a glance" list now reads "37 slide types" (flow 1). If WLC-006 checks the number, it fails until its expected text says 37 in the portal.
+  - The fields panel is hidden when the studio opens. Tests that fill in a field, such as Contact's **QR code link** (flow 13) or the word cloud's **Words on the slide**, need **Show all fields** (`studio-fields`) first. The PRD says so now.
+    - The flow 10 test edits a slide's title. If it types into the panel's **Title** field rather than onto the slide, it can't find the field while the panel is folded away. Typing onto the slide's title works as before.
+  - Flow 13 lists the three new types, and the new flow 14 covers layouts and editing on the slide. Neither has a test yet.
+- **This run:** about 13.5 credits for the 27 tests, which leaves about 19 of the month's 150, enough for one more run.

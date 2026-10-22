@@ -8,14 +8,14 @@ Lectern is a presentation tool for talks, pitches, reports and lessons. Every sl
 
 ## Stable hooks
 
-Prefer roles and accessible names. These `data-testid`s exist where names repeat: `nav-open-lectern`, `hero-present`, `finale-present`, `finale-open-lectern`, `quiz-open-here`, `notes-open-deck`, `start-sample`, `start-notes`, `start-file`, `start-course`, `start-record`, `start-look-around`, `nav-sign-in`, `ai-sign-in`.
+Prefer roles and accessible names. These `data-testid`s exist where names repeat: `nav-open-lectern`, `hero-present`, `finale-present`, `finale-open-lectern`, `quiz-open-here`, `notes-open-deck`, `start-sample`, `start-notes`, `start-file`, `start-course`, `start-record`, `start-look-around`, `nav-sign-in`, `ai-sign-in`, `studio-fields`.
 
 ## Flows and what counts as a pass
 
 ### 1. First visit
 - Opening `/` in a fresh browser lands on `/welcome`.
 - There is one `h1`: "Slides that know what to say."
-- The "At a glance" list shows "34 slide types" and "6 built-in looks".
+- The "At a glance" list shows "37 slide types" and "6 built-in looks".
 - The page has no horizontal scroll at 1440 px or at 390 px wide.
 - Beside the `h1`, a short animation follows one slide's key notes through five scenes: Notes, On stage, Phones, Study and Share. It plays by itself, and its **Pause the animation** button stops it. Choosing a scene shows that scene and stops there. With reduced motion it doesn't play by itself.
 - Under the "At a glance" list, **Watch it run** (`#tour`) has a muted, looping screen recording of the app with controls and chapter buttons. With reduced motion it doesn't start by itself.
@@ -78,6 +78,7 @@ Prefer roles and accessible names. These `data-testid`s exist where names repeat
 ### 10. Decks and the studio
 - `/decks` lists the six sample decks, each tagged "Sample".
 - In the studio, editing a slide's title and reloading the page keeps the edit (autosave).
+- The slide is the editor: clicking text on it types straight into it. The panel with every field starts folded away. **Show all fields** (`studio-fields`, in the studio's top bar) opens it, and so does a slide toolbar button such as **All fields** or **Change picture**.
 
 ### 11. Make a deck without AI
 - On `/make`, with no AI on the server, typing only a topic must **not** produce an empty one-slide deck announced as "Your deck is ready".
@@ -94,13 +95,24 @@ A server turns accounts on with its Supabase settings. Check which state the ser
 - **Either way:** nothing outside AI asks for a sign-in. Decks, the studio, present mode, notes and the quiz all work signed out.
 
 ### 13. Slide types for reports, pitches and the room
-- On `/welcome`, the **Slide types** section (`#slide-types`) has cards named "Scorecard", "Pricing", "Word cloud" and "Contact".
+- On `/welcome`, the **Slide types** section (`#slide-types`) has cards named "Scorecard", "Pricing", "Word cloud", "Contact", "Text", "Roadmap" and "Screenshot".
 - In the studio, **Add slide → Scorecard** adds a slide titled "This quarter" with four measures, each with a bar and a status: "On track", "At risk", "On track", "Done".
 - **Add slide → Pricing** adds three plans, Starter, Team and Business. Team is marked "Most popular".
-- **Add slide → Contact** adds "Thank you" with "Maya Chen" and "maya@example.com". Filling in **QR code link** with an address adds a QR code to the slide.
+- **Add slide → Contact** adds "Thank you" with "Maya Chen" and "maya@example.com". Filling in **QR code link** (open **Show all fields** first) with an address adds a QR code to the slide.
 - **Add slide → Word cloud** adds the question "In one word: what makes a great meeting?". With no answers yet, the slide says "Answer on your phone. Words appear here as they come in."
-  - Under **More options**, adding a word to **Words on the slide** (for example "Agenda" with count 3) draws that word on the slide.
+  - Under **More options** in the fields panel, adding a word to **Words on the slide** (for example "Agenda" with count 3) draws that word on the slide.
 - Answering a word cloud from a phone needs a second device and is out of scope.
+- **Add slide → Text** adds "What we learned" with two paragraphs.
+- **Add slide → Roadmap** adds "Roadmap" with the periods Q1 to Q4 and the workstreams Product, Design, Engineering and Marketing, each with bars.
+- **Add slide → Screenshot** adds "Meet the new editor" with three numbered callouts. With no picture yet, the studio's frame says "Add a screenshot".
+
+### 14. Layouts and editing on the slide
+- In the studio, clicking a point on a **Points** slide puts the cursor in it on the slide, with a small toolbar beside it: **Layout**, **Add point**, **All fields** and **Delete point**.
+  - **Add point** adds an empty point under it, ready to type.
+  - **Delete point** removes it, and the toast's **Undo** brings it back. The slide itself stays.
+- Under the slide, the slide type button (for example "Points") changes the type, and the layout button lists that type's layouts. Points offers **Picture right**, **Picture left** and **Two columns**; choosing **Two columns** sets the points in two columns.
+- These types gained layouts: Quote (**Testimonial**), Big numbers (**One big number**), Steps (**Top to bottom**) and Agenda (**You are here**).
+- Dragging a box on the slide moves it, and **Reset layout** appears under the slide. Clicking it puts everything back. Dragging needs a steady pointer, so a test may skip it.
 
 ## Out of scope for these tests
 
