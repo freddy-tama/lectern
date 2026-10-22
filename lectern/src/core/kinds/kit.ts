@@ -136,21 +136,30 @@ export interface ListOptions {
   vcenter?: boolean;
   color?: string;
   markerColor?: string;
+  /** Index of the first item in the whole list, when this draws part of it (one column of two). */
+  offset?: number;
+  /** One font size for every item, in canvas px, instead of the largest that fits. */
+  size?: number;
 }
 
-/** A list where every item shares one font size, the largest that fits the area. */
+/**
+ * A list where every item shares one font size, the largest that fits the area.
+ * Pass the list as stored, blanks included: blank items are skipped, and each box binds
+ * to its item's place in the stored list, so typing into it changes the right one.
+ */
 export function list(ctx: LayoutContext, items: string[], o: ListOptions): Box[] {
-  const values = items.map((s) => s.trim()).filter(Boolean);
+  const entries = items.map((s, i) => ({ value: String(s ?? '').trim(), i: i + (o.offset ?? 0) })).filter((e) => e.value);
+  const values = entries.map((e) => e.value);
   if (!values.length) return [];
   const marker = o.marker ?? 'dot';
   const max = sz(ctx, o.max ?? 46);
   const min = Math.min(max, sz(ctx, o.min ?? 30));
   const lh = 1.3;
-  let size = max;
+  let size = o.size ?? max;
   const indentFor = (s: number) => (marker === 'none' ? 0 : marker === 'number' ? s * 1.9 : s * 1.25);
   const gapFor = (s: number) => o.gap ?? s * 0.75;
   const total = (s: number) => values.reduce((sum, v) => sum + heightAt(ctx, v, s, o.w - indentFor(s), 'body', lh), 0) + gapFor(s) * (values.length - 1);
-  while (size > min && total(size) > o.h) size -= 2;
+  while (!o.size && size > min && total(size) > o.h) size -= 2;
   if (total(size) > o.h) ctx.warnings.push('This list is too long for one slide. Split it or shorten the points.');
   const indent = indentFor(size);
   const gap = gapFor(size);
@@ -158,30 +167,32 @@ export function list(ctx: LayoutContext, items: string[], o: ListOptions): Box[]
   const used = total(size);
   if (o.vcenter && used < o.h) y += Math.min((o.h - used) / 2, sz(ctx, 80));
   const boxes: Box[] = [];
-  values.forEach((value, i) => {
+  entries.forEach(({ value, i }, k) => {
     const h = heightAt(ctx, value, size, o.w - indent, 'body', lh);
-    const step = o.reveal ? (o.startStep ?? 1) + i : undefined;
+    const step = o.reveal ? (o.startStep ?? 1) + k : undefined;
     const lineMid = y + (size * lh) / 2;
+    // Markers move with their item when it is dragged on the canvas.
+    const item = `${o.bindKey}-${i}`;
     if (marker === 'dot') {
       const d = Math.round(size * 0.3);
-      boxes.push(shape({ id: `${o.bindKey}-m${i}`, shape: 'ellipse', x: o.x + 4, y: lineMid - d / 2, w: d, h: d, fill: o.markerColor ?? ctx.theme.colors.accent, step }));
+      boxes.push(shape({ id: `${o.bindKey}-m${i}`, shape: 'ellipse', x: o.x + 4, y: lineMid - d / 2, w: d, h: d, fill: o.markerColor ?? ctx.theme.colors.accent, step, moveWith: item }));
     } else if (marker === 'number') {
       const d = Math.round(size * 1.35);
-      boxes.push(shape({ id: `${o.bindKey}-m${i}`, shape: 'ellipse', x: o.x, y: lineMid - d / 2, w: d, h: d, fill: o.markerColor ?? ctx.theme.colors.accent, step }));
+      boxes.push(shape({ id: `${o.bindKey}-m${i}`, shape: 'ellipse', x: o.x, y: lineMid - d / 2, w: d, h: d, fill: o.markerColor ?? ctx.theme.colors.accent, step, moveWith: item }));
       boxes.push({
-        type: 'text', id: `${o.bindKey}-n${i}`, x: o.x, y: lineMid - d / 2, w: d, h: d, text: String(i + 1), step,
+        type: 'text', id: `${o.bindKey}-n${i}`, x: o.x, y: lineMid - d / 2, w: d, h: d, text: String(k + 1), step, moveWith: item,
         style: { font: 'body', size: Math.round(size * 0.72), weight: 700, color: ctx.theme.colors.onAccent, align: 'center', valign: 'middle', lineHeight: 1 },
       });
     } else if (marker === 'check') {
       const d = Math.round(size * 1.05);
-      boxes.push(shape({ id: `${o.bindKey}-m${i}`, shape: 'ellipse', x: o.x, y: lineMid - d / 2, w: d, h: d, fill: o.markerColor ?? ctx.theme.colors.accent, step }));
+      boxes.push(shape({ id: `${o.bindKey}-m${i}`, shape: 'ellipse', x: o.x, y: lineMid - d / 2, w: d, h: d, fill: o.markerColor ?? ctx.theme.colors.accent, step, moveWith: item }));
       boxes.push({
-        type: 'text', id: `${o.bindKey}-c${i}`, x: o.x, y: lineMid - d / 2, w: d, h: d, text: '✓', step,
+        type: 'text', id: `${o.bindKey}-c${i}`, x: o.x, y: lineMid - d / 2, w: d, h: d, text: '✓', step, moveWith: item,
         style: { font: 'body', size: Math.round(size * 0.66), weight: 800, color: ctx.theme.colors.onAccent, align: 'center', valign: 'middle', lineHeight: 1 },
       });
     }
     boxes.push({
-      type: 'text', id: `${o.bindKey}-${i}`, x: o.x + indent, y, w: o.w - indent, h: Math.ceil(h), text: value, step, bind: `${o.bindKey}.${i}`,
+      type: 'text', id: item, x: o.x + indent, y, w: o.w - indent, h: Math.ceil(h), text: value, step, bind: `${o.bindKey}.${i}`,
       style: { font: 'body', size, weight: fontWeight(ctx.theme, 'body'), color: o.color ?? ctx.theme.colors.ink, align: 'left', valign: 'top', lineHeight: lh },
     });
     y += h + gap;
@@ -295,8 +306,12 @@ export const read = {
     return typeof v === 'string' ? v : v == null ? fallback : String(v);
   },
   list(c: Record<string, unknown>, key: string): string[] {
+    return read.items(c, key).filter((s) => s.trim());
+  },
+  /** A list as stored, blanks included, so positions match the content (for list() and binds). */
+  items(c: Record<string, unknown>, key: string): string[] {
     const v = c[key];
-    return Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? x : String(x ?? ''))).filter((s) => s.trim()) : [];
+    return Array.isArray(v) ? v.map((x) => (typeof x === 'string' ? x : String(x ?? ''))) : [];
   },
   objects<T extends Record<string, unknown>>(c: Record<string, unknown>, key: string): T[] {
     const v = c[key];

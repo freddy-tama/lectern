@@ -1,5 +1,5 @@
 import {
-  Clapperboard, Cloud, Contact, Dices, Gauge, Tag, Gamepad2, Globe, LayoutDashboard, QrCode, Timer,
+  AlignLeft, AppWindow, ChartGantt, Clapperboard, Cloud, Contact, Dices, Gauge, Tag, Gamepad2, Globe, LayoutDashboard, QrCode, Timer,
   BookOpen, Bookmark, ChartColumn, ChartLine, ChartNoAxesColumn, ChartPie, CircleHelp, ClipboardList, Code, Columns2, Copyright, DoorOpen,
   FileText, Filter, GalleryHorizontal, Grid2x2, Image, Images, Languages, LayoutGrid, List, ListChecks, ListOrdered, type LucideIcon,
   Megaphone, MessageSquareText, Milestone, Presentation, Puzzle, Quote, RefreshCw, Square, Table, Type, Users, Waypoints,
@@ -52,6 +52,9 @@ const ICONS: Record<string, LucideIcon> = {
   tag: Tag,
   contact: Contact,
   cloud: Cloud,
+  'align-left': AlignLeft,
+  gantt: ChartGantt,
+  'app-window': AppWindow,
 };
 
 /** Icons are referenced by name so the core and mods stay free of React. */

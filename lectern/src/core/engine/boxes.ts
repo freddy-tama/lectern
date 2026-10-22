@@ -40,6 +40,16 @@ interface BoxBase {
   step?: number;
   /** Content field this box shows, so a click on the canvas can focus it in the editor. */
   bind?: string;
+  /**
+   * The id of the box this one belongs to, such as a list item's marker. When someone moves or
+   * resizes that box on the canvas, this one goes with it.
+   */
+  moveWith?: string;
+  /**
+   * Dragging this box on the canvas writes where its centre lands into content fields, as
+   * percentages across and down the box named by `within`, instead of storing an override.
+   */
+  drag?: { x: string; y: string; within: string };
   /** Hidden until the step, then emphasised (for answers). */
   reveal?: 'answer';
   opacity?: number;

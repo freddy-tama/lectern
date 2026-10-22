@@ -125,7 +125,18 @@ function ListField({ spec, content, onChange, bind }: { spec: Extract<FieldSpec,
       <legend className="field-label">{spec.label}</legend>
       {items.map((item, i) => (
         <div key={i} className="list-item">
-          {spec.correctKey ? (
+          {spec.correctKey && spec.markAs ? (
+            <button
+              type="button"
+              className={`correct-toggle ${correct === i ? 'on' : ''}`}
+              aria-pressed={correct === i}
+              aria-label={correct === i ? `${spec.itemLabel} ${i + 1} is ${spec.markAs}` : `Mark ${spec.itemLabel.toLowerCase()} ${i + 1} as ${spec.markAs}`}
+              title={correct === i ? `This is ${spec.markAs}` : `Mark as ${spec.markAs}`}
+              onClick={() => onChange(spec.correctKey!, correct === i ? -1 : i)}
+            >
+              {correct === i ? <Check size={14} /> : i + 1}
+            </button>
+          ) : spec.correctKey ? (
             <button
               type="button"
               className={`correct-toggle ${correct === i ? 'on' : ''}`}

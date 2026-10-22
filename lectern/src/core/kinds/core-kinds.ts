@@ -1,6 +1,6 @@
 // The built-in slide kinds. Plugins register more through the same contract.
 
-import { type Box, CANVAS_H, CANVAS_W } from '../engine/boxes';
+import { type Box, CANVAS_H, CANVAS_W, type TextBox } from '../engine/boxes';
 import { fontWeight } from '../engine/themes';
 import { M, type LayoutContext, card, heightAt, imageSrc, list, read, shape, slideTitle, sz, text } from './kit';
 import { DATA_KINDS } from './data-kinds';
@@ -8,7 +8,8 @@ import { LIVE_KINDS } from './live-kinds';
 import { MEDIA_KINDS } from './media-kinds';
 import { PITCH_KINDS } from './pitch-kinds';
 import { registerKind } from './registry';
-import type { AnyKind, SlideKindDefinition } from './types';
+import { REPORT_KINDS } from './report-kinds';
+import type { AnyKind, KindLayout, SlideKindDefinition } from './types';
 import { VISUAL_KINDS } from './visual-kinds';
 
 type C = Record<string, unknown>;
@@ -18,7 +19,7 @@ function imageOrPlaceholder(ctx: LayoutContext, id: string, src: string, x: numb
   if (ctx.mode !== 'edit') return [];
   return [
     shape({ id: `${id}-ph`, shape: 'rect', x, y, w, h, fill: ctx.theme.colors.surface, stroke: ctx.theme.colors.line, strokeWidth: 3, radius, dash: true, bind }),
-    text(ctx, { id: `${id}-ph-t`, text: 'Add an image', x, y: y + h / 2 - 30, w, h: 60, max: 30, min: 24, color: ctx.theme.colors.muted, align: 'center', scaled: false, bind }),
+    { ...text(ctx, { id: `${id}-ph-t`, text: 'Add an image', x, y: y + h / 2 - 30, w, h: 60, max: 30, min: 24, color: ctx.theme.colors.muted, align: 'center', scaled: false, bind }), moveWith: `${id}-ph` },
   ];
 }
 
@@ -99,24 +100,50 @@ const section: SlideKindDefinition<C> = {
   },
 };
 
+/** The agenda item marked as the part you're on, as its place in the stored list, or -1. */
+function currentItem(c: C): number {
+  const items = read.items(c, 'items');
+  const n = Math.round(read.num(c, 'current'));
+  return n >= 0 && n < items.length && items[n]!.trim() ? n : -1;
+}
+
 const agenda: SlideKindDefinition<C> = {
-  kind: 'agenda', label: 'Agenda', description: 'What the session covers, in order.', icon: 'list-ordered', group: 'Open',
+  kind: 'agenda', label: 'Agenda', description: 'What the session covers, in order. The You are here layout highlights the part you’re on.', icon: 'list-ordered', group: 'Open',
+  variants: [{ id: 'list', label: 'List' }, { id: 'here', label: 'You are here' }],
+  autoVariant: (c) => (currentItem(c) >= 0 ? 'here' : 'list'),
   fields: [
     { key: 'title', label: 'Title', type: 'text' },
-    { key: 'items', label: 'Items', type: 'list', itemLabel: 'Item', max: 7 },
+    { key: 'items', label: 'Items', type: 'list', itemLabel: 'Item', max: 7, correctKey: 'current', markAs: 'the current part', help: 'Mark the part you’re on now. The You are here layout highlights it.' },
   ],
-  create: () => ({ title: 'Today', items: ['The problem', 'What we found', 'What it means', 'Next steps'] }),
+  create: () => ({ title: 'Today', items: ['The problem', 'What we found', 'What it means', 'Next steps'], current: -1 }),
   heading: (c) => read.str(c, 'title') || 'Agenda',
   text: (c) => [read.str(c, 'title'), ...read.list(c, 'items')],
-  layout(c, ctx) {
+  layout(c, ctx, variant) {
     const t = text(ctx, { id: 'title', text: read.str(c, 'title') || 'Today', x: M.x, y: 0, w: 520, h: 400, role: 'display', max: 104, min: 64, maxLines: 3, hug: true, bind: 'title' });
     t.y = (CANVAS_H - t.h) / 2 - 20;
     const listX = 760;
+    const items = list(ctx, read.items(c, 'items'), { x: listX, y: M.top + 30, w: M.right - listX, h: M.bottom - M.top - 90, marker: 'number', bindKey: 'items', vcenter: true, max: 50, min: 32 });
     const boxes: Box[] = [
       t,
-      shape({ id: 'rule', shape: 'rect', x: M.x, y: t.y + t.h + 28, w: 96, h: 10, radius: 5, fill: ctx.theme.colors.accent }),
-      ...list(ctx, read.list(c, 'items'), { x: listX, y: M.top + 30, w: M.right - listX, h: M.bottom - M.top - 90, marker: 'number', bindKey: 'items', vcenter: true, max: 50, min: 32 }),
+      shape({ id: 'rule', shape: 'rect', x: M.x, y: t.y + t.h + 28, w: 96, h: 10, radius: 5, fill: ctx.theme.colors.accent, moveWith: 'title' }),
     ];
+    const cur = variant === 'here' ? currentItem(c) : -1;
+    const here = items.find((b): b is TextBox => b.type === 'text' && b.id === `items-${cur}`);
+    const marker = items.find((b) => b.id === `items-m${cur}`);
+    if (!here || !marker) return { boxes: [...boxes, ...items] };
+    // You are here: parts already covered fade, and the current one sits on an accent band.
+    const colors = ctx.theme.colors;
+    const pad = Math.round(here.style.size * 0.32);
+    boxes.push(shape({ id: 'here', shape: 'rect', x: marker.x - pad, y: Math.min(here.y, marker.y) - pad, w: M.right + pad - (marker.x - pad), h: here.h + pad * 2, radius: ctx.theme.radius, fill: colors.accent, moveWith: here.id }));
+    for (const b of items) {
+      const at = Number((b.moveWith ?? b.id).slice('items-'.length));
+      if (at < cur) boxes.push({ ...b, opacity: 0.45 });
+      else if (at > cur) boxes.push(b);
+      else if (b.type === 'text' && b.id === here.id) boxes.push({ ...b, style: { ...b.style, color: colors.onAccent, weight: 700 } });
+      else if (b.type === 'text') boxes.push({ ...b, style: { ...b.style, color: colors.accent } });
+      else if (b.type === 'shape') boxes.push({ ...b, fill: colors.onAccent });
+      else boxes.push(b);
+    }
     return { boxes };
   },
 };
@@ -124,7 +151,14 @@ const agenda: SlideKindDefinition<C> = {
 // ─── Teach ────────────────────────────────────────────────────────────
 
 const bullets: SlideKindDefinition<C> = {
-  kind: 'bullets', label: 'Points', description: 'A title with a few short points, optionally beside an image.', icon: 'list', group: 'Explain',
+  kind: 'bullets', label: 'Points', description: 'A title with a few short points, beside a picture on either side or in two columns.', icon: 'list', group: 'Explain',
+  variants: [{ id: 'right', label: 'Picture right' }, { id: 'left', label: 'Picture left' }, { id: 'columns', label: 'Two columns' }],
+  // Pictures alternate sides down the deck; a long list of short points goes into two columns.
+  autoVariant: (c, auto) => {
+    if (read.str(c, 'image').trim()) return auto.previous === 'right' ? 'left' : 'right';
+    const points = read.list(c, 'bullets');
+    return points.length >= 6 && points.every((p) => p.trim().length <= 70) ? 'columns' : 'right';
+  },
   fields: [
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
     { key: 'bullets', label: 'Points', type: 'list', itemLabel: 'Point', max: 8 },
@@ -134,21 +168,49 @@ const bullets: SlideKindDefinition<C> = {
   create: () => ({ title: 'Main idea', bullets: ['First point', 'Second point', 'Third point'], reveal: false, image: '' }),
   heading: (c) => read.str(c, 'title') || 'Points',
   text: (c) => [read.str(c, 'title'), ...read.list(c, 'bullets')],
-  layout(c, ctx) {
+  layout(c, ctx, variant) {
     const src = imageSrc(ctx, c.image);
-    const textW = src ? Math.round(M.w * 0.55) : M.w;
-    const { box, bottom } = slideTitle(ctx, read.str(c, 'title'), { w: src ? textW : M.w - 120 });
+    const points = read.items(c, 'bullets');
+    const reveal = read.bool(c, 'reveal');
+    if (variant === 'columns') return { boxes: pointColumns(ctx, read.str(c, 'title'), points, reveal, Boolean(src)) };
+    // Picture left keeps an empty frame while editing, so there is somewhere to drop the picture.
+    const left = variant === 'left';
+    const framed = Boolean(src) || (left && ctx.mode === 'edit');
+    const textW = framed ? Math.round(M.w * 0.55) : M.w;
+    const imageW = M.w - textW - 80;
+    const textX = left && framed ? M.x + imageW + 80 : M.x;
+    const { box, bottom } = slideTitle(ctx, read.str(c, 'title'), { x: textX, w: framed ? textW : M.w - 120 });
     const boxes: Box[] = [box];
-    boxes.push(...list(ctx, read.list(c, 'bullets'), {
-      x: M.x, y: bottom, w: textW, h: M.bottom - bottom - 30, bindKey: 'bullets', reveal: read.bool(c, 'reveal'), vcenter: true,
+    boxes.push(...list(ctx, points, {
+      x: textX, y: bottom, w: textW, h: M.bottom - bottom - 30, bindKey: 'bullets', reveal, vcenter: true,
     }));
-    if (src) {
-      const ix = M.x + textW + 80;
-      boxes.push(...imageOrPlaceholder(ctx, 'image', src, ix, M.top + 20, M.right - ix, M.bottom - M.top - 60));
-    }
+    if (framed) boxes.push(...imageOrPlaceholder(ctx, 'image', src, left ? M.x : M.x + textW + 80, M.top + 20, imageW, M.bottom - M.top - 60));
     return { boxes };
   },
 };
+
+/** Points in two columns of equal type, the first half on the left. */
+function pointColumns(ctx: LayoutContext, title: string, points: string[], reveal: boolean, hasImage: boolean): Box[] {
+  const { box, bottom } = slideTitle(ctx, title, { w: M.w - 120 });
+  if (hasImage) ctx.warnings.push('Two columns has no room for the picture. Pick Picture right or Picture left to show it.');
+  const filled = points.map((p, i) => ({ p, i })).filter((e) => e.p.trim());
+  const h = M.bottom - bottom - 30;
+  if (filled.length < 2) return [box, ...list(ctx, points, { x: M.x, y: bottom, w: M.w, h, bindKey: 'bullets', reveal, vcenter: true })];
+  const half = Math.ceil(filled.length / 2);
+  const cut = filled[half]!.i;
+  const parts = [points.slice(0, cut), points.slice(cut)];
+  const gap = 96;
+  const colW = (M.w - gap) / 2;
+  const opts = (k: number) => ({ x: M.x + k * (colW + gap), y: bottom, w: colW, h, bindKey: 'bullets', reveal, startStep: k ? half + 1 : 1, offset: k ? cut : 0 });
+  let cols = parts.map((part, k) => list(ctx, part, opts(k)));
+  const sizes = cols.map((col) => col.find((b): b is TextBox => b.type === 'text' && Boolean(b.bind))?.style.size ?? 0);
+  if (sizes[0] !== sizes[1]) cols = parts.map((part, k) => list(ctx, part, { ...opts(k), size: Math.min(...sizes) }));
+  const boxes = cols.flat();
+  // Centre the taller column in the space, and keep the two tops level.
+  const used = Math.max(...boxes.map((b) => b.y + b.h)) - bottom;
+  const shift = used < h ? Math.min((h - used) / 2, sz(ctx, 80)) : 0;
+  return [box, ...boxes.map((b) => ({ ...b, y: b.y + shift }))];
+}
 
 const compare: SlideKindDefinition<C> = {
   kind: 'compare', label: 'Compare', description: 'Two columns side by side: before and after, pros and cons, A and B.', icon: 'columns-2', group: 'Explain',
@@ -184,7 +246,7 @@ const compare: SlideKindDefinition<C> = {
         boxes.push(shape({ id: `${side}-rule`, shape: 'rect', x: x + pad, y, w: colW - pad * 2, h: 3, fill: ctx.theme.colors.line, step }));
         y += 36;
       }
-      boxes.push(...list(ctx, read.list(c, `${side}Points`), { x: x + pad, y, w: colW - pad * 2, h: top + h - pad - y, bindKey: `${side}Points`, max: 40, min: 28, reveal: false, startStep: step }).map((b) => ({ ...b, step })));
+      boxes.push(...list(ctx, read.items(c, `${side}Points`), { x: x + pad, y, w: colW - pad * 2, h: top + h - pad - y, bindKey: `${side}Points`, max: 40, min: 28, reveal: false, startStep: step }).map((b) => ({ ...b, step })));
     });
     return { boxes };
   },
@@ -247,21 +309,32 @@ const image: SlideKindDefinition<C> = {
   },
 };
 
+/** Up to two initials from a name, for a round badge when there is no photo. */
+export function initials(name: string): string {
+  return name.replace(/^[\s—–-]+/, '').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
+}
+
 const quote: SlideKindDefinition<C> = {
-  kind: 'quote', label: 'Quote', description: 'A quotation or a key sentence, large.', icon: 'quote', group: 'Explain',
+  kind: 'quote', label: 'Quote', description: 'A quotation or a key sentence, large. The Testimonial layout adds a photo, name and role.', icon: 'quote', group: 'Explain',
+  variants: [{ id: 'plain', label: 'Quote' }, { id: 'testimonial', label: 'Testimonial' }],
+  autoVariant: (c) => (read.str(c, 'photo').trim() ? 'testimonial' : 'plain'),
   fields: [
     { key: 'quote', label: 'Quote', type: 'textarea', rows: 4 },
     { key: 'attribution', label: 'Who said it', type: 'text' },
+    { key: 'role', label: 'Role or organisation', type: 'text', help: 'Optional. Shown under the name.' },
+    // Drafting never puts a deck's pictures here: a testimonial photo is of the person quoted.
+    { key: 'photo', label: 'Photo', type: 'image', help: 'Optional. A round photo of the person, for a testimonial.', ai: false },
   ],
-  create: () => ({ quote: 'The important thing is not to stop questioning.', attribution: 'Albert Einstein' }),
+  create: () => ({ quote: 'The important thing is not to stop questioning.', attribution: 'Albert Einstein', role: '', photo: '' }),
   heading: (c) => read.str(c, 'quote').slice(0, 60) || 'Quote',
-  text: (c) => [read.str(c, 'quote'), read.str(c, 'attribution')].filter(Boolean),
-  layout(c, ctx) {
+  text: (c) => [read.str(c, 'quote'), read.str(c, 'attribution'), read.str(c, 'role')].filter(Boolean),
+  layout(c, ctx, variant) {
+    if (variant === 'testimonial') return testimonial(c, ctx);
     const boxes: Box[] = [
-      text(ctx, { id: 'mark', text: '“', x: M.x - 16, y: M.top - 40, w: 300, h: 340, role: 'display', max: 320, min: 320, scaled: false, color: ctx.theme.colors.accent, lh: 1 }),
+      { ...text(ctx, { id: 'mark', text: '“', x: M.x - 16, y: M.top - 40, w: 300, h: 340, role: 'display', max: 320, min: 320, scaled: false, color: ctx.theme.colors.accent, lh: 1 }), moveWith: 'quote' },
     ];
     const q = text(ctx, { id: 'quote', text: read.str(c, 'quote') || ' ', x: M.x + 40, y: 0, w: M.w - 200, h: 600, role: 'display', italic: ctx.theme.display.web.includes('Fraunces'), max: 84, min: 46, hug: true, lh: 1.18, bind: 'quote' });
-    const who = read.str(c, 'attribution');
+    const who = [read.str(c, 'attribution').trim(), read.str(c, 'role').trim()].filter(Boolean).join(', ');
     const a = who ? text(ctx, { id: 'attribution', text: `— ${who}`, x: M.x + 40, y: 0, w: M.w - 200, h: 60, max: 36, min: 28, weight: 600, color: ctx.theme.colors.muted, hug: true, maxLines: 1, bind: 'attribution' }) : null;
     const blockH = q.h + (a ? 48 + a.h : 0);
     q.y = Math.max(300, (CANVAS_H - blockH) / 2 + 40);
@@ -270,6 +343,46 @@ const quote: SlideKindDefinition<C> = {
     return { boxes };
   },
 };
+
+/** A testimonial: the words, then who said them, beside a round photo or under a badge of their initials. */
+function testimonial(c: C, ctx: LayoutContext): KindLayout {
+  const colors = ctx.theme.colors;
+  const photo = imageSrc(ctx, c.photo);
+  const who = read.str(c, 'attribution').trim();
+  const role = read.str(c, 'role').trim();
+  const d = photo ? 440 : 0;
+  const x = photo ? M.x + d + 120 : M.x + 40;
+  const w = M.right - x - (photo ? 0 : 160);
+  const boxes: Box[] = [];
+  if (photo) boxes.push({ type: 'image', id: 'photo', src: photo, x: M.x, y: (CANVAS_H - d) / 2, w: d, h: d, fit: 'cover', radius: d / 2, bind: 'photo', alt: who });
+  const mark = { ...text(ctx, { id: 'mark', text: '“', x: x - 8, y: 0, w: 200, h: 180, role: 'display', max: 180, min: 180, scaled: false, color: colors.accent, lh: 1 }), moveWith: 'quote' };
+  const q = text(ctx, { id: 'quote', text: read.str(c, 'quote') || ' ', x, y: 0, w, h: 560, role: 'display', italic: ctx.theme.display.web.includes('Fraunces'), max: 64, min: 36, hug: true, lh: 1.2, bind: 'quote' });
+  const avatar = !photo && who ? Math.round(sz(ctx, 104)) : 0;
+  const nameX = x + (avatar ? avatar + 28 : 0);
+  const nameW = w - (avatar ? avatar + 28 : 0);
+  const name = who ? text(ctx, { id: 'attribution', text: who, x: nameX, y: 0, w: nameW, h: sz(ctx, 40) * 1.3 * 2, max: 40, min: 28, weight: 700, maxLines: 2, hug: true, bind: 'attribution' }) : null;
+  const r = role ? text(ctx, { id: 'role', text: role, x: nameX, y: 0, w: nameW, h: sz(ctx, 30) * 1.3 * 2, max: 30, min: 22, color: colors.muted, maxLines: 2, hug: true, bind: 'role' }) : null;
+  if (r && name) r.moveWith = 'attribution';
+  const namesH = (name?.h ?? 0) + (name && r ? 4 : 0) + (r?.h ?? 0);
+  const whoH = Math.max(avatar, namesH);
+  const blockH = 110 + q.h + (whoH ? 56 + whoH : 0);
+  const y = Math.max(M.top, (CANVAS_H - blockH) / 2);
+  mark.y = y - 20;
+  q.y = y + 110;
+  boxes.push(mark, q);
+  let ny = q.y + q.h + 56;
+  if (avatar) {
+    boxes.push(shape({ id: 'avatar', shape: 'ellipse', x, y: ny + (whoH - avatar) / 2, w: avatar, h: avatar, fill: colors.accent, bind: 'photo', moveWith: name ? 'attribution' : undefined }));
+    boxes.push({
+      type: 'text', id: 'avatar-t', x, y: ny + (whoH - avatar) / 2, w: avatar, h: avatar, text: initials(who), moveWith: 'avatar',
+      style: { font: 'display', size: Math.round(avatar * 0.4), weight: 700, color: colors.onAccent, align: 'center', valign: 'middle', lineHeight: 1 },
+    });
+  }
+  ny += (whoH - namesH) / 2;
+  if (name) { name.y = ny; boxes.push(name); ny += name.h + 4; }
+  if (r) { r.y = ny; boxes.push(r); }
+  return { boxes };
+}
 
 const term: SlideKindDefinition<C> = {
   kind: 'term', label: 'Key term', description: 'One term, its meaning and an example. Good for vocabulary, jargon or product terms.', icon: 'book-open', group: 'Explain',
@@ -318,7 +431,9 @@ const term: SlideKindDefinition<C> = {
 };
 
 const stats: SlideKindDefinition<C> = {
-  kind: 'stats', label: 'Big numbers', description: 'One to four figures that tell the story.', icon: 'chart-no-axes-column', group: 'Data',
+  kind: 'stats', label: 'Big numbers', description: 'One to four figures that tell the story, side by side or one huge number.', icon: 'chart-no-axes-column', group: 'Data',
+  variants: [{ id: 'row', label: 'Side by side' }, { id: 'hero', label: 'One big number' }],
+  autoVariant: (c) => (filledStats(c).length === 1 ? 'hero' : 'row'),
   fields: [
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
     { key: 'stats', label: 'Figures', type: 'objects', itemLabel: 'Figure', max: 4, min: 1, fields: [
@@ -330,7 +445,8 @@ const stats: SlideKindDefinition<C> = {
   create: () => ({ title: 'By the numbers', stats: [{ value: '71%', label: 'of Earth is water', detail: '' }, { value: '3%', label: 'of that is fresh', detail: '' }] }),
   heading: (c) => read.str(c, 'title') || 'Big numbers',
   text: (c) => [read.str(c, 'title'), ...read.objects(c, 'stats').flatMap((s) => [String(s.value ?? ''), String(s.label ?? ''), String(s.detail ?? '')])].filter(Boolean),
-  layout(c, ctx) {
+  layout(c, ctx, variant) {
+    if (variant === 'hero') return heroNumber(c, ctx);
     const items = read.objects<Record<string, unknown>>(c, 'stats').slice(0, 4);
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title'));
     const boxes: Box[] = [box];
@@ -346,17 +462,55 @@ const stats: SlideKindDefinition<C> = {
       boxes.push(v);
       let y = v.y + v.h + 18;
       const l = text(ctx, { id: `l${i}`, text: String(s.label ?? ''), x, y, w: colW, h: 130, max: 42, min: 28, weight: 650, maxLines: 2, hug: true, bind: `stats.${i}.label` });
+      l.moveWith = v.id;
       boxes.push(l);
       y += l.h + 14;
       const d = String(s.detail ?? '');
-      if (d) boxes.push(text(ctx, { id: `d${i}`, text: d, x, y, w: colW, h: 150, max: 32, min: 24, color: ctx.theme.colors.muted, maxLines: 3, hug: true, bind: `stats.${i}.detail` }));
+      if (d) boxes.push({ ...text(ctx, { id: `d${i}`, text: d, x, y, w: colW, h: 150, max: 32, min: 24, color: ctx.theme.colors.muted, maxLines: 3, hug: true, bind: `stats.${i}.detail` }), moveWith: v.id });
     });
     return { boxes };
   },
 };
 
+/** Figures with a number in them, with their place in the stored list. */
+function filledStats(c: C) {
+  return read.objects<Record<string, unknown>>(c, 'stats').map((o, i) => ({ o, i })).filter(({ o }) => String(o.value ?? '').trim());
+}
+
+/** One figure, centred and as large as the slide allows, under a centred title. */
+function heroNumber(c: C, ctx: LayoutContext): KindLayout {
+  const colors = ctx.theme.colors;
+  const filled = filledStats(c);
+  const all = read.objects<Record<string, unknown>>(c, 'stats');
+  const first = filled[0] ?? (all.length ? { o: all[0]!, i: 0 } : null);
+  const t = text(ctx, { id: 'title', text: read.str(c, 'title') || ' ', x: M.x, y: M.top, w: M.w, h: sz(ctx, 60) * 1.2 * 2, role: 'display', max: 60, min: 40, maxLines: 2, hug: true, align: 'center', bind: 'title' });
+  const boxes: Box[] = [t];
+  if (!first) return { boxes };
+  if (filled.length > 1) ctx.warnings.push('One big number shows the first figure only. Pick Side by side to show them all.');
+  const { o, i } = first;
+  const top = t.y + t.h + sz(ctx, 24);
+  const v = text(ctx, { id: `v${i}`, text: String(o.value ?? '').trim() || ' ', x: M.x, y: 0, w: M.w, h: 440, role: 'display', max: 360, min: 140, maxLines: 1, hug: true, align: 'center', color: colors.accent, lh: 1.05, bind: `stats.${i}.value` });
+  const labelValue = String(o.label ?? '').trim();
+  const detailValue = String(o.detail ?? '').trim();
+  const l = labelValue ? text(ctx, { id: `l${i}`, text: labelValue, x: M.x + 120, y: 0, w: M.w - 240, h: sz(ctx, 56) * 1.3 * 2, max: 56, min: 34, weight: 650, maxLines: 2, hug: true, align: 'center', bind: `stats.${i}.label` }) : null;
+  const d = detailValue ? text(ctx, { id: `d${i}`, text: detailValue, x: M.x + 240, y: 0, w: M.w - 480, h: sz(ctx, 36) * 1.3 * 3, max: 36, min: 24, color: colors.muted, maxLines: 3, hug: true, align: 'center', bind: `stats.${i}.detail` }) : null;
+  const blockH = v.h + (l ? sz(ctx, 20) + l.h : 0) + (d ? sz(ctx, 14) + d.h : 0);
+  let y = top + Math.max(0, (M.bottom - top - blockH) / 2);
+  v.y = y; boxes.push(v); y += v.h;
+  if (l) { l.y = y + sz(ctx, 20); l.moveWith = v.id; boxes.push(l); y = l.y + l.h; }
+  if (d) { d.y = y + sz(ctx, 14); d.moveWith = v.id; boxes.push(d); }
+  return { boxes };
+}
+
 const steps: SlideKindDefinition<C> = {
-  kind: 'steps', label: 'Steps', description: 'A process or a timeline, left to right.', icon: 'milestone', group: 'Explain',
+  kind: 'steps', label: 'Steps', description: 'A process, left to right, or top to bottom when the steps have more to say.', icon: 'milestone', group: 'Explain',
+  variants: [{ id: 'across', label: 'Left to right' }, { id: 'down', label: 'Top to bottom' }],
+  // Steps with longer details run down the slide, where each detail gets the full width.
+  autoVariant: (c) => {
+    const items = read.objects<Record<string, unknown>>(c, 'steps');
+    const details = items.map((s) => String(s.detail ?? '').trim().length);
+    return Math.max(0, ...details) > 60 || details.reduce((a, b) => a + b, 0) > 180 ? 'down' : 'across';
+  },
   fields: [
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
     { key: 'steps', label: 'Steps', type: 'objects', itemLabel: 'Step', max: 6, min: 2, fields: [
@@ -368,11 +522,12 @@ const steps: SlideKindDefinition<C> = {
   create: () => ({ title: 'How it works', steps: [{ label: 'Observe', detail: '' }, { label: 'Ask', detail: '' }, { label: 'Test', detail: '' }], reveal: true }),
   heading: (c) => read.str(c, 'title') || 'Steps',
   text: (c) => [read.str(c, 'title'), ...read.objects(c, 'steps').flatMap((s) => [String(s.label ?? ''), String(s.detail ?? '')])].filter(Boolean),
-  layout(c, ctx) {
+  layout(c, ctx, variant) {
     const items = read.objects<Record<string, unknown>>(c, 'steps').slice(0, 6);
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title'));
     const boxes: Box[] = [box];
     if (!items.length) return { boxes };
+    if (variant === 'down') return { boxes: [...boxes, ...stepsDown(ctx, items, bottom, read.bool(c, 'reveal'))] };
     const n = items.length;
     const colW = M.w / n;
     const d = sz(ctx, n > 4 ? 76 : 92);
@@ -382,18 +537,49 @@ const steps: SlideKindDefinition<C> = {
     items.forEach((s, i) => {
       const cx = M.x + colW * i + colW / 2;
       const step = reveal ? i + 1 : undefined;
-      boxes.push(shape({ id: `node-${i}`, shape: 'ellipse', x: cx - d / 2, y: trackY - d / 2, w: d, h: d, fill: ctx.theme.colors.accent, step }));
-      boxes.push({ type: 'text', id: `num-${i}`, x: cx - d / 2, y: trackY - d / 2, w: d, h: d, text: String(i + 1), step,
+      boxes.push(shape({ id: `node-${i}`, shape: 'ellipse', x: cx - d / 2, y: trackY - d / 2, w: d, h: d, fill: ctx.theme.colors.accent, step, moveWith: `label-${i}` }));
+      boxes.push({ type: 'text', id: `num-${i}`, x: cx - d / 2, y: trackY - d / 2, w: d, h: d, text: String(i + 1), step, moveWith: `label-${i}`,
         style: { font: 'display', size: Math.round(d * 0.46), weight: 700, color: ctx.theme.colors.onAccent, align: 'center', valign: 'middle', lineHeight: 1 } });
       const tw = colW - 36;
       const l = text(ctx, { id: `label-${i}`, text: String(s.label ?? ''), x: cx - tw / 2, y: trackY + d / 2 + 34, w: tw, h: 140, role: 'display', max: 46, min: 30, maxLines: 2, hug: true, align: 'center', step, bind: `steps.${i}.label` });
       boxes.push(l);
       const detail = String(s.detail ?? '');
-      if (detail) boxes.push(text(ctx, { id: `detail-${i}`, text: detail, x: cx - tw / 2, y: l.y + l.h + 14, w: tw, h: M.bottom - (l.y + l.h + 14), max: 32, min: 22, align: 'center', color: ctx.theme.colors.muted, hug: true, step, bind: `steps.${i}.detail` }));
+      if (detail) boxes.push({ ...text(ctx, { id: `detail-${i}`, text: detail, x: cx - tw / 2, y: l.y + l.h + 14, w: tw, h: M.bottom - (l.y + l.h + 14), max: 32, min: 22, align: 'center', color: ctx.theme.colors.muted, hug: true, step, bind: `steps.${i}.detail` }), moveWith: `label-${i}` });
     });
     return { boxes };
   },
 };
+
+/** Steps down the slide: numbered nodes on a line at the left, each label with its detail beside it. */
+function stepsDown(ctx: LayoutContext, items: Record<string, unknown>[], bottom: number, reveal: boolean): Box[] {
+  const colors = ctx.theme.colors;
+  const n = items.length;
+  const areaH = M.bottom - bottom;
+  const rowH = Math.min(sz(ctx, 210), areaH / n);
+  const d = Math.round(Math.min(sz(ctx, 76), rowH * 0.62));
+  const y0 = bottom + Math.max(0, Math.min((areaH - rowH * n) / 2, sz(ctx, 40)));
+  const textX = M.x + d + 44;
+  const textW = M.right - textX;
+  const boxes: Box[] = [];
+  if (n > 1) boxes.push(shape({ id: 'track', shape: 'rect', x: M.x + d / 2 - 3, y: y0 + rowH / 2, w: 6, h: rowH * (n - 1), fill: colors.line, radius: 3 }));
+  items.forEach((s, i) => {
+    const mid = y0 + i * rowH + rowH / 2;
+    const step = reveal ? i + 1 : undefined;
+    const lead = `label-${i}`;
+    const l = text(ctx, { id: lead, text: String(s.label ?? '') || ' ', x: textX, y: 0, w: textW, h: rowH * 0.5, role: 'display', max: 44, min: 28, maxLines: 1, hug: true, step, bind: `steps.${i}.label` });
+    const detail = String(s.detail ?? '').trim();
+    const room = rowH - l.h - 8 - sz(ctx, 16);
+    const dt = detail ? text(ctx, { id: `detail-${i}`, text: detail, x: textX, y: 0, w: textW, h: Math.max(room, sz(ctx, 32) * 1.3), max: 32, min: 22, color: colors.muted, hug: true, step, bind: `steps.${i}.detail` }) : null;
+    const blockH = l.h + (dt ? 8 + dt.h : 0);
+    l.y = mid - blockH / 2;
+    boxes.push(shape({ id: `node-${i}`, shape: 'ellipse', x: M.x, y: mid - d / 2, w: d, h: d, fill: colors.accent, step, moveWith: lead }));
+    boxes.push({ type: 'text', id: `num-${i}`, x: M.x, y: mid - d / 2, w: d, h: d, text: String(i + 1), step, moveWith: lead,
+      style: { font: 'display', size: Math.round(d * 0.46), weight: 700, color: colors.onAccent, align: 'center', valign: 'middle', lineHeight: 1 } });
+    boxes.push(l);
+    if (dt) { dt.y = l.y + l.h + 8; dt.moveWith = lead; boxes.push(dt); }
+  });
+  return boxes;
+}
 
 // ─── Check ────────────────────────────────────────────────────────────
 
@@ -411,7 +597,9 @@ const question: SlideKindDefinition<C> = {
   text: (c) => [read.str(c, 'question'), ...read.list(c, 'options'), read.str(c, 'answer')].filter(Boolean),
   layout(c, ctx) {
     const boxes: Box[] = [];
-    const options = read.list(c, 'options').slice(0, 6);
+    // Blank choices are skipped; each card binds to its choice's place in the stored list.
+    const choices = read.items(c, 'options').map((value, i) => ({ value: value.trim(), i })).filter((o) => o.value).slice(0, 6);
+    const options = choices.map((o) => o.value);
     const correct = read.num(c, 'correct');
     const answer = read.str(c, 'answer');
     const eb = eyebrow(ctx, 'eyebrow', 'Question', M.x, M.top, 600);
@@ -435,13 +623,13 @@ const question: SlideKindDefinition<C> = {
         const row = Math.floor(i / cols);
         const x = M.x + col * (cardW + gapX);
         const cy = y + row * (cardH + gapY);
-        const isCorrect = i === correct;
+        const isCorrect = choices[i]!.i === correct;
         boxes.push(card(ctx, `opt-${i}`, x, cy, cardW, cardH));
         const d = Math.min(cardH - 36, sz(ctx, 64));
         boxes.push(shape({ id: `opt-${i}-badge`, shape: 'ellipse', x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, fill: ctx.theme.colors.accent2 }));
         boxes.push({ type: 'text', id: `opt-${i}-letter`, x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, text: LETTERS[i] ?? '?',
           style: { font: 'body', size: Math.round(d * 0.48), weight: 750, color: ctx.theme.colors.ink, align: 'center', valign: 'middle', lineHeight: 1 } });
-        boxes.push(text(ctx, { id: `opt-${i}-text`, text: opt, x: x + 28 + d + 28, y: cy + 10, w: cardW - d - 96, h: cardH - 20, max: 42, min: 26, valign: 'middle', bind: `options.${i}` }));
+        boxes.push(text(ctx, { id: `opt-${i}-text`, text: opt, x: x + 28 + d + 28, y: cy + 10, w: cardW - d - 96, h: cardH - 20, max: 42, min: 26, valign: 'middle', bind: `options.${choices[i]!.i}` }));
         if (correct >= 0) {
           if (isCorrect) {
             boxes.push(shape({ id: `opt-${i}-ring`, shape: 'rect', x: x - 4, y: cy - 4, w: cardW + 8, h: cardH + 8, stroke: good, strokeWidth: 8, radius: ctx.theme.radius + 4, step: 1, reveal: 'answer' }));
@@ -515,7 +703,7 @@ const summary: SlideKindDefinition<C> = {
   text: (c) => [read.str(c, 'title'), ...read.list(c, 'points')],
   layout(c, ctx) {
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title') || 'Key takeaways');
-    return { boxes: [box, ...list(ctx, read.list(c, 'points'), { x: M.x, y: bottom, w: M.w - 160, h: M.bottom - bottom - 20, marker: 'check', bindKey: 'points', vcenter: true, markerColor: ctx.theme.colors.good })] };
+    return { boxes: [box, ...list(ctx, read.items(c, 'points'), { x: M.x, y: bottom, w: M.w - 160, h: M.bottom - bottom - 20, marker: 'check', bindKey: 'points', vcenter: true, markerColor: ctx.theme.colors.good })] };
   },
 };
 
@@ -533,7 +721,7 @@ const closing: SlideKindDefinition<C> = {
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title') || 'Before we close');
     const closingLine = read.str(c, 'closing');
     const reserve = closingLine ? 150 : 0;
-    const boxes: Box[] = [box, ...list(ctx, read.list(c, 'prompts'), { x: M.x, y: bottom, w: M.w - 160, h: M.bottom - bottom - reserve, marker: 'number', bindKey: 'prompts', vcenter: true })];
+    const boxes: Box[] = [box, ...list(ctx, read.items(c, 'prompts'), { x: M.x, y: bottom, w: M.w - 160, h: M.bottom - bottom - reserve, marker: 'number', bindKey: 'prompts', vcenter: true })];
     if (closingLine) {
       boxes.push(shape({ id: 'rule', shape: 'rect', x: M.x, y: M.bottom - 118, w: 96, h: 8, radius: 4, fill: ctx.theme.colors.accent }));
       boxes.push(text(ctx, { id: 'closing', text: closingLine, x: M.x, y: M.bottom - 90, w: M.w, h: 96, role: 'display', max: 64, min: 40, maxLines: 1, bind: 'closing' }));
@@ -591,7 +779,7 @@ let registered = false;
 export function registerCoreKinds() {
   if (registered) return;
   registered = true;
-  [...CORE_KINDS, ...DATA_KINDS, ...VISUAL_KINDS, ...MEDIA_KINDS, ...PITCH_KINDS, ...LIVE_KINDS].forEach(registerKind);
+  [...CORE_KINDS, ...DATA_KINDS, ...VISUAL_KINDS, ...MEDIA_KINDS, ...PITCH_KINDS, ...LIVE_KINDS, ...REPORT_KINDS].forEach(registerKind);
 }
 
 /** Weight of the body face, for renderers that need it. */

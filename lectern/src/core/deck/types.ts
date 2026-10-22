@@ -49,6 +49,21 @@ export interface Slide<C = Record<string, unknown>> {
   variantPinned?: boolean;
   /** Skipped when presenting and exporting, kept in the studio. */
   hidden?: boolean;
+  /**
+   * Boxes the presenter moved or resized on the canvas, by box id, in canvas px.
+   * The layout places everything first; these replace the places of the boxes named.
+   */
+  overrides?: Record<string, BoxOverride>;
+}
+
+/** Where a box goes instead of where its layout put it. */
+export interface BoxOverride {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Text and markers scale by this, from resizing by a corner. 1 when missing. */
+  scale?: number;
 }
 
 export interface Deck {

@@ -6,6 +6,7 @@ import { getKind } from '../kinds/registry';
 import { toggleDefaults } from '../plugins/registry';
 import { type Box, type SlideLayout, maxStep } from './boxes';
 import { type Measure, measureText } from './measure';
+import { applyOverrides } from './overrides';
 import { type Theme, getTheme } from './themes';
 
 registerCoreKinds();
@@ -49,11 +50,11 @@ export function layoutSlide(slide: Slide, o: LayoutOptions): SlideLayout {
     const frame = result.frame ?? 'content';
     const boxes: Box[] = [
       ...(frame === 'bare' ? [] : decorate(ctx, frame)),
-      ...result.boxes,
+      ...applyOverrides(result.boxes, slide.overrides, ctx),
       ...(frame === 'content' ? footer(ctx) : []),
     ];
     const words = wordCount(def.text(slide.content ?? {}));
-    const budget = DENSITY[ctx.audience].words;
+    const budget = result.budget ?? DENSITY[ctx.audience].words;
     if (frame === 'content' && words > budget) {
       ctx.warnings.push(`${words} words on this slide. For this audience, aim for ${budget} or fewer and move the rest to the key notes.`);
     }
