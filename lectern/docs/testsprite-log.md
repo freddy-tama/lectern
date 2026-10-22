@@ -276,3 +276,20 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
 - **16:16** #16 was merged as `faad386`, and Vercel deploys it to production.
   - This entry went straight to main. A push to the PR would have started another paid run, and TestSprite skips pushes to main.
 - **Credits:** about 13.5 for this run. The two skipped events on #15 cost nothing. About 19 of the month's 150 are left, enough for one more run.
+
+## The tour video, now with a live AI run
+
+**2026-10-23** (China time)
+
+- **Before the run:** the branch `claude/tour-live-ai` replaces the intro page's **Watch it run** video and adds a sound button:
+  - The video (124 s, 7.8 MB) keeps the old recording's first 54 seconds, the sample talk, and adds narration to it. Then it adds a run on the live site:
+    - Claude Opus turns two sample files and a brief into a deck on `/make`.
+    - The deck assistant changes the deck.
+    - The deck plays on a laptop, the room's screen and a phone.
+
+    Each AI wait that was cut out is labelled on screen with how long it was.
+  - The narration is ElevenLabs text-to-speech, over a quiet music loop.
+  - The Tour section gets **Play with sound**: it unmutes the video and starts it from the top, and then reads **Mute**. The chapter names changed, and none is part of another control's name on the page.
+  - The vitest suite (726 tests), the typecheck and `npm run build` passed. The section was checked by hand in Chrome and in the browser pane, on a desktop and at phone width.
+- **What the suite may notice:** flow 1's tour checks. The PRD mentions **Play with sound** now. It doesn't name the chapters, but a test written in the portal might use an old chapter name.
+- **This run:** about 13.5 credits, which leaves about 5.5 of the month's 150.
