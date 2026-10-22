@@ -15,20 +15,23 @@ export interface InlineKeys {
  * Typing straight onto the slide. A textarea sits exactly over the text box it edits,
  * in the slide's own coordinates and type, while the slide redraws around it.
  */
-export function InlineEditor({ box, theme, value, multiline, onInput, onDone, keys }: {
+export function InlineEditor({ box, theme, value, multiline, onInput, onDone, keys, selectAll }: {
   box: TextBox; theme: Theme; value: string; multiline: boolean;
   onInput(value: string): void; onDone(): void; keys: InlineKeys;
+  /** Start with the whole text selected, so typing replaces a hint such as "Step". */
+  selectAll?: boolean;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const s = box.style;
 
-  // Focus once, with the caret at the end.
+  // Focus once, with the caret at the end (or the hint selected).
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
     el.focus({ preventScroll: true });
-    el.setSelectionRange(el.value.length, el.value.length);
-  }, []);
+    if (selectAll) el.select();
+    else el.setSelectionRange(el.value.length, el.value.length);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Grow with the text, and sit where the slide puts text in this box (top, middle or bottom).
   useLayoutEffect(() => {

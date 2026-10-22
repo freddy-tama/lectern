@@ -4,8 +4,10 @@
 // each slide's content (a picture with no text goes full screen, five cards make
 // a grid) and from its neighbours (picture slides alternate sides, statements
 // alternate colour), so a deck has rhythm without anyone choosing. A layout the
-// presenter picks by hand is pinned and left alone.
+// presenter picks by hand is pinned and left alone, and so is a slide whose boxes
+// they moved on the canvas.
 
+import { hasOverrides } from '../engine/overrides';
 import { getKind } from '../kinds/registry';
 import type { Deck, Slide } from './types';
 import { deckPurpose } from './types';
@@ -22,7 +24,7 @@ export function autoVariants(deck: Deck): Deck {
     const n = nth.get(slide.kind) ?? 0;
     nth.set(slide.kind, n + 1);
     const current = slide.variant ?? def.variants[0].id;
-    if (slide.variantPinned || !def.autoVariant) {
+    if (slide.variantPinned || !def.autoVariant || hasOverrides(slide)) {
       previous.set(slide.kind, current);
       return slide;
     }

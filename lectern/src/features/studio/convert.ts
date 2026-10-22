@@ -1,4 +1,5 @@
 import type { Slide } from '../../core/deck/types';
+import { withoutOverrides } from '../../core/engine/overrides';
 import { getKind } from '../../core/kinds/registry';
 
 const HEADING_KEYS = ['title', 'question', 'term', 'quote'];
@@ -42,5 +43,6 @@ export function convertSlide(slide: Slide, kind: string): Slide {
   }
   // Keep an image when both kinds have one.
   if (typeof c.image === 'string' && c.image && to.fields.some((f) => f.key === 'image')) content.image = c.image;
-  return { ...slide, kind, content, variant: undefined };
+  // Boxes moved by hand belong to the old type's layout, so the new type starts from its own.
+  return { ...withoutOverrides(slide), kind, content, variant: undefined };
 }

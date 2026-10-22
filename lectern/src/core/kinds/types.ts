@@ -19,6 +19,8 @@ export type FieldSpec = FieldCommon & (
       type: 'list'; itemLabel: string; placeholder?: string; max?: number;
       /** Name of a numeric content field that marks one item as correct. */
       correctKey?: string;
+      /** What the mark means, when it isn't the correct answer: "the current part". Items then show numbers, not letters. */
+      markAs?: string;
     }
   | { type: 'objects'; itemLabel: string; fields: FieldSpec[]; max?: number; min?: number }
   | { type: 'image' }
@@ -40,6 +42,8 @@ export interface KindLayout {
   background?: string;
   /** Which decoration and footer to add. "bare" adds neither. */
   frame?: 'content' | 'title' | 'section' | 'bare';
+  /** Words the slide may carry before the studio suggests trimming, for kinds meant to be read. Default: the audience's budget. */
+  budget?: number;
 }
 
 /** What auto style knows about a slide's place in the deck when it picks a layout. */

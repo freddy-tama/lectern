@@ -11,9 +11,12 @@ export function outlineMinutes(slides: Pick<PlannedSlide, 'minutes'>[]): number 
   return slides.reduce((t, s) => t + (Number(s.minutes) || 0), 0);
 }
 
-/** How many pictures a slide type shows: one per image field, and each item of a list of pictures. */
+/**
+ * How many planned pictures a slide type shows: one per image field, and each item of a list of pictures.
+ * Fields drafting leaves alone, such as a quote's photo of the speaker, take none.
+ */
 export function pictureRoom(kind: Pick<AnyKind, 'fields'>): number {
-  return kind.fields.reduce((n, f) => n + (f.type === 'image' ? 1 : f.type === 'objects' && f.fields.some((x) => x.type === 'image') ? (f.max ?? 4) : 0), 0);
+  return kind.fields.reduce((n, f) => n + (f.ai === false ? 0 : f.type === 'image' ? 1 : f.type === 'objects' && f.fields.some((x) => x.type === 'image') ? (f.max ?? 4) : 0), 0);
 }
 
 /** A slide changed to another type, keeping only the pictures the new type has room for. */

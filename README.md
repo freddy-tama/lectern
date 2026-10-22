@@ -41,7 +41,7 @@ So you rehearse from the deck itself. There's no second document to write, keep 
 Every link below works in a fresh browser. A `/try/...` link puts the sample deck back first if it was deleted.
 
 - **[Intro page](https://lectern-sooty.vercel.app/welcome):** a playable sample talk, the tour video and a phone quiz.
-- **[Studio](https://lectern-sooty.vercel.app/try/talk/studio):** 34 slide types on a 16:9 canvas. Type straight onto the slide, drop in pictures and video, and undo anything. Every change saves on its own.
+- **[Studio](https://lectern-sooty.vercel.app/try/talk/studio):** 37 slide types on a 16:9 canvas. The slide is the editor, as in Canva or PowerPoint: type into any text, drag things to move them, pull a corner to resize, and pick a layout from the toolbar beside what you selected. Drop in pictures and video, and undo anything. Every change saves on its own.
 - **[Present](https://lectern-sooty.vercel.app/try/talk/present):** click-to-reveal steps. The audience view, presenter view and teleprompter stay in sync.
 - **Share to phones:** two QR codes. Your phone becomes a teleprompter and remote. Everyone else follows the slides, votes in polls and plays a live quiz with a leaderboard.
 - **[A quiz in a link](https://lectern-sooty.vercel.app/welcome#phone-quiz):** the questions travel inside the link, so each phone runs the quiz on its own.
