@@ -46,7 +46,7 @@ function badgeText(id: string, value: string, x: number, y: number, d: number, c
 // ─── Timeline ─────────────────────────────────────────────────────────
 
 const timeline: SlideKindDefinition<C> = {
-  kind: 'timeline', label: 'Timeline', description: 'Milestones along a dated axis: a roadmap, a history or a project plan.', icon: 'waypoints', group: 'Explain',
+  kind: 'timeline', label: 'Timeline', description: 'Milestones along a dated axis: a history, a launch plan or the key dates of a project.', icon: 'waypoints', group: 'Explain',
   fields: [
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
     { key: 'milestones', label: 'Milestones', type: 'objects', itemLabel: 'Milestone', max: 6, min: 2, help: 'Two to six, in order from left to right.', fields: [

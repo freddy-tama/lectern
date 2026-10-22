@@ -3,6 +3,7 @@ import {
   AlertTriangle, ArrowLeft, BookOpen, ChevronDown, ClipboardList, Copy, Copyright, Download, EyeOff, FileJson, FileText, MonitorPlay,
   Plus, PresentationIcon, Redo2, Scissors, ScrollText, Shapes, Sparkles, Trash2, Undo2,
   Globe, NotebookText, PanelRightClose, PanelRightOpen, QrCode as QrIcon, Trophy, WandSparkles,
+  CircleCheck, Image as ImageIcon, MapPin, Pencil, RotateCcw,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -12,8 +13,9 @@ import { wording } from '../../core/deck/purpose';
 import { canSplit, fitsOnSlide, isOverflowWarning, splitInDeck, splitSlide } from '../../core/deck/split';
 import { autoVariants } from '../../core/deck/auto-style';
 import { fieldAt, getAt, insertItem, isListItem, isTextBind, removeItem, setAt, splitBind } from '../../core/deck/paths';
-import { type Deck, type KeyNotes, type Slide, deckMinutes, deckPurpose } from '../../core/deck/types';
-import type { SlideLayout, TextBox } from '../../core/engine/boxes';
+import { type BoxOverride, type Deck, type KeyNotes, type Slide, deckMinutes, deckPurpose } from '../../core/deck/types';
+import type { Box, SlideLayout, TextBox } from '../../core/engine/boxes';
+import { hasOverrides, withOverride, withoutOverrides } from '../../core/engine/overrides';
 import { getTheme } from '../../core/engine/themes';
 import { getKind } from '../../core/kinds/registry';
 import { deckFields, exporters } from '../../core/plugins/registry';
@@ -32,6 +34,8 @@ import { SlideView } from '../slides/SlideView';
 import { AskAboutThis } from './AskAboutThis';
 import { AssistantBar, AssistantNotes, AssistantPanel, AssistantStage, useDeckAssistant } from './Assistant';
 import { AudienceMenu } from './AudienceMenu';
+import { CanvasOverlay, CanvasToolbar, LayoutMenu, type ToolAction, useBoxDrag } from './CanvasEditor';
+import { addItemAfter, canAdd, canDelete, clearField, handlesFor, itemOf, percentIn, removeItemAt, shiftItemOverrides, shiftMark } from './canvas';
 import { convertSlide } from './convert';
 import { DeckDetailsDialog } from './DeckDetailsDialog';
 import { useDraftFitNotice } from './fit-deck';
@@ -67,9 +71,13 @@ export default function Studio() {
   const [step, setStep] = useState<number | undefined>(undefined);
   const [layout, setLayout] = useState<SlideLayout | null>(null);
   const [busy, setBusy] = useState('');
-  const [editing, setEditing] = useState<{ bind: string; fallback?: TextBox } | null>(null);
+  const [editing, setEditing] = useState<{ bind: string; fallback?: TextBox; selectAll?: boolean } | null>(null);
+  // The box picked on the canvas, by id, and where it is being dragged to right now.
+  const [selected, setSelected] = useState<string | null>(null);
+  const [draft, setDraft] = useState<{ id: string; place: BoxOverride } | null>(null);
   const [notesOpen, setNotesOpen] = useStoredFlag('lectern.studio.notes', true);
-  const [panelOpen, setPanelOpen] = useStoredFlag('lectern.studio.panel', true);
+  // The slide is the editor: the panel with every field stays folded away until someone asks for it.
+  const [panelOpen, setPanelOpen] = useStoredFlag('lectern.studio.fields', false);
   const [details, setDetails] = useState(false);
   const [credits, setCredits] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -93,7 +101,7 @@ export default function Studio() {
     setSelectedId(deck.slides.find((s) => s.id === wanted)?.id ?? deck.slides[0]?.id ?? '');
   }, [deck, selectedId, params]);
 
-  useEffect(() => { setStep(undefined); setActiveBind(null); setEditing(null); }, [selectedId]);
+  useEffect(() => { setStep(undefined); setActiveBind(null); setEditing(null); setSelected(null); setDraft(null); }, [selectedId]);
 
   const index = deck ? Math.max(0, deck.slides.findIndex((s) => s.id === selectedId)) : 0;
   const slide = deck?.slides[index];
@@ -112,6 +120,47 @@ export default function Studio() {
   const updateSlide = useCallback((id: string, fn: (s: Slide) => Slide, key?: string) => {
     change((d) => ({ ...d, slides: d.slides.map((s) => (s.id === id ? fn(s) : s)) }), key);
   }, [change]);
+
+  // The slide as drawn on the stage: with the box being dragged at its new place.
+  const shownSlide = useMemo(() => (slide && draft ? withOverride(slide, draft.id, draft.place) : slide), [slide, draft]);
+
+  /** A box moved or resized on the canvas. Callout dots store where they point instead of an override. */
+  const placeBox = (box: Box, place: BoxOverride, key?: string) => {
+    if (!slide) return;
+    const within = box.drag ? layout?.boxes.find((b) => b.id === box.drag!.within) : undefined;
+    if (box.drag && within) {
+      const at = percentIn(place, within);
+      updateSlide(slide.id, (s) => withOverride({ ...s, content: setAt(setAt(s.content, box.drag!.x, String(at.x)), box.drag!.y, String(at.y)) }, box.id, null), key);
+      return;
+    }
+    updateSlide(slide.id, (s) => withOverride(s, box.id, place), key);
+  };
+
+  const drag = useBoxDrag({
+    layout,
+    scaleOf: (id) => slide?.overrides?.[id]?.scale ?? 1,
+    onPreview: (id, place) => setDraft(place ? { id, place } : null),
+    onCommit: (box, place) => { setSelected(box.id); placeBox(box, place); },
+  });
+
+  /** Picks a layout, or Auto (null). Boxes moved by hand go back into place: the new layout arranges them itself. */
+  const chooseLayout = (variant: string | null) => {
+    if (!slide || !deck) return;
+    const def = getKind(slide.kind);
+    const now = slide.variant ?? def?.variants?.[0]?.id;
+    if (variant === null ? !slide.variantPinned : variant === now && (slide.variantPinned || !deck.autoStyle || !def?.autoVariant)) return;
+    const moved = hasOverrides(slide);
+    updateSlide(slide.id, (s) => withoutOverrides(variant === null
+      ? { ...s, variantPinned: undefined }
+      : { ...s, variant, variantPinned: deck.autoStyle ? true : undefined }));
+    if (moved) toast.show('Layout changed. Moved items went back into place.', { action: { label: 'Undo', run: () => undo() } });
+  };
+
+  const resetLayout = () => {
+    if (!slide) return;
+    updateSlide(slide.id, (s) => withoutOverrides(s));
+    toast.show('Everything is back where the layout puts it', { action: { label: 'Undo', run: () => undo() } });
+  };
 
   const insertSlide = (kind: string) => {
     const s = makeSlide(kind);
@@ -189,6 +238,15 @@ export default function Studio() {
       const { deck: d, index: i, selectedId: id } = keyState.current;
       if (!d) return;
       if (e.key === 'Escape' && revision.proposal) { e.preventDefault(); revision.discard(); return; }
+      // With a box selected, Delete removes what it shows and the arrows nudge it.
+      if (selectedBox?.bind && !revision.proposal && !assistant.focused) {
+        const arrows: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        if (e.key === 'Escape') { e.preventDefault(); setSelected(null); setActiveBind(null); return; }
+        if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteBox(selectedBox); return; }
+        if (e.key === 'Enter' && typeable(selectedBox)) { e.preventDefault(); setEditing({ bind: selectedBox.bind }); return; }
+        const step = arrows[e.key];
+        if (step && !e.altKey) { e.preventDefault(); nudge(selectedBox, step[0] * (e.shiftKey ? 40 : 8), step[1] * (e.shiftKey ? 40 : 8)); return; }
+      }
       if (e.key === 'F5' || (mod && e.key === 'Enter')) { e.preventDefault(); navigate(`/present/${d.id}${e.shiftKey ? `?from=${i}` : ''}`); return; }
       if (mod && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicate(id); return; }
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); move(e.key === 'ArrowUp' ? -1 : 1); return; }
@@ -213,18 +271,43 @@ export default function Studio() {
 
   // ─── Typing on the slide ───────────────────────────────────────────
 
-  /** A click on the slide: text opens for typing in place; anything else opens its field in the panel. */
-  const pick = (bind: string, boxId: string) => {
-    if (window.getSelection()?.toString().trim()) return;
+  /** Text that can be typed into straight on the slide. */
+  const typeable = (box: Box | undefined): box is TextBox => {
     const kind = slide ? getKind(slide.kind) : undefined;
-    const box = layout?.boxes.find((b) => b.id === boxId);
-    if (slide && kind && box?.type === 'text' && isTextBind(kind.fields, slide.content, bind)) {
-      setEditing({ bind });
-      setActiveBind(bind);
-      return;
-    }
+    return Boolean(slide && kind && box?.type === 'text' && box.bind && isTextBind(kind.fields, slide.content, box.bind));
+  };
+
+  /** The box a press or click means: the hint inside an empty frame stands for the frame. */
+  const leadFor = (box: Box): Box => {
+    if (typeable(box) || !box.moveWith) return box;
+    const lead = layout?.boxes.find((b) => b.id === box.moveWith);
+    return lead?.bind && lead.bind === box.bind ? lead : box;
+  };
+
+  /** Opens the panel at a field. */
+  const openField = (bind: string) => {
+    setAssistantOpen(false);
     setPanelOpen(true);
     focusBind(bind);
+  };
+
+  /** A click on the slide selects the box. Text opens for typing in place; a second click on anything else opens its field. */
+  const pick = (bind: string, boxId: string) => {
+    if (drag.justDragged()) return;
+    if (window.getSelection()?.toString().trim()) return;
+    const clicked = layout?.boxes.find((b) => b.id === boxId);
+    if (!clicked) return;
+    const box = leadFor(clicked);
+    const again = selected === box.id;
+    setSelected(box.id);
+    if (typeable(box)) {
+      setEditing({ bind: box.bind! });
+      setActiveBind(box.bind!);
+      return;
+    }
+    setEditing(null);
+    setActiveBind(box.bind ?? bind);
+    if (again) openField(box.bind ?? bind);
   };
 
   const setText = (bind: string, value: string) => {
@@ -235,17 +318,12 @@ export default function Studio() {
   /** Moves a list's "correct item" mark when items are added or removed above it. */
   const shiftCorrect = (content: Record<string, unknown>, key: string, at: number, delta: 1 | -1) => {
     const kindDef = slide ? getKind(slide.kind) : undefined;
-    const spec = kindDef ? fieldAt(kindDef.fields, key) : undefined;
-    if (spec?.type !== 'list' || !spec.correctKey) return content;
-    const c = Number(content[spec.correctKey] ?? -1);
-    if (c < 0) return content;
-    const next = delta === 1 ? (c > at ? c + 1 : c) : (c === at ? -1 : c > at ? c - 1 : c);
-    return { ...content, [spec.correctKey]: next };
+    return shiftMark(content, kindDef ? fieldAt(kindDef.fields, key) : undefined, at, delta);
   };
 
-  const editBox = editing && layout
-    ? layout.boxes.find((b): b is TextBox => b.type === 'text' && b.bind === editing.bind) ?? editing.fallback
-    : undefined;
+  // Text shown in more than one box (two columns of one text) is typed into across all of them.
+  const editBoxes = editing && layout ? layout.boxes.filter((b): b is TextBox => b.type === 'text' && b.bind === editing.bind) : [];
+  const editBox: TextBox | undefined = editBoxes.length > 1 ? spanOf(editBoxes) : editBoxes[0] ?? editing?.fallback;
 
   const inlineEditor = (() => {
     const kindDef = slide ? getKind(slide.kind) : undefined;
@@ -260,7 +338,7 @@ export default function Studio() {
     const done = () => {
       // A list item left empty is removed, as in the panel.
       if (listItem && !value.trim() && items.length > 1) {
-        updateSlide(slide.id, (s) => ({ ...s, content: shiftCorrect(removeItem(s.content, key, index), key, index, -1) }), `${slide.id}:${key}`);
+        updateSlide(slide.id, (s) => shiftItemOverrides({ ...s, content: shiftCorrect(removeItem(s.content, key, index), key, index, -1) }, key, index, -1), `${slide.id}:${key}`);
       }
       setEditing((e) => (e?.bind === bind ? null : e));
       setActiveBind(bind);
@@ -272,16 +350,17 @@ export default function Studio() {
         box={editBox}
         theme={getTheme(deck.themeId)}
         value={value}
+        selectAll={editing.selectAll}
         multiline={slide.kind === 'code' || (spec?.type === 'textarea' && (spec.rows ?? 2) >= 3)}
         onInput={(v) => setText(bind, v)}
         onDone={done}
         keys={{
           onEnterItem: listItem && items.length < max ? () => {
-            updateSlide(slide.id, (s) => ({ ...s, content: shiftCorrect(insertItem(s.content, key, index), key, index, 1) }), `${slide.id}:${key}`);
+            updateSlide(slide.id, (s) => shiftItemOverrides({ ...s, content: shiftCorrect(insertItem(s.content, key, index), key, index, 1) }, key, index, 1), `${slide.id}:${key}`);
             setEditing({ bind: `${key}.${index + 1}`, fallback: { ...editBox, id: `${key}-new`, y: editBox.y + editBox.h + Math.round(editBox.style.size * 0.75), text: '' } });
           } : undefined,
           onRemoveItem: listItem && items.length > 1 ? () => {
-            updateSlide(slide.id, (s) => ({ ...s, content: shiftCorrect(removeItem(s.content, key, index), key, index, -1) }), `${slide.id}:${key}`);
+            updateSlide(slide.id, (s) => shiftItemOverrides({ ...s, content: shiftCorrect(removeItem(s.content, key, index), key, index, -1) }, key, index, -1), `${slide.id}:${key}`);
             setEditing(index > 0 ? { bind: `${key}.${index - 1}` } : null);
           } : undefined,
           onTab: texts.length > 1 ? (back) => {
@@ -294,6 +373,90 @@ export default function Studio() {
       />
     );
   })();
+
+  // ─── The selection on the canvas ───────────────────────────────────
+
+  const boxes = layout?.boxes ?? [];
+  const selectedBox = (selected ? boxes.find((b) => b.id === selected) : undefined) ?? (editing ? editBoxes[0] : undefined);
+  // While typing across two columns there is no single box to move or resize.
+  const frameBox = editing ? (editBoxes.length === 1 ? editBoxes[0] : undefined) : selectedBox;
+  const frameRect = editing ? editBox : selectedBox;
+
+  /** Moves a box by a few px from the keyboard, as one undo step per run of presses. */
+  const nudge = (box: Box, dx: number, dy: number) => {
+    if (!slide) return;
+    const own = slide.overrides?.[box.id];
+    placeBox(box, { x: box.x + dx, y: box.y + dy, w: own?.w ?? box.w, h: own?.h ?? box.h, scale: own?.scale }, `${slide.id}:nudge:${box.id}`);
+  };
+
+  /** Deletes the item a box shows (a point, a figure), or empties its field (a title, a picture). */
+  const deleteBox = (box: Box) => {
+    const kindDef = slide ? getKind(slide.kind) : undefined;
+    if (!slide || !kindDef || !box.bind) return;
+    const bind = box.bind;
+    const item = itemOf(kindDef.fields, slide.content, bind);
+    const undoAction = { action: { label: 'Undo', run: () => undo() } };
+    if (item) {
+      if (!canDelete(item)) return;
+      updateSlide(slide.id, (s) => shiftItemOverrides({ ...s, content: removeItemAt(s.content, item) }, item.key, item.index, -1));
+      toast.show(`${item.spec.itemLabel} deleted`, undoAction);
+    } else {
+      const spec = fieldAt(kindDef.fields, bind);
+      updateSlide(slide.id, (s) => ({ ...s, content: clearField(s.content, bind) }));
+      toast.show(spec?.type === 'image' ? 'Picture removed' : spec?.type === 'video' ? 'Video removed' : 'Text cleared', undoAction);
+    }
+    setSelected(null);
+    setEditing(null);
+  };
+
+  /** Adds an item after the one a box shows and starts typing into it. */
+  const addAfter = (box: Box) => {
+    const kindDef = slide ? getKind(slide.kind) : undefined;
+    if (!slide || !kindDef || !box.bind) return;
+    const item = itemOf(kindDef.fields, slide.content, box.bind);
+    if (!item || !canAdd(item)) return;
+    const made = addItemAfter(slide.content, item);
+    updateSlide(slide.id, (s) => shiftItemOverrides({ ...s, content: addItemAfter(s.content, item).content }, item.key, item.index, 1));
+    setSelected(null);
+    const fallback = box.type === 'text' ? { ...box, id: `${item.key}-new`, y: box.y + box.h + Math.round(box.style.size * 0.75), text: '' } : undefined;
+    setEditing({ bind: made.bind, fallback, selectAll: Boolean(made.hint) });
+    setActiveBind(made.bind);
+  };
+
+  const toolActions = (box: Box): ToolAction[] => {
+    const kindDef = slide ? getKind(slide.kind) : undefined;
+    if (!slide || !kindDef || !box.bind) return [];
+    const bind = box.bind;
+    const item = itemOf(kindDef.fields, slide.content, bind);
+    const spec = fieldAt(kindDef.fields, bind);
+    const actions: ToolAction[] = [];
+    if (item && canAdd(item)) {
+      actions.push({ id: 'add', label: `Add ${item.spec.itemLabel.toLowerCase()}`, icon: <Plus size={15} />, wide: true, run: () => addAfter(box) });
+    }
+    if (item?.spec.type === 'list' && item.spec.correctKey) {
+      const key = item.spec.correctKey;
+      const on = Number(slide.content[key] ?? -1) === item.index;
+      const markAs = item.spec.markAs;
+      actions.push({
+        id: 'mark', label: markAs ? 'You are here' : 'Correct', wide: true, pressed: on,
+        icon: markAs ? <MapPin size={15} /> : <CircleCheck size={15} />,
+        title: on ? `Unmark: this is ${markAs ?? 'the correct answer'}` : `Mark as ${markAs ?? 'the correct answer'}`,
+        run: () => updateSlide(slide.id, (s) => ({ ...s, content: { ...s.content, [key]: on ? -1 : item.index } })),
+      });
+    }
+    const picture = spec?.type === 'image' || box.type === 'image';
+    const data = box.type === 'chart' || box.type === 'table';
+    actions.push(typeable(box)
+      ? { id: 'panel', label: 'All fields', icon: <PanelRightOpen size={15} />, title: 'Show every field for this slide', run: () => openField(bind) }
+      : { id: 'panel', label: picture ? 'Change picture' : data ? 'Edit data' : 'Edit', icon: picture ? <ImageIcon size={15} /> : <Pencil size={15} />, wide: true, run: () => openField(bind) });
+    if (slide.overrides?.[box.id]) {
+      actions.push({ id: 'reset', label: 'Reset position', title: 'Put it back where the layout places it', icon: <RotateCcw size={15} />, run: () => updateSlide(slide.id, (s) => withOverride(s, box.id, null)) });
+    }
+    actions.push(item
+      ? { id: 'delete', label: `Delete ${item.spec.itemLabel.toLowerCase()}`, icon: <Trash2 size={15} />, danger: true, disabled: !canDelete(item), title: canDelete(item) ? undefined : `A slide like this keeps at least one ${item.spec.itemLabel.toLowerCase()}`, run: () => deleteBox(box) }
+      : { id: 'delete', label: picture ? 'Remove picture' : spec?.type === 'video' ? 'Remove video' : 'Clear text', icon: <Trash2 size={15} />, danger: true, run: () => deleteBox(box) });
+    return actions;
+  };
 
   // ─── Pictures and videos dropped or pasted onto the slide ──────────
 
@@ -496,7 +659,7 @@ export default function Studio() {
               </>
             )}
           </Menu>
-          <button type="button" className="icon-btn" onClick={() => setPanelOpen((v) => !v)} aria-pressed={!panelOpen} aria-label={panelOpen ? 'Hide the slide panel' : 'Show the slide panel'} title={panelOpen ? 'Hide the slide panel: more room for the slide' : 'Show the slide panel'}>
+          <button type="button" className="icon-btn" data-testid="studio-fields" onClick={() => setPanelOpen((v) => !v)} aria-pressed={panelOpen} aria-label={panelOpen ? 'Hide all fields' : 'Show all fields'} title={panelOpen ? 'Hide the fields: the slide is the editor' : 'Show every field for this slide in a panel'}>
             {panelOpen ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
           </button>
           <div className="split-btn">
@@ -538,35 +701,69 @@ export default function Studio() {
             <Stage
               onFile={(file, bind) => void takeFile(file, bind)}
               onText={(text, bind) => void takeText(text, bind)}
+              onBlank={() => { setSelected(null); setEditing(null); setActiveBind(null); }}
             >
               {assistant.focused ? (
                 <AssistantStage assistant={assistant} deck={deck} />
               ) : revision.proposal ? (
                 <ProposalStage revision={revision} slide={slide} deck={deck} number={shownNumber} count={shownCount} />
               ) : (
-                <SlideView
-                  slide={slide}
-                  deck={deck}
-                  number={shownNumber}
-                  count={shownCount}
-                  mode="edit"
-                  step={step}
-                  ghostLater
-                  flags={flags}
-                  onSelectBind={pick}
-                  activeBind={editing?.bind ?? activeBind}
-                  hiddenBox={editBox && editBox.id !== `${editing?.bind.split('.')[0]}-new` ? editBox.id : undefined}
-                  overlay={inlineEditor}
-                  onLayout={setLayout}
-                  className="stage-slide"
-                  label={`Slide ${index + 1} preview`}
-                  live
-                />
+                <>
+                  <SlideView
+                    slide={shownSlide ?? slide}
+                    deck={deck}
+                    number={shownNumber}
+                    count={shownCount}
+                    mode="edit"
+                    step={step}
+                    ghostLater
+                    flags={flags}
+                    onSelectBind={pick}
+                    onBoxPointerDown={(e, box) => drag.begin(e, leadFor(box))}
+                    activeBind={frameRect ? null : activeBind}
+                    hiddenBoxes={editBoxes.map((b) => b.id)}
+                    overlay={inlineEditor}
+                    onLayout={setLayout}
+                    className="stage-slide"
+                    label={`Slide ${index + 1} preview`}
+                    live
+                  />
+                  <CanvasOverlay
+                    frame={frameRect ?? null}
+                    handles={frameBox ? handlesFor(frameBox) : []}
+                    guides={drag.guides}
+                    busy={Boolean(drag.active)}
+                    onMove={(e) => { if (frameBox) drag.begin(e, frameBox); }}
+                    onResize={(e, h) => { if (frameBox) drag.begin(e, frameBox, h); }}
+                    label={selectedBox?.bind ? `Selected: ${selectedBox.type === 'text' ? `“${selectedBox.text.slice(0, 40)}”` : selectedBox.type}` : 'Selected'}
+                    toolbar={selectedBox?.bind && def ? (
+                      <CanvasToolbar
+                        layouts={<LayoutMenu slide={slide} def={def} autoStyle={Boolean(deck.autoStyle)} onPick={chooseLayout} compact />}
+                        actions={toolActions(selectedBox)}
+                      />
+                    ) : null}
+                  />
+                </>
               )}
             </Stage>
             <div className="stage-bar">
               {assistant.focused ? <AssistantBar assistant={assistant} deck={deck} /> : revision.proposal ? <ProposalBar revision={revision} /> : (
                 <>
+                  <span className="stage-slide-tools">
+                    <Menu width={340} trigger={(p) => (
+                      <button type="button" className="btn btn-ghost btn-sm" title="Change slide type" {...p}>
+                        <KindIcon name={def?.icon ?? 'puzzle'} size={15} /> {def?.label ?? slide.kind} <ChevronDown size={14} />
+                      </button>
+                    )}>
+                      {(close) => <KindPicker current={slide.kind} onPick={(k) => { close(); updateSlide(slide.id, (s) => convertSlide(s, k)); }} />}
+                    </Menu>
+                    {def && <LayoutMenu slide={slide} def={def} autoStyle={Boolean(deck.autoStyle)} onPick={chooseLayout} />}
+                    {hasOverrides(slide) && (
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={resetLayout} title="Put everything you moved back where the layout places it">
+                        <RotateCcw size={15} /> Reset layout
+                      </button>
+                    )}
+                  </span>
                   {layout && layout.steps > 0 ? (
                     <div className="segmented" role="group" aria-label="Preview reveal step">
                       <button type="button" aria-pressed={step === undefined} onClick={() => setStep(undefined)}>All</button>
@@ -574,7 +771,7 @@ export default function Studio() {
                         <button key={k} type="button" aria-pressed={step === k} onClick={() => setStep(k)}>{k === 0 ? 'Start' : `Click ${k}`}</button>
                       ))}
                     </div>
-                  ) : <span className="faint stage-hint">Click text on the slide to type. Drop or paste a picture or video onto it.</span>}
+                  ) : <span className="faint stage-hint">Click to type, drag to move. Drop pictures on the slide.</span>}
                   {layout?.warnings.length ? (
                     <StageWarning warnings={layout.warnings} canSplit={canSplit(slide)} onSplit={splitHere} />
                   ) : null}
@@ -625,7 +822,7 @@ export default function Studio() {
                 <span className="field-label">Layout</span>
                 <div className="segmented layout-segmented">
                   {deck.autoStyle && def.autoVariant && (
-                    <button type="button" aria-pressed={!slide.variantPinned} title="Auto style picks the layout from what’s on the slide" onClick={() => updateSlide(slide.id, (s) => ({ ...s, variantPinned: undefined }))}>
+                    <button type="button" aria-pressed={!slide.variantPinned} title="Auto style picks the layout from what’s on the slide" onClick={() => chooseLayout(null)}>
                       <Sparkles size={13} /> Auto
                     </button>
                   )}
@@ -635,7 +832,7 @@ export default function Studio() {
                       type="button"
                       aria-pressed={(!deck.autoStyle || !def.autoVariant || slide.variantPinned) && (slide.variant ?? def.variants![0].id) === v.id}
                       className={deck.autoStyle && def.autoVariant && !slide.variantPinned && (slide.variant ?? def.variants![0].id) === v.id ? 'is-auto' : undefined}
-                      onClick={() => updateSlide(slide.id, (s) => ({ ...s, variant: v.id, variantPinned: deck.autoStyle ? true : undefined }))}
+                      onClick={() => chooseLayout(v.id)}
                     >{v.label}</button>
                   ))}
                 </div>
@@ -668,6 +865,15 @@ export default function Studio() {
   );
 }
 
+/** One text box covering several, for typing a text that the slide shows in columns. */
+function spanOf(boxes: TextBox[]): TextBox {
+  const x = Math.min(...boxes.map((b) => b.x));
+  const y = Math.min(...boxes.map((b) => b.y));
+  const right = Math.max(...boxes.map((b) => b.x + b.w));
+  const bottom = Math.max(...boxes.map((b) => b.y + b.h));
+  return { ...boxes[0]!, x, y, w: right - x, h: bottom - y };
+}
+
 /** The stage's first warning, overflow first; when the slide is too full, a one-click Split. */
 function StageWarning({ warnings, canSplit: splittable, onSplit }: { warnings: string[]; canSplit: boolean; onSplit(): void }) {
   const overflow = warnings.find(isOverflowWarning);
@@ -689,7 +895,7 @@ function bindAt(x: number, y: number): string | undefined {
 }
 
 /** Fits a 16:9 slide inside the available space, and takes pictures and videos dropped on it. */
-function Stage({ children, onFile, onText }: { children: React.ReactNode; onFile(file: File, bind?: string): void; onText(text: string, bind?: string): void }) {
+function Stage({ children, onFile, onText, onBlank }: { children: React.ReactNode; onFile(file: File, bind?: string): void; onText(text: string, bind?: string): void; onBlank?(): void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   const [over, setOver] = useState(false);
@@ -708,6 +914,8 @@ function Stage({ children, onFile, onText }: { children: React.ReactNode; onFile
     <div
       className={`stage${over ? ' is-dropping' : ''}`}
       ref={ref}
+      // A press on the slide's background or around it drops the selection.
+      onPointerDown={(e) => { if (!(e.target as HTMLElement).closest('.box.is-editable, .canvas-edge, .canvas-handle, .canvas-toolbar-spot, .inline-edit, .menu')) onBlank?.(); }}
       onDragOver={(e) => { if (!wants(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; setOver(true); }}
       onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false); }}
       onDrop={(e) => {

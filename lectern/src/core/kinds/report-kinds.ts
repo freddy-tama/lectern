@@ -355,7 +355,7 @@ function calloutDots(ctx: LayoutContext, list: { o: Item; i: number }[], screen:
     const y = Math.round(Math.max(screen.y, Math.min(screen.y + screen.h - d, screen.y + at.y * screen.h - d / 2)));
     const drag = { x: `callouts.${i}.x`, y: `callouts.${i}.y`, within: 'screen' };
     return [
-      shape({ id: `dot-${i}`, shape: 'ellipse', x, y, w: d, h: d, fill: colors.accent, stroke: '#FFFFFF', strokeWidth: 4, moveWith: 'screen', drag }),
+      shape({ id: `dot-${i}`, shape: 'ellipse', x, y, w: d, h: d, fill: colors.accent, stroke: '#FFFFFF', strokeWidth: 4, moveWith: 'screen', drag, bind: `callouts.${i}.label` }),
       { type: 'text', id: `dot-${i}-n`, x, y, w: d, h: d, text: String(k + 1), moveWith: `dot-${i}`,
         style: { font: 'body', size: Math.round(d * 0.5), weight: 800, color: colors.onAccent, align: 'center', valign: 'middle', lineHeight: 1 } } satisfies TextBox,
     ];

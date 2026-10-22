@@ -420,6 +420,7 @@
 }
 
 .stage-inner {
+  position: relative;
   max-width: 100%;
 }
 
@@ -1928,8 +1929,8 @@ fieldset.field legend {
   overflow-wrap: break-word;
   font-kerning: normal;
   caret-color: currentColor;
-  outline: 4px solid var(--focus);
-  outline-offset: 10px;
+  /* The selection frame drawn round it shows where the typing goes. */
+  outline: none;
   border-radius: 2px;
 }
 
@@ -1962,7 +1963,12 @@ fieldset.field legend {
 }
 
 .stage-hint {
+  flex: 1 1 120px;
+  min-width: 0;
+  overflow: hidden;
   font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .studio.panel-hidden {
@@ -1982,5 +1988,217 @@ fieldset.field legend {
 @media (max-width: 860px) {
   .studio.panel-hidden {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ─── Editing on the canvas: selection, handles, guides, toolbar ─── */
+
+.stage-slide-tools {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.stage .box.is-editable {
+  touch-action: none;
+}
+
+/* Markers, numbers and ornaments let presses through to the content under them. */
+.stage .stage-slide .box:not(.is-editable):not(.is-live) {
+  pointer-events: none;
+}
+
+.stage .box.is-editable:not(.box-text) {
+  cursor: move;
+}
+
+body.is-dragging-box,
+body.is-dragging-box * {
+  user-select: none;
+  cursor: grabbing !important;
+}
+
+.canvas-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+.canvas-frame {
+  position: absolute;
+  border: 2px solid var(--focus);
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.7);
+}
+
+.canvas-edge {
+  position: absolute;
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+}
+
+.canvas-edge.is-top,
+.canvas-edge.is-bottom {
+  left: 0;
+  right: 0;
+  height: 12px;
+}
+
+.canvas-edge.is-top { top: -7px; }
+.canvas-edge.is-bottom { bottom: -7px; }
+
+.canvas-edge.is-left,
+.canvas-edge.is-right {
+  top: 0;
+  bottom: 0;
+  width: 12px;
+}
+
+.canvas-edge.is-left { left: -7px; }
+.canvas-edge.is-right { right: -7px; }
+
+.canvas-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--focus);
+  border-radius: 3px;
+  background: #fff;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  touch-action: none;
+  box-shadow: var(--shadow-1);
+}
+
+/* A bigger target than the handle looks, for fingers and quick pointers. */
+.canvas-handle::after {
+  content: '';
+  position: absolute;
+  inset: -8px;
+}
+
+.canvas-handle.is-nw { left: -1px; top: -1px; cursor: nwse-resize; }
+.canvas-handle.is-n { left: 50%; top: -1px; cursor: ns-resize; }
+.canvas-handle.is-ne { left: calc(100% + 1px); top: -1px; cursor: nesw-resize; }
+.canvas-handle.is-e { left: calc(100% + 1px); top: 50%; cursor: ew-resize; }
+.canvas-handle.is-se { left: calc(100% + 1px); top: calc(100% + 1px); cursor: nwse-resize; }
+.canvas-handle.is-s { left: 50%; top: calc(100% + 1px); cursor: ns-resize; }
+.canvas-handle.is-sw { left: -1px; top: calc(100% + 1px); cursor: nesw-resize; }
+.canvas-handle.is-w { left: -1px; top: 50%; cursor: ew-resize; }
+
+/* Side handles are bars, so they read as "stretch" rather than "scale". */
+.canvas-handle.is-e,
+.canvas-handle.is-w {
+  width: 7px;
+  height: 20px;
+  border-radius: 4px;
+}
+
+.canvas-handle.is-n,
+.canvas-handle.is-s {
+  width: 20px;
+  height: 7px;
+  border-radius: 4px;
+}
+
+.canvas-frame.is-busy .canvas-handle {
+  opacity: 0.6;
+}
+
+.canvas-guide {
+  position: absolute;
+  background: #E5397F;
+  pointer-events: none;
+}
+
+.canvas-guide.is-x {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.canvas-guide.is-y {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.canvas-toolbar-spot {
+  position: absolute;
+  z-index: 7;
+  pointer-events: auto;
+}
+
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--raised);
+  box-shadow: var(--shadow-2);
+  white-space: nowrap;
+}
+
+.canvas-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink-2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+
+.canvas-tool.is-wide {
+  padding: 0 10px 0 8px;
+}
+
+.canvas-tool:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ink) 7%, transparent);
+  color: var(--ink);
+}
+
+.canvas-tool[aria-pressed='true'] {
+  background: var(--brand-soft);
+  color: var(--brand-ink);
+}
+
+.canvas-tool.is-danger:hover:not(:disabled) {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.canvas-tool:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.canvas-tool:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.menu-item .menu-check {
+  margin-left: auto;
+  color: var(--brand);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .canvas-tool {
+    transition: none;
   }
 }

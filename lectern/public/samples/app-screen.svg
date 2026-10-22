@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <rect width="1600" height="1000" fill="#F6F4EF"/>
+  <!-- Top bar -->
+  <rect width="1600" height="84" fill="#FFFFFF"/>
+  <rect y="83" width="1600" height="2" fill="#E6E3DC"/>
+  <circle cx="54" cy="42" r="18" fill="#C2553A"/>
+  <rect x="88" y="30" width="220" height="24" rx="6" fill="#1C1B19"/>
+  <rect x="1180" y="24" width="120" height="36" rx="10" fill="#EFECE6"/>
+  <rect x="1316" y="24" width="120" height="36" rx="10" fill="#EFECE6"/>
+  <rect x="1452" y="24" width="120" height="36" rx="10" fill="#C2553A"/>
+  <!-- Slide rail -->
+  <rect y="85" width="260" height="915" fill="#FBFAF7"/>
+  <rect x="259" y="85" width="2" height="915" fill="#E6E3DC"/>
+  <rect x="40" y="120" width="180" height="101" rx="8" fill="#FFFFFF" stroke="#C2553A" stroke-width="4"/>
+  <rect x="40" y="246" width="180" height="101" rx="8" fill="#FFFFFF" stroke="#E6E3DC" stroke-width="2"/>
+  <rect x="40" y="372" width="180" height="101" rx="8" fill="#FFFFFF" stroke="#E6E3DC" stroke-width="2"/>
+  <rect x="40" y="498" width="180" height="101" rx="8" fill="#FFFFFF" stroke="#E6E3DC" stroke-width="2"/>
+  <rect x="58" y="140" width="110" height="12" rx="4" fill="#1C1B19"/>
+  <rect x="58" y="164" width="140" height="8" rx="4" fill="#BDB8AE"/>
+  <rect x="58" y="180" width="120" height="8" rx="4" fill="#BDB8AE"/>
+  <!-- The slide being edited -->
+  <rect x="330" y="150" width="1200" height="675" rx="12" fill="#FFFFFF"/>
+  <rect x="330" y="150" width="1200" height="675" rx="12" fill="none" stroke="#E6E3DC" stroke-width="2"/>
+  <rect x="410" y="235" width="560" height="54" rx="8" fill="#1C1B19"/>
+  <rect x="402" y="225" width="576" height="74" rx="10" fill="none" stroke="#2F6FE4" stroke-width="4"/>
+  <rect x="410" y="350" width="460" height="22" rx="6" fill="#57534C"/>
+  <rect x="410" y="396" width="400" height="22" rx="6" fill="#57534C"/>
+  <rect x="410" y="442" width="430" height="22" rx="6" fill="#57534C"/>
+  <circle cx="392" cy="361" r="7" fill="#C2553A"/>
+  <circle cx="392" cy="407" r="7" fill="#C2553A"/>
+  <circle cx="392" cy="453" r="7" fill="#C2553A"/>
+  <rect x="1010" y="300" width="440" height="400" rx="14" fill="#F2D8CF"/>
+  <circle cx="1230" cy="470" r="90" fill="#E6A58F"/>
+  <path d="M1040 680 L1170 540 L1260 620 L1340 560 L1430 680 Z" fill="#C2553A" opacity="0.75"/>
+  <rect x="1004" y="294" width="452" height="412" rx="16" fill="none" stroke="#2F6FE4" stroke-width="4" stroke-dasharray="14 10"/>
+  <rect x="1440" y="684" width="22" height="22" rx="4" fill="#FFFFFF" stroke="#2F6FE4" stroke-width="4"/>
+  <!-- Floating toolbar -->
+  <rect x="520" y="166" width="360" height="46" rx="12" fill="#1C1B19"/>
+  <rect x="540" y="180" width="80" height="18" rx="5" fill="#FFFFFF" opacity="0.9"/>
+  <rect x="640" y="180" width="90" height="18" rx="5" fill="#FFFFFF" opacity="0.6"/>
+  <rect x="750" y="180" width="110" height="18" rx="5" fill="#FFFFFF" opacity="0.6"/>
+  <!-- Key notes -->
+  <rect x="330" y="860" width="1200" height="110" rx="12" fill="#FFFFFF" stroke="#E6E3DC" stroke-width="2"/>
+  <rect x="360" y="890" width="180" height="14" rx="4" fill="#8A857C"/>
+  <rect x="360" y="920" width="760" height="12" rx="4" fill="#BDB8AE"/>
+  <rect x="360" y="942" width="620" height="12" rx="4" fill="#BDB8AE"/>
+</svg>
