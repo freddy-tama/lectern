@@ -261,3 +261,7 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
     - The flow 10 test edits a slide's title. If it types into the panel's **Title** field rather than onto the slide, it can't find the field while the panel is folded away. Typing onto the slide's title works as before.
   - Flow 13 lists the three new types, and the new flow 14 covers layouts and editing on the slide. Neither has a test yet.
 - **This run:** about 13.5 credits for the 27 tests, which leaves about 19 of the month's 150, enough for one more run.
+- **10:47 and 15:45** TestSprite skipped both pushes to #15 (`5089819`, and an empty commit `a1dd274` meant to start it). The trigger's Activity tab gave the reason: "The URL pointed at a host we cannot test."
+  - **Why:** the trigger builds the preview address from `https://lectern-git-{branch-slug}-freddy-tamas-projects.vercel.app`. The branch `claude/lectern-layouts-canvas-d2cc05` makes the first part of the host 70 characters long, and a host name's parts can be at most 63. Vercel shortened its own preview address to `lectern-git-claude-lectern-layouts-e9c660-…`, which the pattern can't predict.
+  - **Fix:** the branch was renamed on GitHub to `claude/lectern-layouts` (56 characters), which carries #15 along, and this entry was pushed to it to start the run.
+  - **For later PRs:** keep the branch slug (the branch name with `/` as `-`) to 29 characters or fewer.
