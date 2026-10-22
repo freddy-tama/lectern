@@ -15,7 +15,7 @@ Prefer roles and accessible names. These `data-testid`s exist where names repeat
 ### 1. First visit
 - Opening `/` in a fresh browser lands on `/welcome`.
 - There is one `h1`: "Slides that know what to say."
-- The "At a glance" list shows "30 slide types" and "6 built-in looks".
+- The "At a glance" list shows "34 slide types" and "6 built-in looks".
 - The page has no horizontal scroll at 1440 px or at 390 px wide.
 - Beside the `h1`, a short animation follows one slide's key notes through five scenes: Notes, On stage, Phones, Study and Share. It plays by itself, and its **Pause the animation** button stops it. Choosing a scene shows that scene and stops there. With reduced motion it doesn't play by itself.
 - Under the "At a glance" list, **Watch it run** (`#tour`) has a muted, looping screen recording of the app with controls and chapter buttons. With reduced motion it doesn't start by itself.
@@ -93,11 +93,20 @@ A server turns accounts on with its Supabase settings. Check which state the ser
   - Where AI is offered on a server that has AI, a signed-out visitor sees a notice starting "Sign in to" (`ai-sign-in`) with a **Sign in** button to `/signin?next=…`. Without AI on the server, the "isn't set up" notices from flows 5 and 11 show instead.
 - **Either way:** nothing outside AI asks for a sign-in. Decks, the studio, present mode, notes and the quiz all work signed out.
 
+### 13. Slide types for reports, pitches and the room
+- On `/welcome`, the **Slide types** section (`#slide-types`) has cards named "Scorecard", "Pricing", "Word cloud" and "Contact".
+- In the studio, **Add slide → Scorecard** adds a slide titled "This quarter" with four measures, each with a bar and a status: "On track", "At risk", "On track", "Done".
+- **Add slide → Pricing** adds three plans, Starter, Team and Business. Team is marked "Most popular".
+- **Add slide → Contact** adds "Thank you" with "Maya Chen" and "maya@example.com". Filling in **QR code link** with an address adds a QR code to the slide.
+- **Add slide → Word cloud** adds the question "In one word: what makes a great meeting?". With no answers yet, the slide says "Answer on your phone. Words appear here as they come in."
+  - Under **More options**, adding a word to **Words on the slide** (for example "Agenda" with count 3) draws that word on the slide.
+- Answering a word cloud from a phone needs a second device and is out of scope.
+
 ## Out of scope for these tests
 
 These need hardware, a second device, large downloads or paid keys:
 
-- **Share to phones and the live quiz** need a second device over WebRTC.
+- **Share to phones, the live quiz and live word cloud answers** need a second device over WebRTC.
 - **Recording** needs a microphone.
 - **Transcription** downloads a speech model of 40 MB or more.
 - **AI drafting, the deck assistant and AI pictures** need a server key and a signed-in account. Only check that they say "isn't set up", or ask to sign in (flow 12).

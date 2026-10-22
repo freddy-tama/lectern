@@ -5,8 +5,8 @@ import type { DataConnection, Peer } from 'peerjs';
 import { useSyncExternalStore } from 'react';
 import { registerTheme } from '../../core/engine/themes';
 import {
-  type GuestMessage, type HostMessage, type JoinMetadata, type LiveState, PartCollector, type PollResult, type Role, type SharePackage,
-  type ShareOptions, deviceLabel, isPackage, peerIdFor, receivedAsset,
+  type CloudResult, type GuestMessage, type HostMessage, type JoinMetadata, type LiveState, PartCollector, type PollResult, type Role,
+  type SharePackage, type ShareOptions, cleanWord, deviceLabel, isPackage, peerIdFor, receivedAsset, wordKey,
 } from '../../core/share/protocol';
 import type { PlayerView, QuizStage, QuizView } from '../../core/share/quiz';
 import { db } from '../../data/db';
@@ -26,6 +26,10 @@ export interface LinkSnapshot {
   state: LiveState | null;
   votes: Record<string, PollResult>;
   myVotes: Record<string, number>;
+  /** Word cloud answers so far, by slide. */
+  clouds: Record<string, CloudResult>;
+  /** The words this phone sent to each word cloud. */
+  myWords: Record<string, string[]>;
   quiz: QuizView | null;
   /** When the quiz update arrived here, for counting down its timer. */
   quizAt: number;
@@ -44,7 +48,7 @@ export interface SharedRecord {
 
 const idle = (): LinkSnapshot => ({
   status: 'idle', error: null, code: null, role: null, title: '', progress: 0, deckId: null, options: null, state: null, votes: {}, myVotes: {},
-  quiz: null, quizAt: 0, stage: 'play', you: null, myAnswers: {}, name: playerName(),
+  clouds: {}, myWords: {}, quiz: null, quizAt: 0, stage: 'play', you: null, myAnswers: {}, name: playerName(),
 });
 
 const PLAYER_KEY = 'lectern.player';
@@ -177,6 +181,9 @@ async function onHostMessage(msg: HostMessage) {
     case 'votes':
       set({ votes: { ...snap.votes, [msg.slideId]: msg.result } });
       return;
+    case 'words':
+      set({ clouds: { ...snap.clouds, [msg.slideId]: msg.result } });
+      return;
     case 'options':
       set({ options: msg.options });
       return;
@@ -304,6 +311,15 @@ export const liveLink = {
   vote(slideId: string, choice: number) {
     set({ myVotes: { ...snap.myVotes, [slideId]: choice } });
     sendToHost({ t: 'vote', slideId, choice });
+  },
+  /** An answer to a word cloud. False when it is empty, a repeat, or over the slide's limit. */
+  sendWord(slideId: string, raw: string, limit: number): boolean {
+    const text = cleanWord(raw);
+    const mine = snap.myWords[slideId] ?? [];
+    if (!text || mine.length >= limit || mine.some((w) => wordKey(w) === wordKey(text))) return false;
+    set({ myWords: { ...snap.myWords, [slideId]: [...mine, text] } });
+    sendToHost({ t: 'word', slideId, text });
+    return true;
   },
   /** A quiz answer: one per question, locked once sent. */
   answer(slideId: string, choice: number) {

@@ -12,7 +12,9 @@ import { deckPurpose } from '../../core/deck/types';
 import { wording } from '../../core/deck/purpose';
 import { getKind } from '../../core/kinds/registry';
 import { slideCreditLines, slidePictures } from '../../core/pictures/credits';
-import { type LiveState, type PollResult, type Role, type ShareOptions, pollChoices } from '../../core/share/protocol';
+import {
+  type CloudResult, type LiveState, type PollResult, type Role, type ShareOptions, cleanWord, cloudLimit, pollChoices, withLiveWords,
+} from '../../core/share/protocol';
 import { useKeys } from '../../ui/hooks';
 import { pictureCredits } from '../pictures/store';
 import { advance, retreat, useLiveDeck } from '../present/useLiveDeck';
@@ -101,6 +103,49 @@ function PollBars({ choices, result, mine }: { choices: string[]; result?: PollR
   );
 }
 
+/** The words a cloud has so far, most common first, as a short list. */
+function CloudList({ result }: { result?: CloudResult }) {
+  const top = result?.words.slice(0, 8) ?? [];
+  if (!top.length) return <p className="faint">No answers yet.</p>;
+  return (
+    <ol className="phone-word-top">
+      {top.map((w) => <li key={w.text}><span>{w.text}</span><span className="tabular">{w.count}</span></li>)}
+    </ol>
+  );
+}
+
+/** Where someone in the room types their answers to a word cloud. */
+function WordCard({ slide, limit, link }: { slide: Slide; limit: number; link: LinkSnapshot }) {
+  const [value, setValue] = useState('');
+  const [repeat, setRepeat] = useState(false);
+  const mine = link.myWords[slide.id] ?? [];
+  const left = limit - mine.length;
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (liveLink.sendWord(slide.id, value, limit)) setValue('');
+    else setRepeat(!!cleanWord(value));
+  };
+  const label = left <= 0
+    ? (limit === 1 ? 'Your answer is in' : 'Your answers are in')
+    : mine.length ? `${left} more if you like` : limit === 1 ? 'Your answer' : `Up to ${limit} answers`;
+  return (
+    <section className="phone-card phone-words" aria-label="Answer the word cloud">
+      <p className="eyebrow">{label}</p>
+      {left > 0 && (
+        <form className="phone-word-form" onSubmit={submit}>
+          <input
+            className="input" value={value} onChange={(e) => { setValue(e.target.value); setRepeat(false); }} maxLength={32} placeholder="A word or two"
+            aria-label="Your answer" enterKeyHint="send" autoComplete="off" autoCapitalize="off" data-testid="word-input"
+          />
+          <button type="submit" className="btn btn-brand" disabled={!cleanWord(value)} data-testid="word-send">Send</button>
+        </form>
+      )}
+      {repeat && left > 0 && <p className="faint phone-word-note" role="status">You sent that one already. Try another word.</p>}
+      {mine.length > 0 && <ul className="phone-word-mine" aria-label="What you sent">{mine.map((w) => <li key={w} className="chip">{w}</li>)}</ul>}
+    </section>
+  );
+}
+
 // ─── The presenter's phone ────────────────────────────────────────────
 
 function PhoneRemote({ deck, slides, steps, live, link, onLeave }: PhoneProps) {
@@ -150,7 +195,7 @@ function PhoneRemote({ deck, slides, steps, live, link, onLeave }: PhoneProps) {
       </header>
 
       <div className="phone-stage" {...swipe}>
-        <SlideView slide={slide} deck={deck} number={index + 1} count={count} step={state.step} ghostLater flags={state.flags} framed label={`Slide ${index + 1} of ${count}`} />
+        <SlideView slide={live ? withLiveWords(slide, link.clouds[slide.id]) : slide} deck={deck} number={index + 1} count={count} step={state.step} ghostLater flags={state.flags} framed label={`Slide ${index + 1} of ${count}`} />
         {state.blank && <div className="phone-blank"><EyeOff size={18} /> The screen is blank</div>}
         {remaining > 0 && <span className="phone-steps">{remaining} more {remaining === 1 ? 'click' : 'clicks'}</span>}
       </div>
@@ -168,6 +213,12 @@ function PhoneRemote({ deck, slides, steps, live, link, onLeave }: PhoneProps) {
           <div className="phone-block">
             <span className="eyebrow">Answers so far · {link.votes[slide.id]?.total ?? 0}</span>
             <PollBars choices={choices} result={link.votes[slide.id]} />
+          </div>
+        )}
+        {live && cloudLimit(slide) !== null && (
+          <div className="phone-block">
+            <span className="eyebrow">Words so far · {link.clouds[slide.id]?.people ?? 0} {link.clouds[slide.id]?.people === 1 ? 'person' : 'people'}</span>
+            <CloudList result={link.clouds[slide.id]} />
           </div>
         )}
         {live && <QuizPresenter link={link} choices={scored ? choices : null} />}
@@ -229,6 +280,7 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
   // Past quiz questions aren't polls.
   const pastQuestion = !scored && !!link.quiz?.on && !!quizItem(slide);
   const choices = live && (scored || (options.polls && !pastQuestion)) ? pollChoices(slide) : null;
+  const wordLimit = live && options.polls && link.status !== 'ended' ? cloudLimit(slide) : null;
   const openElsewhere = !!question && question.phase === 'open' && question.slideId !== slide.id && link.myAnswers[question.slideId] === undefined;
   const wantsName = live && !!link.quiz?.on && (link.quiz?.questions ?? 0) > 0 && !link.name && !askedName;
   const mine = link.myVotes[slide.id];
@@ -255,7 +307,7 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
       </header>
 
       <div className={`phone-stage ${following ? 'is-following' : ''}`} ref={stageRef} {...swipe}>
-        <SlideView slide={slide} deck={deck} number={index + 1} count={count} step={step} flags={link.state?.flags} label={`Slide ${index + 1} of ${count}`} framed live />
+        <SlideView slide={live ? withLiveWords(slide, link.clouds[slide.id]) : slide} deck={deck} number={index + 1} count={count} step={step} flags={link.state?.flags} label={`Slide ${index + 1} of ${count}`} framed live />
         {following && link.state?.blank && <div className="phone-blank">The presenter paused the slides</div>}
         <button type="button" className="phone-full" onClick={fullscreen} aria-label="Full screen"><Maximize size={16} /></button>
       </div>
@@ -290,6 +342,8 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
             {voted && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setChanging(slide.id)}>Change my answer</button>}
           </section>
         )}
+
+        {wordLimit !== null && <WordCard slide={slide} limit={wordLimit} link={link} />}
 
         {options.shareTakeaways && n.keyPoints.length > 0 && (
           <section className="phone-card">

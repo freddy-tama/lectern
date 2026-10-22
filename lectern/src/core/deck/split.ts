@@ -23,6 +23,7 @@ const RULES: Record<string, SplitRule> = {
   summary: { key: 'points', shape: 'list', fallback: 'Key takeaways' },
   steps: { key: 'steps', shape: 'objects', max: 6 },
   timeline: { key: 'milestones', shape: 'objects', max: 6 },
+  scorecard: { key: 'metrics', shape: 'objects', max: 6 },
   table: { key: 'cells', shape: 'table' },
 };
 

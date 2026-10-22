@@ -45,7 +45,7 @@ export function kindSpec(def: AnyKind) {
     kind: def.kind,
     label: def.label,
     description: def.description,
-    fields: def.fields.map((f) => ({
+    fields: def.fields.filter((f) => f.ai !== false).map((f) => ({
       key: f.key,
       type: aiFieldType(f.type),
       label: f.label,

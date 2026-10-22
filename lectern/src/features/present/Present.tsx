@@ -5,7 +5,7 @@ import { NotFound } from '../../app/App';
 import { toggles } from '../../core/plugins/registry';
 import { useKeys } from '../../ui/hooks';
 import { openShare } from '../share/host';
-import { LiveScreen } from '../share/LiveScreen';
+import { LiveScreen, useLiveSlide } from '../share/LiveScreen';
 import { SlideView } from '../slides/SlideView';
 import { HelpOverlay } from './HelpOverlay';
 import { leaveShow, openPresenter, useShow } from './sync';
@@ -26,6 +26,7 @@ export default function Present() {
   const count = slides.length;
   const index = Math.min(state.index, Math.max(0, count - 1));
   const slide = slides[index];
+  const shown = useLiveSlide(deckId, slide);
 
   const poke = useCallback(() => {
     setChrome(true);
@@ -78,7 +79,7 @@ export default function Present() {
     <div className={`present ${chrome ? 'show-chrome' : ''}`} onMouseMove={poke} onClick={(e) => { if ((e.target as HTMLElement).closest('button, a, .present-notes')) return; next(); }}>
       <div className="present-stage">
         <div className="present-slide" key={slide.id}>
-          <SlideView slide={slide} deck={deck} number={index + 1} count={count} step={state.step} flags={state.flags} label={`Slide ${index + 1} of ${count}`} live />
+          <SlideView slide={shown ?? slide} deck={deck} number={index + 1} count={count} step={state.step} flags={state.flags} label={`Slide ${index + 1} of ${count}`} live />
         </div>
         {state.blank && <div className="present-blank" aria-label="Screen blanked" />}
         <LiveScreen deckId={deckId} />

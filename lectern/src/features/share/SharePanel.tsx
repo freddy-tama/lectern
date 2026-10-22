@@ -2,7 +2,7 @@
 // on screen while phones are connected. Mounted once for the whole app.
 
 import { useLiveQuery } from 'dexie-react-hooks';
-import { ArrowLeft, Laptop, MonitorUp, QrCode as QrIcon, Radio, RotateCcw, ScrollText, Smartphone, Tablet, Trophy, Users } from 'lucide-react';
+import { ArrowLeft, EyeOff, Laptop, MonitorUp, Pin, QrCode as QrIcon, Radio, RotateCcw, ScrollText, Smartphone, Tablet, Trophy, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { type GuestInfo, liveHost, useLiveHost } from './host';
@@ -11,9 +11,10 @@ import { OfflinePanel } from './OfflinePanel';
 import { QrCode } from './QrCode';
 import { QuizPanel, QuizSettingsRow } from './QuizPanel';
 import { quizItem } from '../../core/share/quiz';
-import { formatCode, joinUrl, pollChoices } from '../../core/share/protocol';
+import { cloudLimit, formatCode, joinUrl, pollChoices } from '../../core/share/protocol';
 import { db } from '../../data/db';
 import { Dialog } from '../../ui/Dialog';
+import { useToast } from '../../ui/Toast';
 import { isSupported } from './peer';
 
 function isLocalOrigin() {
@@ -81,6 +82,45 @@ function PollResults({ deckId }: { deckId: string }) {
   );
 }
 
+/** The current word cloud's answers, for the presenter: hide a word, start again, or keep them on the slide. */
+function CloudResults({ deckId }: { deckId: string }) {
+  const live = useLiveHost();
+  const toast = useToast();
+  const deck = useLiveQuery(() => db.decks.get(deckId), [deckId]);
+  const slides = deck?.slides.filter((s) => !s.hidden) ?? [];
+  const slide = slides[live.state?.index ?? 0];
+  if (!slide || cloudLimit(slide) === null) return null;
+  const result = live.clouds[slide.id];
+  const people = result?.people ?? 0;
+  const words = result?.words ?? [];
+  const keep = async () => {
+    if (await liveHost.keepWords(slide.id)) toast.show('The words are saved on the slide.');
+  };
+  return (
+    <section className="share-poll share-cloud" aria-label="Word cloud answers">
+      <div className="share-poll-head">
+        <p className="eyebrow">Words for slide {(live.state?.index ?? 0) + 1}</p>
+        <span className="faint">{people === 1 ? '1 person' : `${people} people`}</span>
+        {words.length > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={keep} title="Save these words on the slide, for the deck and its exports"><Pin size={14} /> Keep</button>}
+        {people > 0 && <button type="button" className="btn btn-ghost btn-sm" onClick={() => liveHost.clearWords(slide.id)}><RotateCcw size={14} /> Clear</button>}
+      </div>
+      {words.length === 0
+        ? <p className="faint">Answers from phones appear here and on the screen.</p>
+        : (
+          <ol>
+            {words.slice(0, 12).map((w) => (
+              <li key={w.text}>
+                <span className="share-poll-label">{w.text}</span>
+                <span className="share-poll-n tabular">{w.count}</span>
+                <button type="button" className="icon-btn" onClick={() => liveHost.hideWord(slide.id, w.text)} aria-label={`Hide “${w.text}”`} title="Take it off the cloud"><EyeOff size={14} /></button>
+              </li>
+            ))}
+          </ol>
+        )}
+    </section>
+  );
+}
+
 function StartView({ deckId, onOffline }: { deckId: string; onOffline(): void }) {
   const live = useLiveHost();
   const other = live.status === 'live' && live.deckId !== deckId;
@@ -102,7 +142,7 @@ function StartView({ deckId, onOffline }: { deckId: string; onOffline(): void })
         <legend className="field-label">What viewers get</legend>
         <label className="switch"><input type="checkbox" checked={live.options.allowDownload} onChange={(e) => liveHost.setOptions({ allowDownload: e.target.checked })} /><span>Let them save the PowerPoint</span></label>
         <label className="switch"><input type="checkbox" checked={live.options.shareTakeaways} onChange={(e) => liveHost.setOptions({ shareTakeaways: e.target.checked })} /><span>Show the takeaways under each slide</span></label>
-        <label className="switch"><input type="checkbox" checked={live.options.polls} onChange={(e) => liveHost.setOptions({ polls: e.target.checked })} /><span>Let them answer question slides</span></label>
+        <label className="switch"><input type="checkbox" checked={live.options.polls} onChange={(e) => liveHost.setOptions({ polls: e.target.checked })} /><span>Let them answer questions and word clouds</span></label>
         <p className="field-help">Your script, cues and private notes stay on your devices.</p>
       </fieldset>
       <fieldset className="share-options">
@@ -166,6 +206,7 @@ function LiveView({ onOffline }: { onOffline(): void }) {
       )}
       {live.error && <p className="share-note share-error" role="status">{live.error}</p>}
       {tab !== 'quiz' && live.deckId && <PollResults deckId={live.deckId} />}
+      {tab !== 'quiz' && live.deckId && <CloudResults deckId={live.deckId} />}
       {tab !== 'quiz' && <DeviceList guests={live.guests} />}
       {tab === 'audience' && (
         <button type="button" className="share-offline-link" onClick={onOffline}>

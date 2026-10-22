@@ -78,7 +78,7 @@ function distance(a: string, b: string) {
   return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
 }
 
-function luminance(color: string) {
+export function luminance(color: string) {
   const [r, g, b] = rgb(color).map((v) => {
     const c = v / 255;
     return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
