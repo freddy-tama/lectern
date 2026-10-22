@@ -10,7 +10,8 @@ html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; backgro
 #stage { position: absolute; left: 0; top: 0; width: 1440px; height: 810px; transform: scale(1.333333); transform-origin: 0 0; overflow: hidden; }
 body { font-family: 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif; color: #f4f2ee; -webkit-font-smoothing: antialiased; }
 
-/* Two full-frame iframes take turns, so the next shot loads while this one plays. */
+/* Two full-frame iframes take turns, so the next shot loads while this one plays. Each frame has a name,
+   which is how the recorder finds its DevTools session: the app is on another origin. */
 .frame { position: absolute; left: 0; top: 0; width: 1440px; height: 810px; border: 0; opacity: 0; transition: opacity 500ms ease, transform 900ms cubic-bezier(0.65, 0, 0.35, 1); background: #141413; }
 .frame.on { opacity: 1; z-index: 2; }
 
@@ -25,6 +26,24 @@ body { font-family: 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif; 
 #phone { position: absolute; right: 190px; top: 34px; width: 342px; height: 742px; border-radius: 52px; background: #050505; box-shadow: 0 0 0 10px #2b2a28, 0 40px 90px rgba(0, 0, 0, 0.55); overflow: hidden; }
 #phone iframe { position: absolute; left: 0; top: 0; width: 390px; height: 846px; border: 0; transform: scale(0.877); transform-origin: 0 0; background: #fff; }
 
+/* Devices: one deck on a projector, a laptop and a phone at once, each a real page of the app. */
+#devices { position: absolute; inset: 0; opacity: 0; transition: opacity 500ms ease; z-index: 3; pointer-events: none;
+  background: radial-gradient(55% 65% at 50% 30%, rgba(224, 86, 44, 0.18), transparent 70%), radial-gradient(45% 50% at 85% 90%, rgba(76, 86, 201, 0.2), transparent 70%), #121110; }
+#devices.on { opacity: 1; pointer-events: auto; }
+#devices .row { position: absolute; left: 0; right: 0; bottom: 120px; display: flex; align-items: flex-end; justify-content: center; gap: 30px; }
+.dev { position: relative; display: flex; flex-direction: column; align-items: center; }
+.dev .screen { position: relative; overflow: hidden; background: #000; }
+.dev iframe { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; background: #141413; }
+.dev .label { margin-top: 14px; font-size: 15px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(244, 242, 238, 0.62); }
+.dev-laptop .screen { width: 430px; height: 269px; border: 11px solid #1b1a19; border-bottom-width: 14px; border-radius: 14px 14px 0 0; box-shadow: 0 0 0 1px #3a3936; }
+.dev-laptop .base { width: 500px; height: 14px; border-radius: 0 0 14px 14px; background: linear-gradient(#4a4945, #2a2927); box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5); }
+.dev-laptop iframe { width: 1280px; height: 800px; transform: scale(0.3359375); }
+.dev-tv .screen { width: 600px; height: 337.5px; border: 12px solid #0b0b0b; border-radius: 10px; box-shadow: 0 0 0 1px #34332f, 0 30px 70px rgba(0, 0, 0, 0.55); }
+.dev-tv .stand { width: 120px; height: 30px; background: linear-gradient(#2c2b29, #1b1a19); clip-path: polygon(30% 0, 70% 0, 100% 100%, 0 100%); }
+.dev-tv iframe { width: 1440px; height: 810px; transform: scale(0.4166667); }
+.dev-phone .screen { width: 180px; height: 390px; border: 9px solid #050505; border-radius: 34px; box-shadow: 0 0 0 3px #2b2a28, 0 30px 70px rgba(0, 0, 0, 0.55); }
+.dev-phone iframe { width: 390px; height: 845px; transform: scale(0.4615385); background: #fff; }
+
 /* Captions: what is on screen, in plain words, so the video works muted. */
 #cap { position: absolute; left: 50%; bottom: 30px; z-index: 20; pointer-events: none; max-width: 1180px; padding: 14px 28px 16px; border-radius: 18px; background: rgba(20, 19, 18, 0.9); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 18px 50px rgba(0, 0, 0, 0.4); text-align: center; opacity: 0; transform: translate(-50%, 10px); transition: opacity 350ms ease, transform 350ms ease; }
 #cap.on { opacity: 1; transform: translate(-50%, 0); }
@@ -33,6 +52,9 @@ body { font-family: 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif; 
 #cap.right { left: auto; right: 22px; bottom: auto; top: 50%; width: 300px; max-width: none; padding: 18px 22px 20px; text-align: left; transform: translate(0, calc(-50% + 10px)); }
 #cap.right.on { transform: translate(0, -50%); }
 #cap.right .t { font-size: 23px; }
+#cap.left { left: 22px; right: auto; bottom: auto; top: 50%; width: 300px; max-width: none; padding: 18px 22px 20px; text-align: left; transform: translate(0, calc(-50% + 10px)); }
+#cap.left.on { transform: translate(0, -50%); }
+#cap.left .t { font-size: 23px; }
 #cap.corner { left: auto; right: 26px; bottom: auto; top: 24px; max-width: 520px; text-align: left; transform: translate(0, -10px); }
 #cap.corner.on { transform: none; }
 #cap.br { left: auto; right: 24px; bottom: 22px; max-width: 470px; padding: 12px 22px 14px; text-align: left; transform: translate(0, 10px); }
@@ -41,39 +63,66 @@ body { font-family: 'Inter Variable', Inter, 'Segoe UI', system-ui, sans-serif; 
 #cap .k { display: block; margin-bottom: 4px; font-size: 14px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #f08a63; }
 #cap .t { font-size: 25px; font-weight: 600; line-height: 1.35; }
 
+/* A cut in the recording: says what was skipped and for how long, so a wait is never passed off as instant. */
+#skip { position: absolute; left: 50%; top: 22px; z-index: 35; pointer-events: none; display: flex; align-items: center; gap: 10px; padding: 10px 20px 11px 16px; border-radius: 999px; background: #f08a63; color: #1c1b19; font-size: 20px; font-weight: 700; box-shadow: 0 12px 34px rgba(0, 0, 0, 0.45); opacity: 0; transform: translate(-50%, -12px); transition: opacity 300ms ease, transform 300ms ease; white-space: nowrap; }
+#skip.on { opacity: 1; transform: translate(-50%, 0); }
+#skip svg { flex: none; }
+#skip.top-left { left: 26px; transform: translate(0, -12px); }
+#skip.top-left.on { transform: none; }
+
 /* The pointer and the click it makes, so viewers can follow. */
 #cursor { position: absolute; left: 720px; top: 460px; z-index: 30; width: 30px; height: 30px; opacity: 0; transition: left 650ms cubic-bezier(0.22, 1, 0.36, 1), top 650ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease; pointer-events: none; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45)); }
 #cursor.on { opacity: 1; }
 #cursor.tap svg { display: none; }
 #cursor.tap::before { content: ''; position: absolute; left: -16px; top: -16px; width: 32px; height: 32px; border-radius: 50%; background: rgba(255, 255, 255, 0.55); box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.25); }
+#cursor.slow { transition-duration: 1300ms, 1300ms, 250ms; }
 .ring { position: absolute; z-index: 29; width: 44px; height: 44px; margin: -22px 0 0 -22px; border-radius: 50%; border: 3px solid #f08a63; pointer-events: none; animation: ring 600ms ease-out forwards; }
 @keyframes ring { from { opacity: 1; transform: scale(0.3); } to { opacity: 0; transform: scale(1.6); } }
+
+/* Files being dragged in from the desktop, under the pointer. */
+#drag { position: absolute; left: 0; top: 0; z-index: 29; pointer-events: none; opacity: 0; transition: left 1300ms cubic-bezier(0.22, 1, 0.36, 1), top 1300ms cubic-bezier(0.22, 1, 0.36, 1), opacity 250ms ease; }
+#drag.on { opacity: 1; }
+#drag .file { display: flex; align-items: center; gap: 10px; margin: 0 0 8px 18px; padding: 10px 16px 10px 12px; width: max-content; border-radius: 12px; background: #fbfaf8; color: #1c1b19; font-size: 15px; font-weight: 600; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35); transform: rotate(-2deg); }
+#drag .file:nth-child(2) { transform: rotate(1.5deg) translateX(10px); }
+#drag .file i { display: grid; place-items: center; width: 28px; height: 32px; border-radius: 5px; font-style: normal; font-size: 10px; font-weight: 800; color: #fff; }
+#drag .count { position: absolute; left: 6px; top: -6px; min-width: 24px; height: 24px; padding: 0 6px; box-sizing: border-box; display: grid; place-items: center; border-radius: 12px; background: #e0562c; color: #fff; font-size: 13px; font-weight: 800; }
 
 /* A keycap when the recording presses a key. */
 #key { position: absolute; left: 36px; top: 30px; z-index: 30; pointer-events: none; min-width: 58px; height: 58px; padding: 0 16px; box-sizing: border-box; display: grid; place-items: center; border-radius: 14px; background: rgba(20, 19, 18, 0.9); box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.14), 0 4px 0 rgba(0, 0, 0, 0.5); font-size: 26px; font-weight: 700; opacity: 0; transform: translateY(-6px); transition: opacity 200ms ease, transform 200ms ease; }
 #key.on { opacity: 1; transform: none; }
 
-/* Title and end cards. */
+/* Title, chapter and end cards. */
 #card { position: absolute; inset: 0; z-index: 40; display: grid; place-content: center; text-align: center; pointer-events: none; visibility: hidden; background: radial-gradient(55% 60% at 30% 10%, rgba(224, 86, 44, 0.28), transparent 70%), radial-gradient(45% 50% at 90% 80%, rgba(76, 86, 201, 0.24), transparent 70%), #121110; opacity: 0; transition: opacity 600ms ease, visibility 0s 600ms; }
 #card.on { opacity: 1; visibility: visible; transition: opacity 600ms ease; }
 #card .logo { width: 72px; height: 72px; margin: 0 auto 26px; }
+#card .eyebrow { margin: 0 0 18px; font-size: 16px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: #f08a63; }
 #card h1 { margin: 0; font-family: 'Fraunces Variable', Fraunces, Georgia, serif; font-weight: 520; font-size: 84px; line-height: 1; letter-spacing: -0.03em; }
 #card h1 em { display: block; font-style: italic; font-weight: 430; color: #f08a63; }
 #card p { margin: 26px 0 0; font-size: 26px; color: rgba(244, 242, 238, 0.72); }
 #card .url { margin-top: 34px; font-size: 22px; font-weight: 650; color: #f4f2ee; letter-spacing: 0.01em; }
 #card .url span { color: #f08a63; }
+#card .credit { margin-top: 18px; font-size: 15px; color: rgba(244, 242, 238, 0.45); }
 </style>
 </head>
 <body>
 <div id="stage">
-<iframe class="frame" id="A" title="A"></iframe>
-<iframe class="frame" id="B" title="B"></iframe>
+<iframe class="frame" id="A" name="A" title="A"></iframe>
+<iframe class="frame" id="B" name="B" title="B"></iframe>
 <div id="phone-stage">
   <div id="phone-copy"><span class="k"></span><h2></h2><p></p></div>
-  <div id="phone"><iframe id="P" title="Phone"></iframe></div>
+  <div id="phone"><iframe id="P" name="P" title="Phone"></iframe></div>
+</div>
+<div id="devices">
+  <div class="row">
+    <div class="dev dev-laptop"><div class="screen"><iframe id="D2" name="D2" title="Laptop"></iframe></div><div class="base"></div><span class="label">Your laptop</span></div>
+    <div class="dev dev-tv"><div class="screen"><iframe id="D1" name="D1" title="Projector"></iframe></div><div class="stand"></div><span class="label">The room’s screen</span></div>
+    <div class="dev dev-phone"><div class="screen"><iframe id="D3" name="D3" title="Phone in the room"></iframe></div><span class="label">A phone</span></div>
+  </div>
 </div>
 <div id="cap"><span class="k"></span><span class="t"></span></div>
+<div id="skip"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5.5v13l8.5-6.5zM12.5 5.5v13L21 12z" fill="currentColor"/></svg><span></span></div>
 <div id="key"></div>
+<div id="drag"></div>
 <div id="cursor"><svg viewBox="0 0 24 24" width="30" height="30"><path d="M4 2.5 19.5 13l-7 1.4L9 21.2z" fill="#fff" stroke="#111" stroke-width="1.6" stroke-linejoin="round"/></svg></div>
 <div id="card" class="on"></div>
 </div>
@@ -83,6 +132,7 @@ const $ = (s) => document.querySelector(s);
 const S = 1.333333;
 // The app's own mark (src/ui/Logo.tsx), in its dark-theme colours.
 const LOGO = '<svg width="72" height="72" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#f4f2ee"/><path d="M20 46h24" stroke="#e0562c" stroke-width="5" stroke-linecap="round"/><path d="M24 40l4-22h8l4 22" fill="none" stroke="#1c1b19" stroke-width="5" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+const FILE_COLOURS = { xlsx: '#1f7a46', docx: '#2b5fb8', md: '#55534e' };
 window.dir = {
   load(id, url) {
     const f = $('#' + id);
@@ -91,6 +141,7 @@ window.dir = {
   show(id) {
     for (const f of document.querySelectorAll('.frame')) f.classList.toggle('on', f.id === id);
     $('#phone-stage').classList.toggle('on', id === 'P');
+    $('#devices').classList.toggle('on', id === 'devices');
   },
   /** A camera move: scale a frame so the region starting at (x0, y0) fills the screen. 1 resets it. */
   zoom(id, s, x0 = 0, y0 = 0) {
@@ -107,15 +158,35 @@ window.dir = {
       c.querySelector('.k').textContent = k || '';
       c.querySelector('.k').style.display = k ? '' : 'none';
       c.querySelector('.t').textContent = t;
-      for (const w of ['top', 'right', 'corner', 'br']) c.classList.toggle(w, where === w);
+      for (const w of ['top', 'right', 'left', 'corner', 'br']) c.classList.toggle(w, where === w);
       if (t) c.classList.add('on');
     }, t ? 260 : 0);
+  },
+  /** The badge over a cut. Empty text hides it. */
+  skip(text, where) {
+    const b = $('#skip');
+    if (!text) { b.classList.remove('on'); return; }
+    b.querySelector('span').textContent = text;
+    b.classList.toggle('top-left', where === 'top-left');
+    b.classList.add('on');
   },
   card(html) { const c = $('#card'); if (html) { c.innerHTML = html.replace('{LOGO}', LOGO); c.classList.add('on'); } else c.classList.remove('on'); },
   cursor(x, y, mode) {
     const c = $('#cursor');
+    if (mode === 'jump') {
+      // Appears where it is put, without travelling there.
+      c.style.transition = 'none';
+      c.style.left = x / S + 'px';
+      c.style.top = y / S + 'px';
+      void c.offsetWidth;
+      c.style.transition = '';
+      c.classList.remove('tap', 'slow');
+      c.classList.add('on');
+      return;
+    }
     c.classList.add('on');
     c.classList.toggle('tap', mode === 'tap');
+    c.classList.toggle('slow', mode === 'slow');
     c.style.left = x / S + 'px';
     c.style.top = y / S + 'px';
   },
@@ -128,6 +199,23 @@ window.dir = {
     $('#stage').append(r);
     setTimeout(() => r.remove(), 700);
   },
+  /** File cards that follow the pointer while files are dragged in. Moving them takes 1.3 s. */
+  drag(names, x, y) {
+    const d = $('#drag');
+    if (names) {
+      d.innerHTML = names.map((n) => { const ext = n.split('.').pop(); return `<div class="file"><i style="background:${FILE_COLOURS[ext] ?? '#55534e'}">${ext.toUpperCase()}</i>${n}</div>`; }).join('') + `<span class="count">${names.length}</span>`;
+      d.style.transition = 'none';
+      d.style.left = x / S + 'px';
+      d.style.top = y / S + 'px';
+      void d.offsetWidth;
+      d.style.transition = '';
+      d.classList.add('on');
+      return;
+    }
+    if (x === undefined) { d.classList.remove('on'); return; }
+    d.style.left = x / S + 'px';
+    d.style.top = y / S + 'px';
+  },
   key(label) {
     const k = $('#key');
     k.textContent = label;
@@ -135,24 +223,11 @@ window.dir = {
     clearTimeout(this._kt);
     this._kt = setTimeout(() => k.classList.remove('on'), 700);
   },
-  /** An element's centre in this page's coordinates. `find` runs inside the frame's document. */
-  point(id, find) {
-    const f = $('#' + id);
-    const doc = f.contentDocument;
-    const el = typeof find === 'string' ? doc.querySelector(find) : find(doc);
-    if (!el) return null;
-    el.scrollIntoView({ block: 'nearest' });
-    const r = el.getBoundingClientRect();
-    const fr = f.getBoundingClientRect();
-    const scale = fr.width / f.offsetWidth;
-    return { x: fr.left + (r.left + r.width / 2) * scale, y: fr.top + (r.top + r.height / 2) * scale };
-  },
-  frameRect(id, sel) {
+  /** Where a frame's content sits on this page, and how much it is scaled. */
+  frameRect(id) {
     const f = $('#' + id);
     const fr = f.getBoundingClientRect();
-    const scale = fr.width / f.offsetWidth;
-    const r = sel ? f.contentDocument.querySelector(sel).getBoundingClientRect() : { left: 0, top: 0 };
-    return { left: fr.left + r.left * scale, top: fr.top + r.top * scale, scale };
+    return { left: fr.left, top: fr.top, scale: fr.width / f.offsetWidth };
   },
 };
 </script>

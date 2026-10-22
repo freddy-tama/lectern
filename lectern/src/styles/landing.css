@@ -4009,6 +4009,41 @@
   box-shadow: 0 0 0 1px var(--lp-stage-ring), var(--shadow-3), 0 40px 80px -48px rgb(0 0 0 / 0.45);
 }
 
+/* Over the video's top corner, clear of its own controls along the bottom. */
+.tour-sound {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 36px;
+  padding: 0 14px 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(20 19 18 / 0.82);
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.14), 0 8px 24px rgb(0 0 0 / 0.3);
+  font-size: 13.5px;
+  font-weight: 650;
+  color: #f4f2ee;
+  backdrop-filter: blur(6px);
+  transition: background var(--t-fast);
+}
+
+.tour-sound:hover:not(:disabled) {
+  background: rgb(20 19 18 / 0.95);
+}
+
+.tour-sound:focus-visible {
+  outline: 2px solid #f08a63;
+  outline-offset: 2px;
+}
+
+.tour-sound:disabled {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .tour-chapters {
   display: flex;
   flex-wrap: wrap;
@@ -4063,10 +4098,26 @@
   .tour-frame { margin-top: 28px; }
   .tour-video { border-radius: 12px; }
   .tour-chapter { height: 34px; padding: 0 12px; font-size: 13px; }
+  /* Below the video on phones: on a picture this small, a corner would cover the video's own captions. */
+  .tour-sound {
+    position: static;
+    display: flex;
+    width: fit-content;
+    height: 34px;
+    margin: 14px auto 0;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    box-shadow: none;
+    backdrop-filter: none;
+    font-size: 13px;
+    color: var(--ink);
+  }
+  .tour-sound:hover:not(:disabled) { background: var(--sunk); }
 }
 
 @media (pointer: coarse) {
   .tour-chapter { height: 44px; }
+  .tour-sound { height: 44px; }
 }
 
 /* ─── Try the sample ────────────────────────────────────── */

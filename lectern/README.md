@@ -71,7 +71,15 @@ A first visit to `/` opens the front page at `/welcome`. Until the setup is done
 
 ### The front-page video
 
-The **Watch it run** video on `/welcome` (`public/media/lectern-tour.mp4`, 75 seconds) is a screen recording of the app itself, with the sample data. `scripts/tour/record.mjs` plays it in headless Chrome: a director page shows the real app in frames, adds the captions and the pointer, and drives the app with real clicks and keys. `scripts/tour/assemble.mjs` turns the frames into that 720p video, its poster, and a 1080p copy for uploading. The page loads the video only when you scroll near it, plays it muted and looping while it's on screen, and doesn't start it on its own for reduced motion.
+The **Watch it run** video on `/welcome` (`public/media/lectern-tour.mp4`, 124 seconds) is a narrated screen recording. `scripts/tour/record.mjs` plays it in headless Chrome. A director page served from localhost shows `https://lectern-sooty.vercel.app` in frames, adds the captions and the pointer, and drives the app with real clicks, keys and a real file drop. The frames are on another origin, so the script reaches each one through its own DevTools session. It records three parts, so a retake never redrafts more than it must:
+
+- `intro`: the sample talk's key notes, present mode, presenter view, teleprompter and phone quiz. No AI.
+- `make`: the two sample files in `scripts/tour/samples/` and a brief become a deck with AI on `/make`.
+- `assist`: the deck assistant changes that deck. Then the deck plays on a laptop (presenter view), the room's screen and a phone that joined a live share.
+
+The video on the site keeps the opening of the earlier recording, which had no sound: the sample talk, recorded on a local build. `scripts/tour/reuse.mjs` turns its first 54.3 seconds into a `talk` part with the intro's narration laid over it, and `PARTS=talk,make,assist` puts that part in place of `intro`. With `REC_ROOT` set, the site's video is `node scripts/tour/reuse.mjs <earlier recording> 54.3`, then `PARTS=talk,make,assist POSTER_AT=119.75 node scripts/tour/assemble.mjs`.
+
+The AI parts spend real money on the site's key. The AI's waits are cut out of the recording, and a badge on screen says how long each cut was. `scripts/tour/voice.mjs` speaks the lines in `narration.mjs` with ElevenLabs text-to-speech, and `music.mjs` makes a quiet music loop with ElevenLabs sound effects. `scripts/tour/assemble.mjs` then turns the frames and sound into that 720p video, its poster, and 1080p copies for uploading, with and without the music. The page loads the video only when you scroll near it, plays it muted and looping while it's on screen, and doesn't start it on its own for reduced motion. **Play with sound** starts it again from the top with the narration.
 
 ## Writing an outline
 
