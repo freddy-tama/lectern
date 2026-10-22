@@ -266,3 +266,13 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
   - **Fix:** the branch was renamed on GitHub to `claude/lectern-layouts` (56 characters).
   - **16:01** Renaming the branch closed #15. GitHub moves a PR along when its base branch is renamed, but closes it when its head branch is. The same commits were opened again as #16, and this entry was pushed after it opened to start the run.
   - **For later PRs:** keep the branch slug (the branch name with `/` as `-`) to 29 characters or fewer.
+- **16:03** TestSprite ran the 27 tests on the #16 preview ([run `bdd1b265`](https://www.testsprite.com/dashboard-v3/o/dfe734b3-7442-5019-aa71-fa10706b4f14/projects/4a558259-6d77-449a-bede-151ba58b667a/execution/bdd1b265-26e8-4d13-90b7-e1bbafbd0392)): 26 passed, 1 blocked, none failed.
+  - WLC-006 passed with "37 slide types".
+  - The flow 10 title test passed with the fields panel folded away.
+  - The blocked test was again "Build a deck from notes with the talk audience" (NTS-001), which was also blocked on #14.
+    - This time the agent saw the outline, the eight-slide preview and **Talk** selected, but couldn't activate **Open as a deck**.
+    - That button (`notes-open-deck` in `FromNotes.tsx`) is a plain, enabled button that this branch didn't change, so this looks like the test agent's trouble rather than the app's. It's worth one check by hand.
+  - The `TestSprite V3` check shows as failing because of the blocked test, as on #14.
+- **16:16** #16 was merged as `faad386`, and Vercel deploys it to production.
+  - This entry went straight to main. A push to the PR would have started another paid run, and TestSprite skips pushes to main.
+- **Credits:** about 13.5 for this run. The two skipped events on #15 cost nothing. About 19 of the month's 150 are left, enough for one more run.
