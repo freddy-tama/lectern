@@ -293,3 +293,9 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
   - The vitest suite (726 tests), the typecheck and `npm run build` passed. The section was checked by hand in Chrome and in the browser pane, on a desktop and at phone width.
 - **What the suite may notice:** flow 1's tour checks. The PRD mentions **Play with sound** now. It doesn't name the chapters, but a test written in the portal might use an old chapter name.
 - **This run:** about 13.5 credits, which leaves about 5.5 of the month's 150.
+- **07:50** TestSprite queued the 27 tests on the #17 preview ([run `324c3933`](https://www.testsprite.com/dashboard-v3/o/dfe734b3-7442-5019-aa71-fa10706b4f14/projects/4a558259-6d77-449a-bede-151ba58b667a/execution/324c3933-c2d7-4f4f-acdd-0b2568c7bd1f)). It had finished by 08:34: all 27 passed.
+  - NTS-001, blocked on #14 and #16, passed this time.
+  - The branch was pushed before the PR was opened, and the run still started. Vercel finished building after the PR opened.
+- **08:34** #17 was merged as `e399901`, and Vercel deploys it to production.
+  - This entry went straight to main. A push to the PR would have started another paid run, and TestSprite skips pushes to main.
+- **Credits:** about 13.5 for this run. About 5.5 of the month's 150 are left, not enough for another full run.
