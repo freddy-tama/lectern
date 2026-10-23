@@ -18,7 +18,7 @@ Prefer roles and accessible names. These `data-testid`s exist where names repeat
 - The "At a glance" list shows "37 slide types" and "6 built-in looks".
 - The page has no horizontal scroll at 1440 px or at 390 px wide.
 - Beside the `h1`, a short animation follows one slide's key notes through five scenes: Notes, On stage, Phones, Study and Share. It plays by itself, and its **Pause the animation** button stops it. Choosing a scene shows that scene and stops there. With reduced motion it doesn't play by itself.
-- Under the "At a glance" list, **Watch it run** (`#tour`) has a muted, looping screen recording of the app with controls and chapter buttons. With reduced motion it doesn't start by itself.
+- Under the "At a glance" list, **Watch it run** (`#tour`) has a muted, looping screen recording of the app with controls and chapter buttons. With reduced motion it doesn't start by itself. **Play with sound** unmutes it and starts it from the top, and then reads **Mute**.
 
 ### 2. The sample talk on the intro page
 - The sample talk is in the **Try it here** section (`#try`), under the video.

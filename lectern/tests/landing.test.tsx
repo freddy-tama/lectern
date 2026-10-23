@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { act, createElement } from 'react';
 import { type Root, createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { THEMES } from '../src/core/engine/themes';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
 import { allKinds } from '../src/core/kinds/registry';
@@ -127,6 +127,26 @@ describe('the front page', () => {
     }
     expect($$('#tour ol button').length).toBeGreaterThan(3);
     expect($('a.hero-watch')?.getAttribute('href')).toBe('#tour');
+  });
+
+  it('plays the tour with sound from the top, and mutes it again', async () => {
+    const video = $<HTMLVideoElement>('#tour video')!;
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    try {
+      video.currentTime = 40;
+      await act(async () => byText('#tour button', 'Play with sound')!.click());
+      expect(video.muted).toBe(false);
+      expect(video.currentTime).toBe(0);
+      expect(play).toHaveBeenCalled();
+      // Muting leaves the place alone.
+      video.currentTime = 12;
+      await act(async () => byText('#tour button', 'Mute')!.click());
+      expect(video.muted).toBe(true);
+      expect(video.currentTime).toBe(12);
+      expect(byText('#tour button', 'Play with sound')).toBeDefined();
+    } finally {
+      play.mockRestore();
+    }
   });
 
   it('steps the sample talk the way present mode does', async () => {

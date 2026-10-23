@@ -4,9 +4,9 @@
 
 **Live:** https://lectern-sooty.vercel.app (no sign-up) · **Tests:** every pull request is tested end to end by [TestSprite](#tests-that-run-themselves-the-testsprite-loop) · Built for the TestSprite Hackathon, Season 4.
 
-[![Presenter view in Lectern: the slide on the left, the next slide, the script, cues and a clock on the right](lectern/public/media/lectern-tour.jpg)](https://lectern-sooty.vercel.app/welcome#tour)
+[![One slide on three screens: presenter view on a laptop, the room’s screen, and a phone that joined a live share](lectern/public/media/lectern-tour.jpg)](https://lectern-sooty.vercel.app/welcome#tour)
 
-*A 75-second screen recording of the real app with its sample data. Click the picture to watch it on the intro page, or [download the video](lectern/public/media/lectern-tour.mp4) (3.7 MB).*
+*A 124-second narrated recording. It plays the sample talk, then, live on the site, Claude Opus turns two sample files and a brief into a deck, the deck assistant changes it, and three screens play it. The AI’s waits are cut, and each cut is labelled. Click the picture to watch it on the intro page, or [download the video](lectern/public/media/lectern-tour.mp4) (7.8 MB).*
 
 ## The problem
 
