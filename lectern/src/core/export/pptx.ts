@@ -611,8 +611,10 @@ export async function exportDeckToPptx(deck: Deck, options: PptxOptions = {}): P
   const theme = getTheme(deck.themeId);
   const laid = layoutDeck(deck, { target: 'pptx', mode: 'show' });
 
-  const sources = laid.flatMap(({ layout }) => layout.boxes.flatMap((b) => (b.type === 'image' ? [b.src] : [])));
-  const images = await loadImages(sources, options, warnings);
+  const pictures = laid.flatMap(({ layout }) => layout.boxes.filter((b): b is ImageBox => b.type === 'image'));
+  const images = await loadImages(pictures.filter((b) => !b.id.startsWith('deco-')).map((b) => b.src), options, warnings);
+  // Theme decorations are SVG. Without a resolver that rasterises them they are left off, with no warning for ornaments.
+  for (const [src, data] of await loadImages(pictures.filter((b) => b.id.startsWith('deco-')).map((b) => b.src).filter((src) => !images.has(src)), options, [])) images.set(src, data);
   // A YouTube still becomes the cover of the online video. Without one PowerPoint shows its own, so a miss isn't a warning.
   const covers = laid.flatMap(({ layout }) => layout.boxes.flatMap((b) => (b.type === 'video' ? [videoThumbnail(parseVideo(b.src))].filter(Boolean) : [])));
   for (const [src, data] of await loadImages(covers.filter((src) => !images.has(src)), options, [])) images.set(src, data);

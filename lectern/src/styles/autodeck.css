@@ -565,6 +565,32 @@
   margin-top: 8px;
 }
 
+.ad-file-role select {
+  height: 30px;
+  padding: 2px 8px;
+  font-size: 12.5px;
+  width: auto;
+  max-width: 150px;
+}
+
+.ad-review {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-1);
+}
+
+.ad-review p {
+  margin-top: 4px;
+  max-width: 62ch;
+}
+
 .ad-filmstrip {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));

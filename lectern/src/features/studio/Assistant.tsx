@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, RotateCcw, Square, SquarePen, Trash2, WandSparkles, X } from 'lucide-react';
+import { AlertTriangle, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, Eye, RotateCcw, Square, SquarePen, Trash2, WandSparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { wording } from '../../core/deck/purpose';
 import { type Deck, type Slide, deckMinutes, deckPurpose } from '../../core/deck/types';
@@ -17,6 +17,8 @@ type Decision = 'accepted' | 'discarded' | 'stale';
 interface Turn {
   id: number;
   request: string;
+  /** A design review, which may take more steps. */
+  review?: boolean;
   status: 'working' | 'review' | 'done' | 'error';
   startedAt: number;
   step: number;
@@ -42,6 +44,9 @@ interface Chat {
 }
 
 const emptyChat = (): Chat => ({ history: [], turns: [], kindsKey: null });
+
+/** What "Review the design" asks for. The system prompt has the checklist; this is the presenter's side of it. */
+export const REVIEW_REQUEST = 'Review the design of every slide and polish it. Look at the whole deck first, then fix what you see: text that overflows or crowds, empty picture frames, bare or monotonous slides, things that collide or sit awkwardly. Change layouts, move and resize boxes, add fitting pictures or your own drawings, and a little decoration where a slide is bare. Keep my wording unless it is too long to fit. Check the slides you changed before you finish.';
 
 /** One chat per deck for this session: it survives closing the panel and leaving the studio. */
 const chats = new Map<string, Chat>();
@@ -100,20 +105,21 @@ export function useDeckAssistant({ deck, change, plannedMinutes, select, notify 
   const historyBytes = useMemo(() => JSON.stringify(chat.history).length, [chat.history]);
   const full = historyBytes > MAX_HISTORY_BYTES;
 
-  const send = useCallback((text: string) => {
+  const send = useCallback((text: string, opts: { review?: boolean } = {}) => {
     const request = text.trim();
+    const review = Boolean(opts.review);
     const d = live.current;
     if (!request || !d || working || pending.length || full) return;
     const id = d.id;
     const c = chats.get(id) ?? emptyChat();
     const key = kindsKey();
     const turnId = Date.now();
-    update(id, (x) => ({ ...x, turns: [...x.turns, { id: turnId, request, status: 'working', startedAt: Date.now(), step: 0, cards: [], ops: [], decisions: {}, described: {}, ticked: {} }] }));
+    update(id, (x) => ({ ...x, turns: [...x.turns, { id: turnId, request, ...(review ? { review } : {}), status: 'working', startedAt: Date.now(), step: 0, cards: [], ops: [], decisions: {}, described: {}, ticked: {} }] }));
     abort.current?.abort();
     const ac = new AbortController();
     abort.current = ac;
     runAssistantTurn(
-      { request, history: c.history, deck: d, plannedMinutes, withKinds: c.kindsKey !== key, since: c.since },
+      { request, history: c.history, deck: d, plannedMinutes, withKinds: c.kindsKey !== key, since: c.since, review },
       (e) => {
         if (e.type === 'step') patchTurn(id, turnId, (t) => ({ ...t, step: e.step }));
         if (e.type === 'tool') {
@@ -130,7 +136,8 @@ export function useDeckAssistant({ deck, change, plannedMinutes, select, notify 
         update(id, (x) => ({
           ...x,
           history: result.history,
-          kindsKey: key,
+          // The slide types went with this request's message; a request that kept nothing must send them again.
+          kindsKey: result.history.length > c.history.length ? key : c.kindsKey,
           since: undefined,
           turns: x.turns.map((t) => (t.id === turnId ? { ...t, status: result.ops.length ? 'review' : 'done', summary: result.summary, stopped: result.stopped, ops: result.ops, ticked } : t)),
         }));
@@ -150,9 +157,10 @@ export function useDeckAssistant({ deck, change, plannedMinutes, select, notify 
   const retry = useCallback(() => {
     if (current?.status !== 'error' || !deckId) return;
     const request = current.request;
+    const review = current.review;
     update(deckId, (c) => ({ ...c, turns: c.turns.filter((t) => t.id !== current.id) }));
     // The failed turn left the conversation as it was, so the request goes again as a fresh turn.
-    setTimeout(() => send(request), 0);
+    setTimeout(() => send(request, { review }), 0);
   }, [current, deckId, update, send]);
 
   /** Records decisions; once nothing is left to decide, the turn is done and the next request says what happened. */
@@ -274,9 +282,11 @@ export function useDeckAssistant({ deck, change, plannedMinutes, select, notify 
     if (next) preview(opKey(next)); else setFocus(null);
   }, [focusedOp, pending, discard, preview]);
 
+  const review = useCallback(() => send(REVIEW_REQUEST, { review: true }), [send]);
+
   return {
     chat, current, working, pending, full,
-    send, stop, retry, accept, discard, acceptTicked, discardAll, tick, newChat,
+    send, review, stop, retry, accept, discard, acceptTicked, discardAll, tick, newChat,
     focused: focusedOp, focusedSlideId: focusedOp ? anchorOf(focusedOp) : null, preview, step, acceptFocused, discardFocused,
     showOriginal, setShowOriginal,
   };
@@ -305,20 +315,25 @@ function describe(deck: Deck, op: DeckOp): Described {
     return { title: anchor ? `Move ${slide} after slide ${num(anchor)}` : `Move ${slide} to the start`, heading: headingOf(before), changes: [] };
   }
   const changes: string[] = [];
-  if (op.content) changes.push('Wording');
+  if (op.kind) changes.push(`Now a ${getKind(op.kind)?.label.toLowerCase() ?? op.kind} slide`);
+  else if (op.content) changes.push('Wording');
+  if (op.variant !== undefined) changes.push('Layout');
+  if (op.overrides !== undefined) changes.push('Arrangement');
+  if (op.elements !== undefined) changes.push('Pictures and decoration');
   const notes = op.notes ?? {};
   if (Object.keys(notes).some((k) => k !== 'minutes')) changes.push('Key notes');
   // Slide times are in halves, so they are shown as they are rather than rounded.
   if (notes.minutes !== undefined && before) changes.push(`${before.notes.minutes} min → ${notes.minutes} min`);
   const was = headingOf(before);
   const now = headingOf(after);
-  return { title: op.content ? `Edit ${slide}` : `Key notes, ${slide}`, heading: was !== now ? `${was} → ${now}` : was, changes };
+  const design = op.kind !== undefined || op.variant !== undefined || op.overrides !== undefined || op.elements !== undefined;
+  return { title: op.content || op.kind ? `Edit ${slide}` : design ? `Design, ${slide}` : `Key notes, ${slide}`, heading: was !== now ? `${was} → ${now}` : was, changes };
 }
 
 const STOPPED: Record<string, string> = {
   steps: 'It stopped at its step limit.',
-  time: 'It stopped early to stay within the time limit.',
   length: 'Its answer ran too long.',
+  error: 'It stopped after an error.',
 };
 
 // ─── The panel ─────────────────────────────────────────────────────────────────
@@ -339,9 +354,9 @@ export function AssistantPanel({ assistant, deck, plannedMinutes, onClose }: { a
   const total = deckMinutes(deck);
   const target = plannedMinutes && total > plannedMinutes ? plannedMinutes : Math.max(5, Math.round((total * 0.7) / 5) * 5);
   const suggestions = [
+    'Add pictures where slides are bare',
     total > 5 ? `Cut this to ${target} minutes` : 'Add more detail where it’s thin',
     'Add a summary at the end',
-    'Make it less technical',
     'Fill in missing key notes',
   ];
   const blocked = working || pending.length > 0 || full;
@@ -357,7 +372,10 @@ export function AssistantPanel({ assistant, deck, plannedMinutes, onClose }: { a
         <h2><WandSparkles size={16} /> Deck assistant</h2>
         <span className="assistant-head-tools">
           {chat.turns.length > 0 && (
-            <button type="button" className="icon-btn" onClick={assistant.newChat} disabled={working} aria-label="Start a new chat" title="Start a new chat"><SquarePen size={16} /></button>
+            <>
+              <button type="button" className="icon-btn" onClick={() => { if (!blocked) assistant.review(); }} disabled={blocked || locked} aria-label="Review the design" title="Review the design: look at every slide and fix what looks off"><Eye size={16} /></button>
+              <button type="button" className="icon-btn" onClick={assistant.newChat} disabled={working} aria-label="Start a new chat" title="Start a new chat"><SquarePen size={16} /></button>
+            </>
           )}
           <button type="button" className="icon-btn" onClick={onClose} aria-label="Close the assistant" title="Close"><X size={16} /></button>
         </span>
@@ -375,7 +393,10 @@ export function AssistantPanel({ assistant, deck, plannedMinutes, onClose }: { a
           </div>
         ) : !chat.turns.length ? (
           <div className="assistant-empty">
-            <p>Ask for changes across the whole deck. You’ll see each one before anything changes.</p>
+            <p>Ask for changes across the whole deck. The assistant looks at your slides as the audience will, and can change wording, layouts and pictures. You’ll see each change before anything happens.</p>
+            <button type="button" className="btn btn-primary btn-sm assistant-start-review" onClick={() => { if (!blocked) assistant.review(); }} disabled={blocked || locked}>
+              <Eye size={15} /> Review the design
+            </button>
             <div className="assistant-suggest">
               {suggestions.map((s) => <button key={s} type="button" className="ai-tone" onClick={() => submit(s)}>{s}</button>)}
             </div>
@@ -453,7 +474,7 @@ function TurnView({ turn, deck, assistant, last }: { turn: Turn; deck: Deck; ass
   const applied = turn.ops.filter((op) => turn.decisions[opKey(op)] === 'accepted').length;
   return (
     <div className="assistant-turn">
-      <p className="assistant-request">{turn.request}</p>
+      <p className="assistant-request" title={turn.review ? turn.request : undefined}>{turn.review ? 'Review the design' : turn.request}</p>
       {turn.status === 'working' ? (
         <div className="assistant-working" role="status" aria-live="polite">
           <StepCards cards={turn.cards} />
