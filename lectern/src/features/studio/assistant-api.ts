@@ -1,37 +1,15 @@
-// Client side of /api/deck-assistant: one turn of the deck assistant, streamed as step cards and ending with the
-// proposals. The conversation is kept here exactly as the server returns it and only ever appended to.
+// Client side of /api/deck-assistant: one request of the deck assistant. The loop (./agent/loop.ts) runs here,
+// calling the server once per step; this file is the server call and the request the panel makes.
 
-import type { Deck } from '../../core/deck/types';
-import { draftingHints } from '../../core/plugins/registry';
 import { aiPost, refreshCreditsSoon } from '../account/session';
-import { type DeckOp, assistantKinds, assistantSnapshot } from './deck-ops';
+import { type CallEvent, type CallModel, type HistoryMessage, type LoopEvent, type StepCard, type TurnInput, type TurnResult, runTurn } from './agent/loop';
 import { SlideAiError } from './slide-ai';
+
+export type { HistoryMessage, StepCard, TurnResult };
 
 const ENDPOINT = '/api/deck-assistant';
 
-/** A message of the conversation as the API takes it. Kept opaque: it goes back to the server unchanged. */
-export type HistoryMessage = { role: 'user' | 'assistant'; content: unknown };
-
-export interface StepCard {
-  id: string;
-  name: string;
-  label: string;
-  status: 'running' | 'done' | 'error';
-  detail?: string;
-}
-
-export interface TurnResult {
-  ops: DeckOp[];
-  summary: string;
-  history: HistoryMessage[];
-  stopped?: 'steps' | 'time' | 'length' | 'refusal';
-}
-
-export type AssistantEvent =
-  | { type: 'step'; step: number }
-  | ({ type: 'tool' } & StepCard)
-  | ({ type: 'done' } & TurnResult)
-  | { type: 'error'; error: string };
+export type AssistantEvent = LoopEvent;
 
 let status: Promise<{ available: boolean; needsCode: boolean }> | null = null;
 
@@ -47,48 +25,30 @@ export function assistantStatus() {
   return status;
 }
 
-/** Above this the request nears Vercel's 4.5 MB limit: the chat has to start over. */
+/** Above this the chat (without its slide pictures) nears Vercel's 4.5 MB limit: it has to start over. */
 export const MAX_HISTORY_BYTES = 3_000_000;
 
-export interface TurnRequest {
-  request: string;
-  history: HistoryMessage[];
-  deck: Deck;
-  plannedMinutes?: number;
-  /** Send the slide types again: on the first turn, and when mods changed since the last. */
-  withKinds: boolean;
-  since?: { proposed: number; applied: number };
-}
+export type TurnRequest = TurnInput;
+
+type ServerEvent = CallEvent | { type: 'error'; error: string };
 
 /** The events in a chunk of an event stream, and what is left over for the next chunk. */
-export function readEvents(buffer: string): { events: AssistantEvent[]; rest: string } {
+export function readEvents(buffer: string): { events: ServerEvent[]; rest: string } {
   const parts = buffer.split('\n\n');
   const rest = parts.pop() ?? '';
   const events = parts.flatMap((part) => {
     const data = part.split('\n').filter((l) => l.startsWith('data:')).map((l) => l.slice(5).trimStart()).join('\n');
     if (!data) return [];
-    try { return [JSON.parse(data) as AssistantEvent]; } catch { return []; }
+    try { return [JSON.parse(data) as ServerEvent]; } catch { return []; }
   });
   return { events, rest };
 }
 
-/**
- * Runs one turn. Step cards arrive through `onEvent` as the assistant works; the promise settles with the
- * proposals. Nothing in the deck changes here.
- */
-export async function runAssistantTurn(req: TurnRequest, onEvent: (e: AssistantEvent) => void, signal?: AbortSignal): Promise<TurnResult> {
-  const body = JSON.stringify({
-    request: req.request,
-    history: req.history,
-    deck: assistantSnapshot(req.deck, req.plannedMinutes),
-    kinds: assistantKinds(),
-    withKinds: req.withKinds,
-    hints: draftingHints(),
-    ...(req.since ? { since: req.since } : {}),
-  });
+/** One model call through the server, streamed: step cards as tool calls start, then the reply. */
+export const callModel: CallModel = async (body, onTool, signal) => {
   let res: Response;
   try {
-    res = await aiPost(ENDPOINT, body, signal);
+    res = await aiPost(ENDPOINT, JSON.stringify(body), signal);
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
     throw new SlideAiError('Couldn’t reach the server. Check your connection and try again.');
@@ -107,14 +67,23 @@ export async function runAssistantTurn(req: TurnRequest, onEvent: (e: AssistantE
     buffer = rest;
     for (const e of events) {
       if (e.type === 'error') throw new SlideAiError(e.error);
-      onEvent(e);
-      if (e.type === 'done') {
-        // Every step was charged as it finished; the balance is read once the turn is over.
-        refreshCreditsSoon();
-        return { ops: e.ops, summary: e.summary, history: e.history, ...(e.stopped ? { stopped: e.stopped } : {}) };
-      }
+      if (e.type === 'tool') onTool(e);
+      if (e.type === 'message') return e;
     }
     if (done) break;
   }
   throw new SlideAiError('The connection closed before the assistant finished. Try again.');
+};
+
+/**
+ * Runs one request. Step cards arrive through `onEvent` as the assistant works; the promise settles with the
+ * proposals. Nothing in the deck changes here.
+ */
+export async function runAssistantTurn(req: TurnRequest, onEvent: (e: AssistantEvent) => void, signal?: AbortSignal, call: CallModel = callModel): Promise<TurnResult> {
+  try {
+    return await runTurn(req, call, onEvent, signal);
+  } finally {
+    // Every step was charged as it finished; the balance is read once the request is over.
+    refreshCreditsSoon();
+  }
 }

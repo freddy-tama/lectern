@@ -5,6 +5,7 @@ import { DENSITY, type LayoutContext, M, decorate, footer, text } from '../kinds
 import { getKind } from '../kinds/registry';
 import { toggleDefaults } from '../plugins/registry';
 import { type Box, type SlideLayout, maxStep } from './boxes';
+import { layoutElements } from './elements';
 import { type Measure, measureText } from './measure';
 import { applyOverrides } from './overrides';
 import { type Theme, getTheme } from './themes';
@@ -48,10 +49,14 @@ export function layoutSlide(slide: Slide, o: LayoutOptions): SlideLayout {
   try {
     const result = def.layout(slide.content ?? {}, ctx, slide.variant);
     const frame = result.frame ?? 'content';
+    const elements = layoutElements(slide, ctx);
+    // Overrides reach the theme's decorations too, so one can be moved or left off a single slide.
     const boxes: Box[] = [
-      ...(frame === 'bare' ? [] : decorate(ctx, frame)),
+      ...applyOverrides(frame === 'bare' ? [] : decorate(ctx, frame), slide.overrides, ctx),
+      ...elements.back,
       ...applyOverrides(result.boxes, slide.overrides, ctx),
       ...(frame === 'content' ? footer(ctx) : []),
+      ...elements.front,
     ];
     const words = wordCount(def.text(slide.content ?? {}));
     const budget = result.budget ?? DENSITY[ctx.audience].words;

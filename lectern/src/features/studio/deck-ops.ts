@@ -1,12 +1,11 @@
-// The deck assistant's proposals on the client: what each one changes, which ones need an explicit tick, and
-// applying them. The server (api/deck-assistant.ts) only proposes; everything here runs on the presenter's yes.
+// The deck assistant's proposals: what each one changes, which ones need an explicit tick, and applying them.
+// The assistant works on a copy (./agent/workspace.ts) and only proposes; everything here runs on the presenter's yes.
 
 import { makeSlide } from '../../core/deck/draft';
 import { fitsOnSlide } from '../../core/deck/split';
-import { type CheckQuestion, type Deck, type Slide, deckPurpose } from '../../core/deck/types';
-import { getTheme } from '../../core/engine/themes';
+import type { CheckQuestion, Deck, Slide, SlideElement } from '../../core/deck/types';
 import { allKinds, getKind } from '../../core/kinds/registry';
-import { applyRevision, contentForAi, kindSpec } from './slide-ai';
+import { kindSpec, mergeNotes } from './slide-ai';
 
 export interface OpNotes {
   script?: string;
@@ -16,13 +15,15 @@ export interface OpNotes {
   minutes?: number;
 }
 
-/** A new slide as the server proposes it. Content and notes are filled in from the slide type when applied. */
+/** A new slide as the assistant proposes it. Content and notes are filled in from the slide type when applied. */
 export interface ProposedSlide {
   id: string;
   kind: string;
   content: Record<string, unknown>;
   notes: OpNotes;
   variant?: string;
+  overrides?: Slide['overrides'];
+  elements?: SlideElement[];
 }
 
 /**
@@ -31,7 +32,18 @@ export interface ProposedSlide {
  * after the first of them still in the deck, or at the start.
  */
 export type DeckOp =
-  | { op: 'edit'; slideId: string; content?: Record<string, unknown>; notes?: OpNotes; reason: string }
+  | {
+      op: 'edit'; slideId: string; content?: Record<string, unknown>; notes?: OpNotes;
+      /** A new slide type: the content then replaces the old content outright. */
+      kind?: string;
+      /** A new layout, or null for the slide type's first. */
+      variant?: string | null;
+      /** Boxes moved, resized or left off, or null for none. */
+      overrides?: Slide['overrides'] | null;
+      /** The slide's free elements as they should be, or null for none. */
+      elements?: SlideElement[] | null;
+      reason: string;
+    }
   | { op: 'add'; slide: ProposedSlide; after: string[]; reason: string }
   | { op: 'move'; slideId: string; after: string[]; reason: string }
   | { op: 'delete'; slideId: string; reason: string };
@@ -51,7 +63,34 @@ function insertAfter(slides: Slide[], slide: Slide, after: string[]): Slide[] {
 /** The new slide an add op makes, with the slide type's defaults under what was proposed. */
 export function proposedSlide(p: ProposedSlide): Slide {
   const base = makeSlide(p.kind, p.content, p.notes as Parameters<typeof makeSlide>[2], p.variant);
-  return { ...base, id: p.id };
+  return { ...base, id: p.id, ...(p.overrides ? { overrides: p.overrides } : {}), ...(p.elements?.length ? { elements: p.elements } : {}) };
+}
+
+/**
+ * A slide with an edit laid over it, field by field, so changes the presenter made since stay where the edit
+ * doesn't touch them. A chosen layout is pinned, so auto style keeps it.
+ */
+export function editedSlide(slide: Slide, op: Extract<DeckOp, { op: 'edit' }>, autoStyle = false): Slide {
+  const next: Slide = { ...slide };
+  if (op.kind && op.kind !== slide.kind) {
+    next.kind = op.kind;
+    next.content = op.content ?? getKind(op.kind)?.create() ?? {};
+  } else if (op.content) {
+    next.content = { ...slide.content, ...op.content };
+  }
+  if (op.notes) next.notes = mergeNotes(slide.notes, op.notes);
+  if (op.variant !== undefined) {
+    if (op.variant === null) { delete next.variant; delete next.variantPinned; } else { next.variant = op.variant; if (autoStyle) next.variantPinned = true; }
+  }
+  if (op.overrides !== undefined) {
+    if (op.overrides && Object.keys(op.overrides).length) next.overrides = op.overrides;
+    else delete next.overrides;
+  }
+  if (op.elements !== undefined) {
+    if (op.elements?.length) next.elements = op.elements;
+    else delete next.elements;
+  }
+  return next;
 }
 
 /** Whether the op can still be applied to this deck: its slide is there (or, for a new slide, isn't yet). */
@@ -67,7 +106,7 @@ export function applyOp(deck: Deck, op: DeckOp): Deck {
   if (!opApplies(deck, op)) return deck;
   switch (op.op) {
     case 'edit':
-      return { ...deck, slides: deck.slides.map((s) => (s.id === op.slideId ? applyRevision(s, { content: op.content, notes: op.notes }) : s)) };
+      return { ...deck, slides: deck.slides.map((s) => (s.id === op.slideId ? editedSlide(s, op, deck.autoStyle) : s)) };
     case 'add':
       return { ...deck, slides: insertAfter(deck.slides, proposedSlide(op.slide), op.after) };
     case 'move': {
@@ -106,7 +145,7 @@ export function rewritesSlide(before: Slide, after: Slide): boolean {
 /** Why an op needs the presenter's explicit tick, or null when it can go with Accept all. Decided here, never by the AI. */
 export function needsTick(deck: Deck, op: DeckOp): string | null {
   if (op.op === 'delete') return 'Deletes this slide';
-  if (op.op !== 'edit' || !op.content) return null;
+  if (op.op !== 'edit' || !op.content || op.kind) return null;
   const before = deck.slides.find((s) => s.id === op.slideId);
   if (!before) return null;
   return rewritesSlide(before, applyOp(deck, op).slides.find((s) => s.id === op.slideId)!) ? 'Rewrites the whole slide' : null;
@@ -118,36 +157,13 @@ export function opPreview(deck: Deck, op: DeckOp): { before?: Slide; after?: Sli
   const before = deck.slides.find((s) => s.id === op.slideId);
   if (!before || op.op === 'delete') return { before };
   if (op.op === 'move') return { before, after: before };
-  return { before, after: applyRevision(before, { content: op.content, notes: op.notes }) };
+  return { before, after: editedSlide(before, op, deck.autoStyle) };
 }
 
 /** True when the proposed slide doesn't fit in this deck's look: the review flags it. */
 export function overflows(deck: Deck, slide: Slide): boolean {
   if (!getKind(slide.kind)) return false;
   try { return !fitsOnSlide(slide, deck); } catch { return false; }
-}
-
-/** A text-only copy of the deck for the assistant: no pictures, no links, no mod values in the notes. */
-export function assistantSnapshot(deck: Deck, plannedMinutes?: number) {
-  const t = getTheme(deck.themeId);
-  return {
-    title: deck.title,
-    purpose: deckPurpose(deck),
-    audience: deck.audience,
-    look: t.description ? `${t.name}, ${t.description}` : t.name,
-    minutes: plannedMinutes ?? deck.minutes ?? null,
-    slides: deck.slides.map((s) => {
-      const def = getKind(s.kind);
-      return {
-        id: s.id,
-        kind: s.kind,
-        content: def ? contentForAi(def, s.content) : s.content,
-        notes: { script: s.notes.script, keyPoints: s.notes.keyPoints, cues: s.notes.cues, check: s.notes.check, minutes: s.notes.minutes },
-        ...(s.variant ? { variant: s.variant } : {}),
-        ...(s.hidden ? { hidden: true } : {}),
-      };
-    }),
-  };
 }
 
 /** Every slide type the studio has, core and mods, as the assistant reads them. */

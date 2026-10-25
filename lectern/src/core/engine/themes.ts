@@ -1,7 +1,8 @@
 // Slide themes. A theme is colours, two typefaces and a decoration recipe.
 // Web fonts are used on screen; the PowerPoint names are what the exported file asks for.
 
-export type Decoration = 'none' | 'corner' | 'band' | 'dots' | 'grid' | 'blobs';
+export type Decoration = 'none' | 'corner' | 'band' | 'dots' | 'grid' | 'blobs'
+  | 'confetti' | 'waves' | 'sprigs' | 'sparkles' | 'ribbons' | 'mosaic' | 'circuit';
 
 export const DECORATIONS: { id: Decoration; label: string }[] = [
   { id: 'none', label: 'None' },
@@ -10,6 +11,13 @@ export const DECORATIONS: { id: Decoration; label: string }[] = [
   { id: 'dots', label: 'Dots' },
   { id: 'grid', label: 'Glow' },
   { id: 'blobs', label: 'Blobs' },
+  { id: 'confetti', label: 'Confetti' },
+  { id: 'waves', label: 'Waves' },
+  { id: 'sprigs', label: 'Leaves' },
+  { id: 'sparkles', label: 'Sparkle' },
+  { id: 'ribbons', label: 'Ribbons' },
+  { id: 'mosaic', label: 'Mosaic' },
+  { id: 'circuit', label: 'Circuit' },
 ];
 
 export type LogoPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';

@@ -3,7 +3,7 @@ import {
   AlertTriangle, ArrowLeft, BookOpen, ChevronDown, ClipboardList, Copy, Copyright, Download, EyeOff, FileJson, FileText, MonitorPlay,
   Plus, PresentationIcon, Redo2, Scissors, ScrollText, Shapes, Sparkles, Trash2, Undo2,
   Globe, NotebookText, PanelRightClose, PanelRightOpen, QrCode as QrIcon, Trophy, WandSparkles,
-  CircleCheck, Image as ImageIcon, MapPin, Pencil, RotateCcw,
+  CircleCheck, Image as ImageIcon, MapPin, Pencil, RotateCcw, Palette, BringToFront, SendToBack,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -13,8 +13,9 @@ import { wording } from '../../core/deck/purpose';
 import { canSplit, fitsOnSlide, isOverflowWarning, splitInDeck, splitSlide } from '../../core/deck/split';
 import { autoVariants } from '../../core/deck/auto-style';
 import { fieldAt, getAt, insertItem, isListItem, isTextBind, removeItem, setAt, splitBind } from '../../core/deck/paths';
-import { type BoxOverride, type Deck, type KeyNotes, type Slide, deckMinutes, deckPurpose } from '../../core/deck/types';
+import { type BoxOverride, type Deck, type KeyNotes, type Slide, type SlideElement, deckMinutes, deckPurpose } from '../../core/deck/types';
 import type { Box, SlideLayout, TextBox } from '../../core/engine/boxes';
+import { ELEMENT_BOX, elementIdOf, findElement, restackElement, updateElement, withElement, withoutElement } from '../../core/engine/elements';
 import { hasOverrides, withOverride, withoutOverrides } from '../../core/engine/overrides';
 import { getTheme } from '../../core/engine/themes';
 import { getKind } from '../../core/kinds/registry';
@@ -40,6 +41,7 @@ import { convertSlide } from './convert';
 import { DeckDetailsDialog } from './DeckDetailsDialog';
 import { useDraftFitNotice } from './fit-deck';
 import { InlineEditor } from './InlineEditor';
+import { InsertMenu, pictureElement } from './InsertMenu';
 import { type MediaType, mediaSlide, mediaTarget, placeableText, storeFile, storeText } from './stage-media';
 import { downloadBlob, exportJson, exportPptx, safeName } from './download';
 import { Fields } from './Fields';
@@ -95,6 +97,17 @@ export default function Studio() {
     notify: useCallback((message: string) => toast.show(message, { action: { label: 'Undo', run: () => undo() } }), [toast, undo]),
   });
 
+  // Arriving from Make with "Review the design": open the assistant and start the review once.
+  const reviewing = useRef(false);
+  useEffect(() => {
+    if (!deck || reviewing.current || params.get('review') !== '1') return;
+    reviewing.current = true;
+    setPanelOpen(true);
+    setAssistantOpen(true);
+    assistant.review();
+    navigate(`/studio/${deck.id}`, { replace: true });
+  }, [deck, params]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     if (!deck || selectedId && deck.slides.some((s) => s.id === selectedId)) return;
     const wanted = params.get('slide');
@@ -122,7 +135,11 @@ export default function Studio() {
   }, [change]);
 
   // The slide as drawn on the stage: with the box being dragged at its new place.
-  const shownSlide = useMemo(() => (slide && draft ? withOverride(slide, draft.id, draft.place) : slide), [slide, draft]);
+  const shownSlide = useMemo(() => {
+    if (!slide || !draft) return slide;
+    const box = layout?.boxes.find((b) => b.id === draft.id);
+    return box && elementIdOf(box.id) ? placeElement(slide, box, draft.place) : withOverride(slide, draft.id, draft.place);
+  }, [slide, draft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** A box moved or resized on the canvas. Callout dots store where they point instead of an override. */
   const placeBox = (box: Box, place: BoxOverride, key?: string) => {
@@ -133,6 +150,7 @@ export default function Studio() {
       updateSlide(slide.id, (s) => withOverride({ ...s, content: setAt(setAt(s.content, box.drag!.x, String(at.x)), box.drag!.y, String(at.y)) }, box.id, null), key);
       return;
     }
+    if (elementIdOf(box.id)) { updateSlide(slide.id, (s) => placeElement(s, box, place), key); return; }
     updateSlide(slide.id, (s) => withOverride(s, box.id, place), key);
   };
 
@@ -273,6 +291,8 @@ export default function Studio() {
 
   /** Text that can be typed into straight on the slide. */
   const typeable = (box: Box | undefined): box is TextBox => {
+    const own = slide && box?.bind ? elementIdOf(box.bind) : null;
+    if (own) return box?.type === 'text' && findElement(slide!, own)?.type === 'text';
     const kind = slide ? getKind(slide.kind) : undefined;
     return Boolean(slide && kind && box?.type === 'text' && box.bind && isTextBind(kind.fields, slide.content, box.bind));
   };
@@ -312,6 +332,8 @@ export default function Studio() {
 
   const setText = (bind: string, value: string) => {
     if (!slide) return;
+    const own = elementIdOf(bind);
+    if (own) { updateSlide(slide.id, (s) => updateElement(s, own, { text: value }), `${slide.id}:${bind}`); return; }
     updateSlide(slide.id, (s) => ({ ...s, content: setAt(s.content, bind, value) }), `${slide.id}:${splitBind(bind)[0]}`);
   };
 
@@ -327,6 +349,24 @@ export default function Studio() {
 
   const inlineEditor = (() => {
     const kindDef = slide ? getKind(slide.kind) : undefined;
+    const own = editing ? elementIdOf(editing.bind) : null;
+    const typed = own && slide ? findElement(slide, own) : undefined;
+    if (editing && editBox && deck && typed?.type === 'text') {
+      const bind = editing.bind;
+      return (
+        <InlineEditor
+          key={bind}
+          box={editBox}
+          theme={getTheme(deck.themeId)}
+          value={typed.text}
+          selectAll={editing.selectAll}
+          multiline
+          onInput={(v) => setText(bind, v)}
+          onDone={() => { setEditing((e) => (e?.bind === bind ? null : e)); setActiveBind(bind); }}
+          keys={{}}
+        />
+      );
+    }
     if (!editing || !editBox || !slide || !kindDef || !deck) return null;
     const bind = editing.bind;
     const spec = fieldAt(kindDef.fields, bind);
@@ -391,6 +431,14 @@ export default function Studio() {
 
   /** Deletes the item a box shows (a point, a figure), or empties its field (a title, a picture). */
   const deleteBox = (box: Box) => {
+    const own = elementIdOf(box.bind);
+    if (slide && own) {
+      updateSlide(slide.id, (s) => withoutElement(s, own));
+      toast.show('Removed from the slide', { action: { label: 'Undo', run: () => undo() } });
+      setSelected(null);
+      setEditing(null);
+      return;
+    }
     const kindDef = slide ? getKind(slide.kind) : undefined;
     if (!slide || !kindDef || !box.bind) return;
     const bind = box.bind;
@@ -424,6 +472,20 @@ export default function Studio() {
   };
 
   const toolActions = (box: Box): ToolAction[] => {
+    const own = elementIdOf(box.bind);
+    const el = own && slide ? findElement(slide, own) : undefined;
+    if (slide && el) {
+      const actions: ToolAction[] = [];
+      if (el.type === 'text') actions.push({ id: 'type', label: 'Edit text', icon: <Pencil size={15} />, wide: true, run: () => setEditing({ bind: box.bind!, selectAll: true }) });
+      if (el.type !== 'picture') {
+        actions.push({ id: 'colour', label: 'Colour', title: 'Try the next colour of this look', icon: <Palette size={15} />, run: () => updateSlide(slide.id, (s) => updateElement(s, el.id, nextColour(el))) });
+      }
+      actions.push(el.layer === 'back'
+        ? { id: 'front', label: 'Bring to front', title: 'Draw it over the slide’s content', icon: <BringToFront size={15} />, run: () => updateSlide(slide.id, (s) => restackElement(s, el.id, 'front')) }
+        : { id: 'back', label: 'Send to back', title: 'Draw it behind the slide’s content', icon: <SendToBack size={15} />, run: () => updateSlide(slide.id, (s) => restackElement(s, el.id, 'back')) });
+      actions.push({ id: 'delete', label: 'Delete', icon: <Trash2 size={15} />, danger: true, run: () => deleteBox(box) });
+      return actions;
+    }
     const kindDef = slide ? getKind(slide.kind) : undefined;
     if (!slide || !kindDef || !box.bind) return [];
     const bind = box.bind;
@@ -469,6 +531,14 @@ export default function Studio() {
       toast.show(type === 'image' ? 'Picture added to the slide' : 'Video added to the slide', { action: { label: 'Undo', run: () => undo() } });
       return;
     }
+    if (type === 'image') {
+      void pictureElement(ref).then((el) => {
+        updateSlide(slide.id, (s) => withElement(s, el));
+        setSelected(`${ELEMENT_BOX}${el.id}`);
+        toast.show('Picture added. Drag it where you want it, or pull a corner to resize it.', { action: { label: 'Undo', run: () => undo() } });
+      });
+      return;
+    }
     const made = mediaSlide(type, ref);
     change((d) => {
       const slides = [...d.slides];
@@ -476,7 +546,7 @@ export default function Studio() {
       return { ...d, slides };
     });
     setSelectedId(made.id);
-    toast.show(type === 'image' ? 'This slide has no picture frame, so the picture got a slide of its own' : 'The video got a slide of its own', { action: { label: 'Undo', run: () => { undo(); setSelectedId(slide.id); } } });
+    toast.show('The video got a slide of its own', { action: { label: 'Undo', run: () => { undo(); setSelectedId(slide.id); } } });
   };
 
   const takeFile = async (file: File, prefer?: string) => {
@@ -738,7 +808,7 @@ export default function Studio() {
                     label={selectedBox?.bind ? `Selected: ${selectedBox.type === 'text' ? `“${selectedBox.text.slice(0, 40)}”` : selectedBox.type}` : 'Selected'}
                     toolbar={selectedBox?.bind && def ? (
                       <CanvasToolbar
-                        layouts={<LayoutMenu slide={slide} def={def} autoStyle={Boolean(deck.autoStyle)} onPick={chooseLayout} compact />}
+                        layouts={elementIdOf(selectedBox.bind) ? null : <LayoutMenu slide={slide} def={def} autoStyle={Boolean(deck.autoStyle)} onPick={chooseLayout} compact />}
                         actions={toolActions(selectedBox)}
                       />
                     ) : null}
@@ -758,6 +828,16 @@ export default function Studio() {
                       {(close) => <KindPicker current={slide.kind} onPick={(k) => { close(); updateSlide(slide.id, (s) => convertSlide(s, k)); }} />}
                     </Menu>
                     {def && <LayoutMenu slide={slide} def={def} autoStyle={Boolean(deck.autoStyle)} onPick={chooseLayout} />}
+                    <InsertMenu
+                      theme={getTheme(deck.themeId)}
+                      context={pictureContext}
+                      onInsert={(el, note) => {
+                        updateSlide(slide.id, (s) => withElement(s, el));
+                        setSelected(`${ELEMENT_BOX}${el.id}`);
+                        if (el.type === 'text') setEditing({ bind: `@${el.id}`, selectAll: true });
+                        toast.show(note ?? 'Added to the slide. Drag it where you want it.', { action: { label: 'Undo', run: () => undo() } });
+                      }}
+                    />
                     {hasOverrides(slide) && (
                       <button type="button" className="btn btn-ghost btn-sm" onClick={resetLayout} title="Put everything you moved back where the layout places it">
                         <RotateCcw size={15} /> Reset layout
@@ -863,6 +943,39 @@ export default function Studio() {
       )}
     </div>
   );
+}
+
+/**
+ * An element at the place a box of it was dragged to. The box may sit inside the element (text on a card),
+ * so the element keeps its offset from the box; corner-resized text grows its type size.
+ */
+function placeElement(slide: Slide, box: Box, place: BoxOverride): Slide {
+  const id = elementIdOf(box.id);
+  const el = id ? findElement(slide, id) : undefined;
+  if (!el) return slide;
+  const dx = box.x - el.x;
+  const dy = box.y - el.y;
+  const line = el.type === 'shape' && el.shape === 'line';
+  const patch: Record<string, number> = {
+    x: Math.round(place.x - dx), y: Math.round(place.y - dy),
+    w: Math.round(place.w + (el.w - box.w)), h: line ? el.h : Math.round(place.h + (el.h - box.h)),
+  };
+  if (el.type === 'text' && place.scale && Math.abs(place.scale - 1) > 0.001) patch.size = Math.round((el.size ?? 40) * place.scale);
+  return updateElement(slide, el.id, patch as Partial<SlideElement>);
+}
+
+const COLOUR_CYCLE = ['accent', 'accent2', 'ink', 'muted', 'surface', 'good'] as const;
+
+/** The element in the next colour of the look. */
+function nextColour(el: SlideElement): Partial<SlideElement> {
+  const after = (c: string | undefined, fallback: string) => COLOUR_CYCLE[(COLOUR_CYCLE.indexOf((c ?? fallback) as (typeof COLOUR_CYCLE)[number]) + 1) % COLOUR_CYCLE.length];
+  if (el.type === 'text') return { color: after(el.color, 'ink') };
+  if (el.type === 'shape') return el.shape === 'line' ? { stroke: after(el.stroke, 'accent') } : { fill: after(el.fill, 'accent') };
+  if (el.type === 'decor') {
+    const [a = 'accent', b = 'accent2'] = el.colors ?? [];
+    return { colors: [after(a, 'accent'), after(b, 'accent2')] };
+  }
+  return {};
 }
 
 /** One text box covering several, for typing a text that the slide shows in columns. */

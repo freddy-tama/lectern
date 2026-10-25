@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
-import { buildMaterial, fallbackTopic, hasMaterial, kindOf, offlineDraft, placePictures } from '../src/features/autodeck/make';
+import { buildMaterial, fallbackTopic, hasMaterial, kindOf, offlineDraft, picturesOf, placePictures } from '../src/features/autodeck/make';
 
 registerCoreKinds();
 
@@ -62,6 +62,23 @@ describe('deck maker', () => {
     ], 'Weekly call');
     expect(draft.title).toBe('Weekly call');
     expect(draft.slides[0]!.content.image).toBe('pic1');
+  });
+
+  it('numbers the pictures with what each is for, and leaves pages to read off an offline deck', () => {
+    const marked = picturesOf([
+      { pictures: [file('page1.png'), file('page2.png')], pictureRole: 'read' },
+      { pictures: [file('team.jpg')] },
+      { pictures: [file('logo.png')], pictureRole: 'show' },
+    ]);
+    expect(marked.map((p) => [p.file.name, p.role])).toEqual([['page1.png', 'read'], ['page2.png', 'read'], ['team.jpg', 'auto'], ['logo.png', 'show']]);
+    expect(picturesOf([{ pictures: Array.from({ length: 10 }, (_, i) => file(`p${i}.png`)) }])).toHaveLength(8);
+    const draft = offlineDraft([
+      { file: file('book.pdf'), kind: 'doc', text: '# Chapter one\n\n## Rivers\n- Long\n- Wet', pictures: [file('page1.png'), file('page2.png')], pictureRole: 'read' },
+      { file: file('team.jpg'), kind: 'picture', text: '', pictures: [file('team.jpg')] },
+    ], 'Notes');
+    // Only the team photo counts: it is pic1, and no gallery is made of the book's pages.
+    expect(draft.slides[0]!.content.image).toBe('pic1');
+    expect(draft.slides.some((s) => s.kind === 'gallery')).toBe(false);
   });
 
   it('places pictures by id, saves each once and clears unknown ids', async () => {

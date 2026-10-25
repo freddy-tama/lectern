@@ -1,6 +1,6 @@
 // A stand-in for the Claude Messages API, for tests and for trying the deck assistant in the browser without a key.
-// It answers POST /v1/messages with scripted replies streamed as server-sent events, so the real SDK, its tool
-// runner and the real api/deck-assistant.ts all run as they would against the API.
+// It answers POST /v1/messages with scripted replies streamed as server-sent events, so the real SDK, the real
+// api/deck-assistant.ts and the studio's agent loop all run as they would against the API.
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
@@ -94,21 +94,30 @@ function stepOfTurn(request: SentRequest): number {
   return messages.slice(start + 1).filter((m) => m.role === 'assistant').length;
 }
 
+/** A small drawing in the mock's replies: a lamp, in whatever colours. */
+const LAMP = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="400" height="300" rx="24" fill="#F4EDE2"/><circle cx="200" cy="120" r="70" fill="#E9B44C"/><rect x="170" y="190" width="60" height="50" rx="10" fill="#1E1C19"/><path d="M120 120h-40M320 120h40M200 30v-20" stroke="#D9502B" stroke-width="12" stroke-linecap="round"/></svg>';
+
 /**
- * A short, believable turn for any deck: read a few slides, propose an edit, new timings, a summary slide and one
- * deletion, then reply. Used by the browser check (see vite.mock.config.ts).
+ * A short, believable turn for any deck, in the way the real assistant works: look at the whole deck and read a
+ * few slides, then propose wording, timing, a layout, a decoration, a drawing, a new slide and a deletion, look
+ * again at what changed, and reply. Used by the browser check (see vite.mock.config.ts).
  */
 export const demoScript: Script = (request) => {
   const step = stepOfTurn(request);
   const slides = outlineSlides(request);
   const pick = slides.find((s, i) => i > 0 && s.titled) ?? slides[0];
+  const points = slides.find((s) => s.kind === 'bullets');
   const last = slides[slides.length - 1];
   const doomed = slides.length > 3 ? slides[slides.length - 2] : undefined;
   const turn = request.messages.length;
   if (step === 0) {
     return {
       stop_reason: 'tool_use',
-      content: [thinking(turn), { type: 'tool_use', id: `toolu_read_${turn}`, name: 'read_slide', input: { slides: slides.slice(0, 4).map((s) => s.id) } }],
+      content: [
+        thinking(turn),
+        { type: 'tool_use', id: `toolu_view_${turn}`, name: 'view_slides', input: { slides: [], whole_deck: true } },
+        { type: 'tool_use', id: `toolu_read_${turn}`, name: 'read_slides', input: { slides: slides.slice(0, 4).map((s) => s.id) } },
+      ],
     };
   }
   if (step === 1 && pick) {
@@ -118,15 +127,31 @@ export const demoScript: Script = (request) => {
         thinking(turn + 1),
         { type: 'tool_use', id: `toolu_edit_${turn}`, name: 'edit_slide', input: { slide: pick.id, content_json: JSON.stringify({ title: `${pick.heading.replace(/\s*\(shorter\)$/, '')} (shorter)` }), reason: 'A shorter heading reads faster' } },
         { type: 'tool_use', id: `toolu_time_${turn}`, name: 'edit_notes', input: { slide: slides[0].id, script: null, keyPoints: null, cues: null, checkQuestion: null, checkAnswer: null, minutes: slides[0].minutes > 1 ? 1 : 0.5, reason: 'Open quickly' } },
-        { type: 'tool_use', id: `toolu_add_${turn}`, name: 'add_slide', input: { after: last.id, kind: 'summary', content_json: JSON.stringify({ title: 'Key takeaways', points: ['The main idea in one line', 'What to do next'] }), script: 'Let’s bring it together.', keyPoints: ['The main idea'], minutes: 1, reason: 'End on the takeaways' } },
+        ...(points ? [{ type: 'tool_use' as const, id: `toolu_layout_${turn}`, name: 'set_layout', input: { slide: points.id, layout: 'columns', kind: null, reason: 'Two columns use the empty space' } }] : []),
+        { type: 'tool_use', id: `toolu_decor_${turn}`, name: 'add_elements', input: { slide: slides[0].id, elements_json: JSON.stringify([{ type: 'decor', motif: 'confetti', x: 1360, y: 40, w: 520, h: 330, layer: 'back' }]), reason: 'A touch of colour on the opening' } },
+        { type: 'tool_use', id: `toolu_draw_${turn}`, name: 'draw_picture', input: { svg: LAMP, title: 'A lamp: an idea' } },
+        { type: 'tool_use', id: `toolu_add_${turn}`, name: 'add_slide', input: { after: last.id, kind: 'summary', layout: null, content_json: JSON.stringify({ title: 'Key takeaways', points: ['The main idea in one line', 'What to do next'] }), script: 'Let’s bring it together.', keyPoints: ['The main idea'], minutes: 1, reason: 'End on the takeaways' } },
         ...(doomed ? [{ type: 'tool_use' as const, id: `toolu_del_${turn}`, name: 'delete_slide', input: { slide: doomed.id, reason: 'It repeats the slide before it' } }] : []),
         { type: 'tool_use', id: `toolu_bad_${turn}`, name: 'edit_slide', input: { slide: pick.id, content_json: '{"colour": "red"}', reason: 'Testing a bad field' } },
       ],
     };
   }
+  if (step === 2) {
+    // The drawing's reference came back in the last results: put it on the slide that was shortened.
+    const results = JSON.stringify(request.messages[request.messages.length - 1]?.content ?? '');
+    const ref = /Saved as (asset:[A-Za-z0-9_-]+)/.exec(results)?.[1];
+    return {
+      stop_reason: 'tool_use',
+      content: [
+        thinking(turn + 2),
+        ...(ref && pick ? [{ type: 'tool_use' as const, id: `toolu_pic_${turn}`, name: 'add_elements', input: { slide: pick.id, elements_json: JSON.stringify([{ type: 'picture', picture: ref, x: 1400, y: 640, w: 400, h: 300, alt: 'A lamp' }]), reason: 'A small picture where the slide was bare' } }] : []),
+        { type: 'tool_use', id: `toolu_look_${turn}`, name: 'view_slides', input: { slides: [slides[0].id, ...(pick ? [pick.id] : [])], whole_deck: false } },
+      ],
+    };
+  }
   return {
     stop_reason: 'end_turn',
-    content: [thinking(turn + 2), { type: 'text', text: 'I shortened one heading, gave the opening a minute, added a takeaways slide at the end and suggest deleting a slide that repeats the one before it. That deletion needs your tick.' }],
+    content: [thinking(turn + 3), { type: 'text', text: 'I shortened one heading, gave the opening a minute and a little confetti, put the points in two columns, added a small drawing and a takeaways slide, and suggest deleting a slide that repeats the one before it. That deletion needs your tick.' }],
   };
 };
 

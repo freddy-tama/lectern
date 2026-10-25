@@ -1,5 +1,5 @@
 import {
-  AlertCircle, AudioLines, Check, Download, FileText, Image as ImageIcon, Loader2, MonitorPlay, NotebookPen, Pencil,
+  AlertCircle, AudioLines, Check, Download, Eye, FileText, Image as ImageIcon, Loader2, MonitorPlay, NotebookPen, Pencil,
   RotateCcw, Sparkles, Upload, Wand2, X,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -31,7 +31,7 @@ import { type AiQuestion, draftOutline, fetchQuestions } from './ai';
 import { approveOutline, createJob, finishJob, recover, runJob, runsSnapshot, saveOutline, stopJob, subscribeRuns, toggleDraftFit } from './drafting';
 import { DraftingView, ResumeCard, useJobPictures } from './DraftingView';
 import { dragHasFiles, onHandOff, takeHandedOff } from './handoff';
-import { ACCEPT_ALL, type Source, buildMaterial, countWords, fallbackTopic, hasMaterial, kindOf, offlineDraft, placePictures, purposeLabel, stem } from './make';
+import { ACCEPT_ALL, PICTURE_ROLES, type PictureRole, type Source, buildMaterial, countWords, fallbackTopic, hasMaterial, kindOf, offlineDraft, picturesOf, placePictures, purposeLabel, stem } from './make';
 import { pictureForAi, pictureForDeck } from './pictures';
 import { OutlineEditor } from './OutlineEditor';
 import { type Answer, QuestionDialog } from './QuestionDialog';
@@ -205,7 +205,8 @@ export default function MakePage() {
 
   const ready = sources.filter((s) => s.status === 'ready');
   const busy = sources.filter((s) => s.status === 'reading' || s.status === 'transcribing');
-  const pictures = ready.flatMap((s) => s.pictures).slice(0, 8);
+  const marked = picturesOf(ready);
+  const pictures = marked.map((p) => p.file);
   const access = useAiAccess();
   // The server has AI, but this person can't use it yet: they need to sign in, or their credits are used up.
   const blocked = ai?.available === true && (access === 'sign_in' || access === 'no_credits');
@@ -232,7 +233,8 @@ export default function MakePage() {
       if (!aiOn) {
         setStage('building');
         let result = offlineDraft(ready, suggestion?.title || stem(ready.find((s) => s.kind !== 'picture')?.file.name ?? 'New deck'));
-        result = await placePictures(result, pictures, async (f) => saveAsset(await pictureForDeck(f), f.name));
+        const shown = picturesOf(ready.filter((s) => s.pictureRole !== 'read')).map((p) => p.file);
+        result = await placePictures(result, shown, async (f) => saveAsset(await pictureForDeck(f), f.name));
         const made = draftToDeck(result, { audience, themeId, purpose: chosen });
         await addDeck(made);
         remember();
@@ -245,9 +247,9 @@ export default function MakePage() {
       }
       // With AI, the deck starts as an outline to check. Its slides are written once it's approved.
       setStage('outlining');
-      const forAi = (await Promise.all(pictures.map(async (f, i) => {
-        const p = await pictureForAi(f);
-        return p ? { id: `pic${i + 1}`, name: f.name, ...p } : null;
+      const forAi = (await Promise.all(marked.map(async ({ file: f, role }, i) => {
+        const p = await pictureForAi(f, role);
+        return p ? { id: `pic${i + 1}`, name: f.name, role, ...p } : null;
       }))).filter((p): p is NonNullable<typeof p> => p !== null);
       const request: DraftRequest = {
         topic: brief.trim() || suggestion?.topic || fallbackTopic(ready),
@@ -439,6 +441,7 @@ export default function MakePage() {
           exporting={exporting}
           onDownload={download}
           onOpen={() => navigate(`/studio/${shownDeck.id}`)}
+          onReview={aiOn ? () => navigate(`/studio/${shownDeck.id}?review=1`) : undefined}
           onPresent={() => navigate(`/present/${shownDeck.id}`)}
           onAgain={reset}
         />
@@ -524,6 +527,17 @@ export default function MakePage() {
                               <span className="progress ad-file-progress"><span style={{ width: `${Math.round(progress * 100)}%` }} /></span>
                             )}
                           </span>
+                          {s.status === 'ready' && s.pictures.length > 0 && (
+                            <label className="ad-file-role" title={PICTURE_ROLES.find((r) => r.id === (s.pictureRole ?? 'auto'))?.detail}>
+                              <span className="visually-hidden">{s.kind === 'picture' ? 'What this picture is for' : 'What its pictures are for'}</span>
+                              <select className="input" value={aiOn ? s.pictureRole ?? 'auto' : s.pictureRole === 'read' ? 'read' : 'auto'} onChange={(e) => patch(s.id, { pictureRole: e.target.value as PictureRole })}>
+                                {aiOn
+                                  ? PICTURE_ROLES.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)
+                                  // Without AI nothing reads pictures: they go on the slides or stay out.
+                                  : <><option value="auto">Put on slides</option><option value="read">Leave out</option></>}
+                              </select>
+                            </label>
+                          )}
                           <button type="button" className="icon-btn" onClick={() => remove(s)} aria-label={`Remove ${s.file.name}`}><X size={16} /></button>
                         </li>
                       );
@@ -725,7 +739,7 @@ function fitLine(job: DraftJob, deck: Deck): FitLine | undefined {
   };
 }
 
-function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, onOpen, onPresent, onAgain }: {
+function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, onOpen, onReview, onPresent, onAgain }: {
   deck: Deck;
   sources: Source[];
   remembered: number;
@@ -734,6 +748,8 @@ function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, 
   exporting: boolean;
   onDownload(): void;
   onOpen(): void;
+  /** Opens the deck in the studio with the assistant reviewing its design. Only with AI. */
+  onReview?(): void;
   onPresent(): void;
   onAgain(): void;
 }) {
@@ -762,6 +778,15 @@ function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, 
           <button type="button" className="btn btn-ghost btn-lg" onClick={onPresent}><MonitorPlay size={17} /> Present</button>
         </div>
       </div>
+      {onReview && (
+        <div className="ad-review">
+          <div>
+            <strong>Next: a design review</strong>
+            <p className="muted">The assistant looks at every slide as your audience will, then proposes fixes: layouts, positions, pictures, drawings and a little decoration. You check each change.</p>
+          </div>
+          <button type="button" className="btn btn-primary" onClick={onReview}><Eye size={16} /> Review the design</button>
+        </div>
+      )}
       <div className="ad-filmstrip">
         {shown.slice(0, 12).map((s, i) => (
           <button key={s.id} type="button" className="ad-thumb" onClick={onOpen} aria-label={`Slide ${i + 1}, open in the editor`}>
