@@ -1409,16 +1409,22 @@ fieldset.field legend {
   margin-bottom: 6px;
 }
 
-.assistant-reply p {
-  margin: 0;
+/* The reply, in light Markdown: short paragraphs, points and bold. */
+.assistant-reply-text {
+  gap: 8px;
   font-size: 14px;
   line-height: 1.55;
-  white-space: pre-wrap;
 }
 
-.assistant-reply p + p {
-  margin-top: 4px;
+.assistant-reply-text ul,
+.assistant-reply-text ol {
+  gap: 4px;
+}
+
+.assistant-reply > p {
+  margin: 4px 0 0;
   font-size: 12.5px;
+  line-height: 1.55;
 }
 
 .assistant-error {

@@ -155,7 +155,7 @@ function boxLines(slide: Slide, layout: SlideLayout): string[] {
       if (listed.has(own)) continue;
       listed.add(own);
       const el = findElement(slide, own);
-      if (el) out.push(`- ${ELEMENT_BOX}${own} · element ${elementWhat(el)} · ${at(el)}${el.layer === 'back' ? ' · back layer' : ''}`);
+      if (el) out.push(`- ${ELEMENT_BOX}${own} · element ${elementWhat(el)} · ${at(el)}${el.layer === 'back' ? ' · back layer' : ''}${el.step ? ` · appears on click ${el.step}` : ''}`);
       continue;
     }
     if (b.moveWith && layout.boxes.some((x) => x.id === b.moveWith && x.bind === b.bind)) continue;
@@ -619,7 +619,8 @@ export const RUNS: Record<string, Run> = {
     const patch = jsonOf(str(input, 'changes_json', 200_000, { empty: true }) || '{}', 'changes_json');
     if (!patch || typeof patch !== 'object' || Array.isArray(patch)) throw new Error('changes_json must be a JSON object.');
     const changed = await elementFrom({ ...(patch as Record<string, unknown>), type: (patch as Record<string, unknown>).type ?? el.type }, ctx, el);
-    const next = updateElement(slide, id, changed);
+    // The cleaned element replaces the old one, so a field set to 0 or null ({"step":0}) is cleared, not kept.
+    const next: Slide = { ...slide, elements: slide.elements!.map((e) => (e.id === id ? changed : e)) };
     if (same(next, slide)) return { content: `${ELEMENT_BOX}${id} already looks like that; nothing changed.`, label: `Left slide ${n} as it was`, detail: 'No change' };
     ws.replace(slide.id, next, reason);
     return { content: `Proposed: changed ${ELEMENT_BOX}${id} on slide ${n}. View it to check.`, label: `Proposed a change to slide ${n}`, detail: reason || undefined };
