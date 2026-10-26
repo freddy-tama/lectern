@@ -151,7 +151,7 @@ export const demoScript: Script = (request) => {
   }
   return {
     stop_reason: 'end_turn',
-    content: [thinking(turn + 3), { type: 'text', text: 'I shortened one heading, gave the opening a minute and a little confetti, put the points in two columns, added a small drawing and a takeaways slide, and suggest deleting a slide that repeats the one before it. That deletion needs your tick.' }],
+    content: [thinking(turn + 3), { type: 'text', text: 'I shortened one heading, gave the opening a minute and a little confetti, put the points in two columns, and added a small drawing and a takeaways slide.\n\n- **Needs your tick:** deleting a slide that repeats the one before it.\n- The drawing sits in a corner, clear of the text.' }],
   };
 };
 

@@ -3,7 +3,7 @@ import {
   AlertTriangle, ArrowLeft, BookOpen, ChevronDown, ClipboardList, Copy, Copyright, Download, EyeOff, FileJson, FileText, MonitorPlay,
   Plus, PresentationIcon, Redo2, Scissors, ScrollText, Shapes, Sparkles, Trash2, Undo2,
   Globe, NotebookText, PanelRightClose, PanelRightOpen, QrCode as QrIcon, Trophy, WandSparkles,
-  CircleCheck, Image as ImageIcon, MapPin, Pencil, RotateCcw, Palette, BringToFront, SendToBack,
+  CircleCheck, Image as ImageIcon, MapPin, Pencil, RotateCcw, Palette, BringToFront, SendToBack, MousePointerClick,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -483,6 +483,15 @@ export default function Studio() {
       actions.push(el.layer === 'back'
         ? { id: 'front', label: 'Bring to front', title: 'Draw it over the slide’s content', icon: <BringToFront size={15} />, run: () => updateSlide(slide.id, (s) => restackElement(s, el.id, 'front')) }
         : { id: 'back', label: 'Send to back', title: 'Draw it behind the slide’s content', icon: <SendToBack size={15} />, run: () => updateSlide(slide.id, (s) => restackElement(s, el.id, 'back')) });
+      // When it appears in present mode: with the slide, or on one of its clicks, up to one click after the last.
+      const clicks = Math.max(0, ...(layout?.boxes ?? []).filter((b) => elementIdOf(b.bind) !== el.id).map((b) => b.step ?? 0));
+      const nextStep = (el.step ?? 0) > clicks ? undefined : (el.step ?? 0) + 1;
+      actions.push({
+        id: 'step', label: el.step ? `Click ${el.step}` : 'With slide', wide: true, pressed: Boolean(el.step),
+        title: el.step ? `Appears on click ${el.step} in present mode. Click to change` : 'Appears with the slide. Click to make it appear on a click instead',
+        icon: <MousePointerClick size={15} />,
+        run: () => updateSlide(slide.id, (s) => updateElement(s, el.id, { step: nextStep })),
+      });
       actions.push({ id: 'delete', label: 'Delete', icon: <Trash2 size={15} />, danger: true, run: () => deleteBox(box) });
       return actions;
     }

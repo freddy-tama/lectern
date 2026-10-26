@@ -274,6 +274,21 @@ describe('proposing design', () => {
     expect(ws.ops()).toEqual([]);
     await expect(call(ws, 'change_element', { slide: 's_end', element: 'el-e_nope', changes_json: '{}', remove: true, reason: '' })).rejects.toThrow(/has no element "el-e_nope"/);
   });
+
+  it('lets an element appear on a click, with the points revealed on it', async () => {
+    const ws = workspace();
+    await call(ws, 'edit_slide', { slide: 's_why', content_json: JSON.stringify({ reveal: true }), reason: '' });
+    expect(text(await call(ws, 'read_slides', { slides: ['s_why'] }))).toMatch(/- bullets-1 · text “Lower hosting cost” · .* · appears on click 2/);
+    const [id] = addedIds(await call(ws, 'add_elements', { slide: 's_why', elements_json: JSON.stringify([{ type: 'shape', shape: 'ellipse', x: 900, y: 380, w: 80, h: 80, step: 2 }]), reason: '' }));
+    expect(text(await call(ws, 'read_slides', { slides: ['s_why'] }))).toContain(`- el-${id} · element ellipse · 900, 380 · 80 × 80 · appears on click 2`);
+    const slide = ws.find('s_why').slide;
+    expect(ws.layout(slide).boxes.find((b) => b.id === `el-${id}`)?.step).toBe(2);
+    // One click after the slide's last makes the slide one click longer.
+    await call(ws, 'change_element', { slide: 's_why', element: `el-${id}`, changes_json: JSON.stringify({ step: 4 }), remove: false, reason: '' });
+    expect(ws.layout(ws.find('s_why').slide).steps).toBe(4);
+    await call(ws, 'change_element', { slide: 's_why', element: `el-${id}`, changes_json: JSON.stringify({ step: 0 }), remove: false, reason: '' });
+    expect(edit(ws.ops(), 's_why')!.elements).toEqual([expect.not.objectContaining({ step: expect.anything() })]);
+  });
 });
 
 describe('pictures', () => {

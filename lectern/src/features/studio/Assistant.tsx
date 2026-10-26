@@ -5,6 +5,7 @@ import { type Deck, type Slide, deckMinutes, deckPurpose } from '../../core/deck
 import { getKind } from '../../core/kinds/registry';
 import { AiAccessNotice } from '../account/AccountUi';
 import { useAiAccess } from '../account/session';
+import { NoteBody } from '../notes/NoteBody';
 import { SlideView } from '../slides/SlideView';
 import { saveCode, savedCode } from './ai';
 import { type HistoryMessage, MAX_HISTORY_BYTES, type StepCard, type TurnResult, assistantStatus, runAssistantTurn } from './assistant-api';
@@ -495,7 +496,7 @@ function TurnView({ turn, deck, assistant, last }: { turn: Turn; deck: Deck; ass
       )}
       {turn.summary && (
         <div className="assistant-reply">
-          <p>{turn.summary}</p>
+          <NoteBody body={turn.summary} className="assistant-reply-text" />
           {turn.stopped && STOPPED[turn.stopped] && <p className="faint">{STOPPED[turn.stopped]}</p>}
         </div>
       )}

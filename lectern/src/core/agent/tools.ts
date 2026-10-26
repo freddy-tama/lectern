@@ -129,7 +129,7 @@ export const TOOL_SPECS: ToolSpec[] = [
       slide: SLIDE_REF,
       elements_json: {
         type: 'string',
-        description: 'A JSON array of elements. Every element has "type" and x, y, w, h on the 1920 × 1080 canvas, and optionally "layer":"back" (under the slide’s content), "opacity". Types: {"type":"picture","picture":"asset:… or found:…","fit":"contain"|"cover","radius":24,"alt":"…"}; {"type":"drawing","svg":"<svg viewBox=…>…</svg>","alt":"…"} (you write the SVG); {"type":"text","text":"…","size":48,"color":"accent","font":"display"|"body","weight":700,"align":"center","fill":"surface"}; {"type":"shape","shape":"rect"|"ellipse"|"line","fill":"accent2","stroke":"accent","strokeWidth":4,"radius":24}; {"type":"decor","motif":"waves","colors":["accent","accent2"]}. Colours are look colour names (accent, accent2, ink, muted, surface, bg, line, onAccent, good) or "#rrggbb".',
+        description: 'A JSON array of elements. Every element has "type" and x, y, w, h on the 1920 × 1080 canvas, and optionally "layer":"back" (under the slide’s content), "opacity", and "step": a click number to make it appear on that click in present mode, together with the boxes read_slides marks "appears on click" that number (leave it out to show it with the slide). Types: {"type":"picture","picture":"asset:… or found:…","fit":"contain"|"cover","radius":24,"alt":"…"}; {"type":"drawing","svg":"<svg viewBox=…>…</svg>","alt":"…"} (you write the SVG); {"type":"text","text":"…","size":48,"color":"accent","font":"display"|"body","weight":700,"align":"center","fill":"surface"}; {"type":"shape","shape":"rect"|"ellipse"|"line","fill":"accent2","stroke":"accent","strokeWidth":4,"radius":24}; {"type":"decor","motif":"waves","colors":["accent","accent2"]}. Colours are look colour names (accent, accent2, ink, muted, surface, bg, line, onAccent, good) or "#rrggbb".',
       },
       reason: REASON,
     },
@@ -141,7 +141,7 @@ export const TOOL_SPECS: ToolSpec[] = [
     properties: {
       slide: SLIDE_REF,
       element: { type: 'string', description: 'The element’s box id, like "el-e_1a2b3c".' },
-      changes_json: { type: 'string', description: 'A JSON object of the fields to change, as for add_elements (for example {"text":"…","color":"ink"} or {"x":1400,"y":80}). "{}" when removing.' },
+      changes_json: { type: 'string', description: 'A JSON object of the fields to change, as for add_elements (for example {"text":"…","color":"ink"}, {"x":1400,"y":80} or {"step":2}; {"step":0} shows it with the slide again). "{}" when removing.' },
       remove: { type: 'boolean', description: 'True to take the element off the slide.' },
       reason: REASON,
     },
