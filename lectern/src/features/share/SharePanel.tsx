@@ -205,6 +205,9 @@ function LiveView({ onOffline }: { onOffline(): void }) {
         </div>
       )}
       {live.error && <p className="share-note share-error" role="status">{live.error}</p>}
+      {live.signal === 'down' && (
+        <p className="share-note" role="status">Reconnecting to the connection service… Phones already joined keep working; new ones can join once it’s back.</p>
+      )}
       {tab !== 'quiz' && live.deckId && <PollResults deckId={live.deckId} />}
       {tab !== 'quiz' && live.deckId && <CloudResults deckId={live.deckId} />}
       {tab !== 'quiz' && <DeviceList guests={live.guests} />}

@@ -11,8 +11,8 @@ import { useSyncExternalStore } from 'react';
 import type { Deck } from '../../core/deck/types';
 import { getTheme, isBuiltInTheme } from '../../core/engine/themes';
 import {
-  type CloudResult, DEFAULT_OPTIONS, type GuestMessage, type HostMessage, type JoinMetadata, type LiveState, type PollResult, type Role,
-  type SharePackage, type ShareOptions, assetIds, cleanWord, cloudLimit, deckForRole, joinUrl, newCode, newToken, peerIdFor, pollChoices,
+  type CloudResult, DEFAULT_OPTIONS, GONE_AFTER, type GuestMessage, type HostMessage, type JoinMetadata, type LiveState, PING_EVERY, type PollResult,
+  type Role, type SharePackage, type ShareOptions, assetIds, cleanWord, cloudLimit, deckForRole, joinUrl, newCode, newToken, peerIdFor, pollChoices,
   sharedAsset, splitParts, tally, tallyWords, wordKey,
 } from '../../core/share/protocol';
 import {
@@ -20,7 +20,7 @@ import {
 } from '../../core/share/quiz';
 import { db } from '../../data/db';
 import { saveDeck } from '../../data/repo';
-import { openPeer, peerErrorMessage } from './peer';
+import { backoff, heartbeat, keepAwake, openPeer, peerErrorMessage } from './peer';
 
 export interface GuestInfo {
   id: string;
@@ -33,6 +33,11 @@ export interface GuestInfo {
 export interface HostSnapshot {
   status: 'idle' | 'starting' | 'live' | 'error';
   error: string | null;
+  /**
+   * The link to the connection service, which introduces new phones. While it is down,
+   * phones already connected carry on; new ones can join once it is back.
+   */
+  signal: 'up' | 'down';
   deckId: string | null;
   title: string;
   code: string | null;
@@ -76,7 +81,7 @@ function loadOptions(): ShareOptions {
 }
 
 const idle = (): HostSnapshot => ({
-  status: 'idle', error: null, deckId: null, title: '', code: null, token: null, options: loadOptions(),
+  status: 'idle', error: null, signal: 'up', deckId: null, title: '', code: null, token: null, options: loadOptions(),
   guests: [], state: null, votes: {}, clouds: {}, onScreen: false, panel: { open: false, deckId: null },
   quizSettings: loadQuizSettings(), quiz: null, quizBoard: [], stage: 'play',
 });
@@ -96,7 +101,11 @@ let screen: BroadcastChannel | null = null;
 let deckWatch: { unsubscribe(): void } | null = null;
 let deck: Deck | null = null;
 let resendTimer: number | undefined;
-const conns = new Map<string, { conn: DataConnection; role: Role; player: string }>();
+/** Each phone's link. `heard` is when it last sent anything; `pongs` that it answers pings (older apps don't). */
+const conns = new Map<string, { conn: DataConnection; role: Role; player: string; heard: number; pongs: boolean }>();
+let stopTicker: (() => void) | null = null;
+let signalTries = 0;
+let signalTimer: number | undefined;
 let quiz = new QuizEngine(loadQuizSettings());
 let quizTimer: number | undefined;
 let publishTimer: number | undefined;
@@ -289,7 +298,11 @@ function onConnection(conn: DataConnection) {
     const meta = (conn.metadata ?? {}) as Partial<JoinMetadata>;
     const role: Role = meta.token && meta.token === snap.token ? 'presenter' : 'audience';
     const player = typeof meta.player === 'string' && meta.player ? meta.player.slice(0, 40) : conn.peer;
-    conns.set(conn.peer, { conn, role, player });
+    // A phone that reconnects comes back with a new link: let go of its old one.
+    for (const [id, c] of conns) {
+      if (id !== conn.peer && c.player === player && c.role === role) dropGuest(id);
+    }
+    conns.set(conn.peer, { conn, role, player, heard: Date.now(), pongs: false });
     if (role === 'audience') { quiz.join(player, typeof meta.name === 'string' ? meta.name : undefined); publishSoon(); }
     guestsChanged(conn.peer, { role, device: typeof meta.device === 'string' ? meta.device.slice(0, 40) : 'Device', ready: false, since: Date.now() });
     void deliver(conn, role, typeof meta.have === 'number' ? meta.have : undefined);
@@ -309,11 +322,63 @@ function visibleSlides() {
   return deck?.slides.filter((s) => !s.hidden) ?? [];
 }
 
+function dropGuest(id: string) {
+  const c = conns.get(id);
+  if (!c) return;
+  conns.delete(id);
+  try { c.conn.close(); } catch { /* already closed */ }
+  guestsChanged(id, null);
+}
+
+// --- Staying connected ----------------------------------------------------
+
+/** Reconnects to the connection service, waiting longer after each failed try. */
+function reconnectSignal(now = false) {
+  const p = peer;
+  if (!p || p.destroyed || !p.disconnected || signalTimer !== undefined) return;
+  signalTries += 1;
+  set({ signal: 'down' });
+  signalTimer = window.setTimeout(() => {
+    signalTimer = undefined;
+    if (peer !== p || p.destroyed || !p.disconnected) return;
+    try { p.reconnect(); } catch { /* destroyed meanwhile */ }
+  }, now ? 0 : backoff(signalTries, 1000, 20_000));
+}
+
+/** Right away when the computer is back online or back on screen, rather than at the next try. */
+function reconnectNow() {
+  if (!peer?.disconnected) return;
+  window.clearTimeout(signalTimer);
+  signalTimer = undefined;
+  reconnectSignal(true);
+}
+
+function onVisible() {
+  if (document.visibilityState === 'visible') reconnectNow();
+}
+
+/** Every few seconds, also in a background tab: pings phones, lets go of silent ones, keeps the service link alive. */
+function tick() {
+  const p = peer;
+  if (!p) return;
+  if (document.visibilityState === 'hidden') heartbeat(p);
+  const now = Date.now();
+  for (const [id, c] of conns) {
+    if (c.pongs && now - c.heard > GONE_AFTER) { dropGuest(id); continue; }
+    if (snap.guests.find((g) => g.id === id)?.ready) send(c.conn, { t: 'ping', at: now });
+  }
+  // A link to the service that dropped without telling.
+  if (p.disconnected && !p.destroyed) reconnectSignal();
+}
+
 function onGuestMessage(conn: DataConnection, msg: GuestMessage) {
   const guest = conns.get(conn.peer);
   const role = guest?.role;
   if (!guest || !role || !msg || typeof msg !== 'object') return;
-  if (msg.t === 'state' && role === 'presenter') {
+  guest.heard = Date.now();
+  if (msg.t === 'pong') {
+    guest.pongs = true;
+  } else if (msg.t === 'state' && role === 'presenter') {
     set({ state: msg.state });
     channel?.postMessage({ type: 'state', from: bridgeId, state: msg.state, at: Date.now() });
     broadcast({ t: 'state', state: msg.state }, conn.peer);
@@ -388,12 +453,21 @@ async function start(deckId: string) {
   if (snap.deckId !== deckId || snap.status !== 'starting' || !opened) { opened?.destroy(); return; }
 
   peer = opened;
+  signalTries = 0;
   peer.on('connection', onConnection);
-  peer.on('disconnected', () => { if (peer && !peer.destroyed) peer.reconnect(); });
+  // Back on the service after a reconnect.
+  peer.on('open', () => { signalTries = 0; set({ signal: 'up' }); });
+  peer.on('disconnected', () => reconnectSignal());
   peer.on('error', (err) => {
-    if ((err as { type?: string }).type === 'peer-unavailable') return;
+    const type = (err as { type?: string }).type;
+    if (type === 'peer-unavailable') return;
+    // Trouble with the service: the disconnected handler retries, and the panel says so.
+    if (['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected', 'unavailable-id'].includes(type ?? '')) return;
     set({ error: peerErrorMessage(err) });
   });
+  stopTicker = keepAwake(tick, PING_EVERY);
+  window.addEventListener('online', reconnectNow);
+  document.addEventListener('visibilitychange', onVisible);
 
   if (typeof BroadcastChannel !== 'undefined') {
     channel = new BroadcastChannel(`lectern:${deckId}`);
@@ -431,6 +505,13 @@ async function start(deckId: string) {
 
 function stop() {
   broadcast({ t: 'bye' });
+  stopTicker?.();
+  stopTicker = null;
+  window.clearTimeout(signalTimer);
+  signalTimer = undefined;
+  signalTries = 0;
+  window.removeEventListener('online', reconnectNow);
+  document.removeEventListener('visibilitychange', onVisible);
   const closing = [...conns.values()].map((c) => c.conn);
   window.setTimeout(() => closing.forEach((c) => { try { c.close(); } catch { /* already closed */ } }), 300);
   conns.clear();

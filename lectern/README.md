@@ -159,7 +159,9 @@ See [docs/mods.md](docs/mods.md) to write your own.
 | `OPENVERSE_CLIENT_ID`, `OPENVERSE_CLIENT_SECRET` | Optional [Openverse API credentials](https://api.openverse.org/v1/). Anonymous use has low rate limits shared by everyone using your server; search results are cached for an hour to help. |
 | `LECTERN_PLUGINS` | Build with mods, for example `chinese,lesson-plan`. Leave it empty for the general edition. |
 | `VITE_PEER_HOST`, `VITE_PEER_PORT`, `VITE_PEER_PATH`, `VITE_PEER_KEY` | Your own [PeerJS server](https://github.com/peers/peerjs-server) for Share to phones. By default PeerJS's free public server introduces devices; slides, state and votes then go straight between them. |
-| `VITE_ICE_SERVERS` | JSON list of your own STUN/TURN servers, for networks that block direct connections. |
+| `CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN` | A relay for Share to phones, from [Cloudflare's TURN service](https://developers.cloudflare.com/realtime/turn/). Phones on school or guest Wi-Fi that keeps devices apart, and many on mobile data, can only reach the presenter's computer through a relay. `/api/ice` makes short-lived relay passwords for each visitor, so no new build is needed. |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | Any other TURN relay, with fixed details. `TURN_URLS` is comma separated, such as `turn:relay.example.com:3478,turns:relay.example.com:443?transport=tcp`. A relay on port 443 gets through the strictest networks. |
+| `VITE_ICE_SERVERS` | JSON list of your own STUN/TURN servers, built into the app. It replaces the defaults and `/api/ice`. |
 | `VITE_PUBLIC_ORIGIN` | The public address of the site, such as `https://lectern.example.com`. The front page builds its quiz QR code from it, so a code shown on `localhost` or a preview deployment still opens on a phone. Without it, the code uses the address the page was opened at. |
 | `VITE_TESTSPRITE_URL` | A link to the site's TestSprite test results. When it's set, the front page's footer links to it; otherwise the line is left out. |
 
