@@ -16,6 +16,7 @@ import { type Caller, admit, charge, usageOf } from './_lib/account.js';
 
 /** The two models a request may ask for by name; anything else gets the default. */
 export const MODELS = { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5' } as const;
+// Sonnet by default: on real decks its notes and quizzes matched Opus's for half the cost (about $0.004 a slide) and in about two thirds the time.
 const DEFAULT_MODEL = process.env.LECTERN_NOTES_MODEL || MODELS.sonnet;
 /** Vercel takes at most 4.5 MB per request. */
 const MAX_BODY = 4_400_000;

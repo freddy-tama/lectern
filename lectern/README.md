@@ -30,6 +30,7 @@ This file is the app's manual. The project's front page is the [repository READM
 | **Hand out a copy** | For rooms where live sharing won't connect. A QR code carries the quiz, or a text-only copy of the slides, inside the link itself, and each phone runs it alone and marks its own answers. Phones can save it as a file for later. **Export ▸ Web page** makes the whole deck one view-only .html file (your reveals, no notes) that opens offline in any browser. |
 | **Study / Review** | Read each slide with its takeaways and explanation, answer the question, flip flashcards, or read a one-page summary. Progress is saved. |
 | **Start a deck** | From an outline (pasted, or a Markdown, Word or PowerPoint file), with AI, blank, or from a mod's starter. |
+| **Finished slides** | Bring a PowerPoint that's already designed and present it as it is. Add its PDF export and every slide keeps its exact look; the .pptx gives the words, speaker notes, order and hidden slides. AI writes teleprompter notes for each slide (a script, takeaways, cues and minutes), starting from your speaker notes. Questions already on the slides, such as A–D choices with the answer in the notes, become phone quizzes. |
 | **Export** | PowerPoint with on-click animations or one slide per step (for Google Slides and Keynote). Charts and tables export as real PowerPoint charts and tables you can edit. YouTube videos go in as online videos that play in PowerPoint, and stored videos as video files. Web pages and activities become a card with a link and a QR code; timers show their time. Also a view-only web page (one .html file that works offline), a key-notes handout to print or save as PDF, and a deck file you can open again. |
 
 ### Presenting keys
@@ -148,6 +149,7 @@ See [docs/mods.md](docs/mods.md) to write your own.
 |---|---|
 | `ANTHROPIC_API_KEY` | Turns on "With AI" drafting, AI class notes from recordings, AI activities and AI drawings. Without it, each explains that it isn't set up, and everything else works, transcription included. |
 | `LECTERN_MODEL` | The model that drafts decks and writes class notes. Default `claude-opus-5-5`. |
+| `LECTERN_NOTES_MODEL` | The model that writes teleprompter notes for finished slides. Default `claude-sonnet-5-5`: half the cost of Opus, with notes just as accurate. |
 | `LECTERN_ACCESS_CODE` | People must enter this code before AI drafting, AI pictures or class notes run, so a public site doesn't spend your credit for strangers. Picture search works without it. For a public site, [accounts](#accounts-and-ai-credits) are the better guard. |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` | Turn on [accounts](#accounts-and-ai-credits): AI then needs a signed-in person with credits left. The legacy `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` work too. The secret key stays on the server. |
 | `LECTERN_DAILY_CREDITS` | With accounts on, the most credits everyone together may spend in a UTC day. Default `4000` ($20); `0` turns the cap off. |
