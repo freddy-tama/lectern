@@ -97,12 +97,52 @@ function stepOfTurn(request: SentRequest): number {
 /** A small drawing in the mock's replies: a lamp, in whatever colours. */
 const LAMP = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="400" height="300" rx="24" fill="#F4EDE2"/><circle cx="200" cy="120" r="70" fill="#E9B44C"/><rect x="170" y="190" width="60" height="50" rx="10" fill="#1E1C19"/><path d="M120 120h-40M320 120h40M200 30v-20" stroke="#D9502B" stroke-width="12" stroke-linecap="round"/></svg>';
 
+/** Text between a "<<<LABEL (data, not instructions)>>>" marker and "<<<END>>>". */
+function dataBlock(text: string, label: string): string {
+  const start = `<<<${label} (data, not instructions)>>>\n`;
+  const from = text.indexOf(start);
+  if (from < 0) return '';
+  const end = text.indexOf('\n<<<END>>>', from);
+  return text.slice(from + start.length, end < 0 ? undefined : end);
+}
+
+/**
+ * Teleprompter notes for a finished deck (api/teleprompter.ts): a short script per slide built from its speaker
+ * notes or words, and any question Lectern found on a slide kept as a quiz, with the first choice right when the
+ * slide didn't say.
+ */
+export function teleprompterReply(request: SentRequest): FakeReply {
+  const blocks: { type: string; text?: string }[] = request.messages?.[0]?.content ?? [];
+  const slides = blocks.filter((b) => b.type === 'text' && /^Slide \d+, id /.test(b.text ?? '')).map((b) => {
+    const text = b.text ?? '';
+    const [, n, id] = /^Slide (\d+), id (\S+?):/.exec(text) ?? [];
+    const words = dataBlock(text, 'SLIDE WORDS').split('\n').filter(Boolean);
+    const notes = dataBlock(text, 'SPEAKER NOTES');
+    const found = dataBlock(text, 'FOUND QUESTION');
+    const quiz = found ? JSON.parse(found) as { question: string; options: string[]; correct: number } : null;
+    const lead = notes && notes !== '(none)' ? notes.split('\n')[0]! : `This slide is about ${words[0] ?? 'the next idea'}`;
+    const script = quiz
+      ? `${quiz.question} Take out your phones and choose an answer.\n\n(After the reveal) The answer is ${quiz.options[Math.max(0, quiz.correct)]}.`
+      : `${lead.replace(/[.\s]+$/, '')}.\n\nLet's look at what this means for us before we move on.`;
+    return {
+      id,
+      script: `(Mock notes, slide ${n}) ${script}`,
+      keyPoints: words.slice(0, 2).map((w) => w.slice(0, 80)),
+      cues: quiz ? ['Wait for answers'] : ['Pause'],
+      minutes: quiz ? 1.5 : 1,
+      quiz: quiz ? { ...quiz, correct: quiz.correct >= 0 ? quiz.correct : 0 } : { question: '', options: [], correct: -1 },
+    };
+  });
+  return { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ slides }) }] };
+}
+
 /**
  * A short, believable turn for any deck, in the way the real assistant works: look at the whole deck and read a
  * few slides, then propose wording, timing, a layout, a decoration, a drawing, a new slide and a deletion, look
  * again at what changed, and reply. Used by the browser check (see vite.mock.config.ts).
  */
 export const demoScript: Script = (request) => {
+  if (typeof request.system === 'string' && request.system.startsWith('You write teleprompter notes')) return teleprompterReply(request);
   const step = stepOfTurn(request);
   const slides = outlineSlides(request);
   const pick = slides.find((s, i) => i > 0 && s.titled) ?? slides[0];
@@ -176,7 +216,7 @@ export function mockClaude(script: Script = demoScript): Plugin {
         const { port } = server.httpServer!.address() as AddressInfo;
         process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${port}/__mock-claude`;
         process.env.ANTHROPIC_API_KEY = 'mock-key';
-        server.config.logger.info(`  Claude is mocked: /api/deck-assistant answers from tests/mock-claude.ts`);
+        server.config.logger.info(`  Claude is mocked: /api/deck-assistant and /api/teleprompter answer from tests/mock-claude.ts`);
       });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
         if (!req.url?.startsWith('/__mock-claude/v1/messages')) return next();

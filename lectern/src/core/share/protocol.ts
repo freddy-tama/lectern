@@ -266,9 +266,12 @@ export function isPackage(value: unknown): value is SharePackage {
 
 // ─── Polls ────────────────────────────────────────────────────────────
 
+/** Slide types that can ask the room a question with choices: question slides, and designed slides given one. */
+const POLL_KINDS = new Set(['question', 'designed']);
+
 /** The choices of a question slide, or null when the slide isn't a poll. */
 export function pollChoices(slide: Pick<Slide, 'kind' | 'content'> | undefined): string[] | null {
-  if (!slide || slide.kind !== 'question') return null;
+  if (!slide || !POLL_KINDS.has(slide.kind)) return null;
   const options = (slide.content as { options?: unknown }).options;
   if (!Array.isArray(options)) return null;
   const list = options.filter((o): o is string => typeof o === 'string' && o.trim().length > 0).slice(0, 6);

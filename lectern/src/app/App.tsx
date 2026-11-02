@@ -26,6 +26,7 @@ const RecordingDetail = lazy(() => import('../features/recordings/RecordingDetai
 const Landing = lazy(() => import('../features/landing/Landing'));
 const Onboarding = lazy(() => import('../features/onboarding/Onboarding'));
 const MakePage = lazy(() => import('../features/autodeck/MakePage'));
+const FinishedPage = lazy(() => import('../features/finished/FinishedPage'));
 const JoinPage = lazy(() => import('../features/share/JoinPage'));
 const SavedDeck = lazy(() => import('../features/share/JoinPage').then((m) => ({ default: m.SavedDeck })));
 const PackPage = lazy(() => import('../features/share/PackPage').then((m) => ({ default: m.PackPage })));
@@ -79,6 +80,7 @@ export function App() {
               <Route path="decks" element={<DecksPage />} />
               <Route path="mods" element={<ModsPage />} />
               <Route path="make" element={<MakePage />} />
+              <Route path="finished" element={<FinishedPage />} />
               <Route path="settings" element={<PreferencesPage />} />
               <Route path="signin" element={<SignInPage />} />
             </Route>

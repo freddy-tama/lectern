@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B1E4A"/>
+      <stop offset="1" stop-color="#2B1060"/>
+    </linearGradient>
+    <radialGradient id="sun" cx="0.35" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#FFE38A"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </radialGradient>
+  </defs>
+  <rect width="1920" height="1080" fill="url(#sky)"/>
+  <g fill="#FFFFFF" opacity="0.7">
+    <circle cx="210" cy="140" r="4"/><circle cx="640" cy="90" r="3"/><circle cx="1180" cy="170" r="5"/>
+    <circle cx="1720" cy="110" r="3"/><circle cx="1500" cy="420" r="4"/><circle cx="380" cy="980" r="3"/>
+    <circle cx="980" cy="1010" r="4"/><circle cx="1820" cy="900" r="3"/>
+  </g>
+  <circle cx="-60" cy="700" r="420" fill="url(#sun)"/>
+  <g fill="none" stroke="#FFFFFF" stroke-opacity="0.18" stroke-width="3">
+    <ellipse cx="-60" cy="700" rx="620" ry="620"/>
+    <ellipse cx="-60" cy="700" rx="880" ry="880"/>
+    <ellipse cx="-60" cy="700" rx="1180" ry="1180"/>
+  </g>
+  <circle cx="470" cy="360" r="34" fill="#60A5FA"/>
+  <circle cx="660" cy="560" r="48" fill="#F97316"/>
+  <circle cx="1010" cy="300" r="96" fill="#FBBF24"/>
+  <ellipse cx="1010" cy="300" rx="160" ry="34" fill="none" stroke="#FDE68A" stroke-width="10"/>
+  <text x="1030" y="640" font-family="Georgia, serif" font-size="128" font-weight="700" fill="#FFFFFF">Our solar</text>
+  <text x="1030" y="780" font-family="Georgia, serif" font-size="128" font-weight="700" fill="#FFFFFF">system</text>
+  <rect x="1036" y="830" width="180" height="10" rx="5" fill="#F59E0B"/>
+  <text x="1036" y="920" font-family="Arial, sans-serif" font-size="52" fill="#C7D2FE">Eight planets, one star</text>
+</svg>

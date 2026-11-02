@@ -54,7 +54,7 @@ export function aiFieldType(type: FieldSpec['type']): 'text' | 'textarea' | 'lis
 
 /** Kinds the server may use: core ones plus any a mod registered, with their fields. */
 export function kindCatalogue() {
-  return allKinds().map((k) => ({
+  return allKinds().filter((k) => k.draft !== false).map((k) => ({
     kind: k.kind,
     label: k.label,
     description: k.description,
