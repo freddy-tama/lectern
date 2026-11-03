@@ -1,8 +1,8 @@
 import {
   AlignLeft, AppWindow, ChartGantt, Clapperboard, Cloud, Contact, Dices, Gauge, Tag, Gamepad2, Globe, LayoutDashboard, QrCode, Timer,
-  BookOpen, Bookmark, ChartColumn, ChartLine, ChartNoAxesColumn, ChartPie, CircleHelp, ClipboardList, Code, Columns2, Copyright, DoorOpen,
+  BookOpen, BookOpenText, Bookmark, ChartColumn, ChartLine, ChartNoAxesColumn, ChartPie, CircleHelp, ClipboardList, Code, Columns2, Copyright, DoorOpen,
   FileText, Filter, GalleryHorizontal, Grid2x2, Image, Images, Languages, LayoutGrid, List, ListChecks, ListOrdered, type LucideIcon,
-  Megaphone, MessageSquareText, Milestone, Presentation, Puzzle, Quote, RefreshCw, Square, Table, Type, Users, Waypoints,
+  Megaphone, MessageSquareText, Milestone, Presentation, Puzzle, Quote, RefreshCw, Square, Table, TextCursorInput, Type, Users, Waypoints,
 } from 'lucide-react';
 
 const ICONS: Record<string, LucideIcon> = {
@@ -55,6 +55,8 @@ const ICONS: Record<string, LucideIcon> = {
   'align-left': AlignLeft,
   gantt: ChartGantt,
   'app-window': AppWindow,
+  'book-open-text': BookOpenText,
+  'text-cursor-input': TextCursorInput,
 };
 
 /** Icons are referenced by name so the core and mods stay free of React. */

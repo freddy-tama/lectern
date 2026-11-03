@@ -14,10 +14,10 @@ export const PINYIN_FLAG = 'chinese.pinyin';
 const showPinyin = (ctx: LayoutContext) => ctx.flags[PINYIN_FLAG] !== false;
 
 /** Pinyin keeps its space when hidden, so nothing on the slide moves when the presenter presses P. */
-function pinyinBox(ctx: LayoutContext, box: TextBox): TextBox {
+export function pinyinBox(ctx: LayoutContext, box: TextBox): TextBox {
   return showPinyin(ctx) ? box : { ...box, text: '' };
 }
-const PINYIN_HELP = 'Tone numbers work too: xue2 becomes xué.';
+export const PINYIN_HELP = 'Tone numbers work too: xue2 becomes xué.';
 
 /** Stacks boxes top to bottom from y, with a gap after each. Returns the bottom edge. */
 function stack(boxes: Box[], y: number, gaps: number[]) {
