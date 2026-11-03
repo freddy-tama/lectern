@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { type CheckRule, CORE_RULES, checkDeck, minutesOff, notesEmpty, slideProblems } from '../src/core/deck/check';
+import { type CheckRule, CORE_RULES, LESSON_RULES, checkDeck, givenAway, lessonIssues, minutesOff, notesEmpty, rulesFor, sameChecks, slideProblems } from '../src/core/deck/check';
 import { retimeDeck, splitToFit } from '../src/core/deck/fit';
 import { CONT, fitsOnSlide } from '../src/core/deck/split';
 import { type Deck, type Slide, deckMinutes, emptyNotes } from '../src/core/deck/types';
@@ -84,6 +84,79 @@ describe('checkDeck', () => {
     expect(p.overflow.length).toBeGreaterThan(0);
     expect(p.warnings).toEqual(expect.arrayContaining(p.overflow));
     expect(slideProblems(short('y'), d)).toMatchObject({ overflow: [], warnings: [] });
+  });
+});
+
+describe('lesson rules', () => {
+  // A short lesson about one life, as a teacher reviewed it: the year is taught in the passage and asked
+  // for afterwards, but the opening picture's caption had already given it away.
+  const opening = slideOf('open', 'image', { title: 'Who is this?', caption: 'Sun Yat-sen, born in 1866 in Guangdong', image: '' });
+  const passage = slideOf('read', 'text', { title: 'Read', body: 'Sun Yat-sen was born in 1866 in a village in Guangdong. As a boy he went to school in Hawaii.' });
+  const when = slideOf('ask', 'question', { question: 'When was Sun Yat-sen born?', options: ['1866', '1966', '1886'], correct: 0, answer: '' });
+  const judge = (items: { statement: string; isTrue: boolean; correction?: string }[], id = 'tf') => slideOf(id, 'true-false', { title: 'True or false?', items });
+
+  it('finds an answer shown before the slide that teaches it, and quotes the slide that gave it away', () => {
+    expect(givenAway([opening, passage, when])).toEqual([
+      { rule: 'given-away', severity: 'info', slideId: 'ask', message: 'Slide 1 gives away “1866” before this slide asks for it.' },
+    ]);
+  });
+
+  it('lets the slide that teaches the answer show it, and a copy of it shown again for a re-read', () => {
+    expect(givenAway([passage, when])).toEqual([]);
+    const think = slideOf('think', 'bullets', { title: 'Read again and think', bullets: ['Where did he go to school?'] });
+    expect(givenAway([passage, think, { ...passage, id: 'again' }, when])).toEqual([]);
+  });
+
+  it('matches short answers as words, not as parts of words, and leaves the deck’s own topic alone', () => {
+    const teach = slideOf('teach', 'bullets', { title: 'Energy', bullets: ['Wind turns the blades', 'Coal is burned'] });
+    const intro = slideOf('intro', 'bullets', { title: 'Today', bullets: ['A windy day', 'Wind power'] });
+    const ask = slideOf('q', 'question', { question: 'Which source is renewable?', options: ['Coal', 'Wind'], correct: 1, answer: '' });
+    expect(givenAway([intro, teach, ask]).map((i) => i.message)).toEqual(['Slide 1 gives away “Wind” before this slide asks for it.']);
+    expect(givenAway([slideOf('i2', 'bullets', { title: 'Today', bullets: ['A windy day'] }), teach, ask])).toEqual([]);
+    expect(givenAway([intro, teach, ask], 'Wind energy')).toEqual([]);
+  });
+
+  it('reads Chinese answers without spaces between words, and ignores one-digit numbers', () => {
+    const intro = slideOf('i', 'statement', { statement: '孙中山出生在广东香山。' });
+    const text = slideOf('t', 'text', { title: '课文', body: '孙中山小时候住在广东香山的一个村子里。' });
+    const ask = slideOf('q', 'recall', { title: '想一想', cards: [{ prompt: '孙中山出生在哪里？', answer: '广东香山' }, { prompt: '他有几个哥哥？', answer: '2' }] });
+    expect(givenAway([intro, text, ask]).map((i) => i.message)).toEqual(['Slide 1 gives away “广东香山” before this slide asks for it.']);
+  });
+
+  it('finds one fact tested twice, across slides and on one slide', () => {
+    const twice = judge([{ statement: 'Sun Yat-sen was born in 1966.', isTrue: false, correction: '1866' }]);
+    expect(sameChecks([when, twice])).toEqual([
+      { rule: 'same-check', severity: 'warning', slideId: 'tf', message: 'Slide 1 already tests “1866”.' },
+    ]);
+    // The same statement with only the number changed, even without a correction to compare.
+    const pair = judge([{ statement: 'He was born in 1866.', isTrue: true }, { statement: 'He was born in 1966.', isTrue: false }]);
+    expect(sameChecks([pair]).map((i) => i.message)).toEqual(['This slide tests “He was born in 1866.” twice.']);
+    const echo = judge([{ statement: 'He went to school in Hawaii.', isTrue: true }], 'tf2');
+    const reworded = slideOf('rc', 'recall', { title: 'Recall', cards: [{ prompt: 'He went to school in Hawaii.', answer: 'True' }] });
+    expect(sameChecks([echo, reworded]).map((i) => i.message)).toEqual(['Slide 1 already tests “He went to school in Hawaii.”.']);
+  });
+
+  it('leaves different facts, verdict words and blanks of one passage alone', () => {
+    const facts = judge([{ statement: 'He was born in 1866.', isTrue: true }, { statement: 'He went to school in Hawaii.', isTrue: true }]);
+    const yesNo = slideOf('rc', 'recall', { title: 'Recall', cards: [{ prompt: 'Was he a doctor?', answer: 'Yes' }, { prompt: 'Did he live in Paris?', answer: 'Yes' }] });
+    const cloze = slideOf('fi', 'fill-in', { title: 'Fill in', passage: 'He was [born] in a village and [born] again as a leader.' });
+    expect(sameChecks([facts, yesNo, cloze])).toEqual([]);
+    // A blank and a question that both ask for the year are one fact tested twice.
+    const year = slideOf('fy', 'fill-in', { title: 'Fill in', passage: 'He was born in [1866].' });
+    expect(sameChecks([year, when]).map((i) => i.message)).toEqual(['Slide 1 already tests “1866”.']);
+  });
+
+  it('runs for lessons only, from checkDeck and on their own for the studio', () => {
+    const slides = [opening, passage, when, judge([{ statement: 'He was born in 1966.', isTrue: false, correction: '1866' }])];
+    expect(rulesFor(deckOf([], { purpose: 'lesson' }))).toEqual([...CORE_RULES, ...LESSON_RULES]);
+    expect(rulesFor(deckOf([], { purpose: 'talk' }))).toEqual(CORE_RULES);
+    const lesson = checkDeck(deckOf(slides, { purpose: 'lesson' }));
+    expect(lesson.issues.filter((i) => i.rule === 'given-away' || i.rule === 'same-check').map((i) => `${i.slideId} ${i.rule}`)).toEqual(['ask given-away', 'tf given-away', 'tf same-check']);
+    expect(checkDeck(deckOf(slides, { purpose: 'talk' })).issues.some((i) => i.rule === 'given-away')).toBe(false);
+    expect(lessonIssues(deckOf(slides, { purpose: 'lesson' })).map((i) => i.rule)).toEqual(['given-away', 'given-away', 'same-check']);
+    expect(lessonIssues(deckOf(slides, { purpose: 'pitch' }))).toEqual([]);
+    // Hidden slides give nothing away and are numbered out.
+    expect(lessonIssues(deckOf([{ ...opening, hidden: true }, passage, when], { purpose: 'lesson' }))).toEqual([]);
   });
 });
 

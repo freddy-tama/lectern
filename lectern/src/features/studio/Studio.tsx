@@ -10,6 +10,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { NotFound } from '../../app/App';
 import { cloneSlide, makeSlide } from '../../core/deck/draft';
 import { wording } from '../../core/deck/purpose';
+import { lessonIssues } from '../../core/deck/check';
 import { canSplit, fitsOnSlide, isOverflowWarning, splitInDeck, splitSlide } from '../../core/deck/split';
 import { autoVariants } from '../../core/deck/auto-style';
 import { fieldAt, getAt, insertItem, isListItem, isTextBind, removeItem, setAt, splitBind } from '../../core/deck/paths';
@@ -119,6 +120,12 @@ export default function Studio() {
   const index = deck ? Math.max(0, deck.slides.findIndex((s) => s.id === selectedId)) : 0;
   const slide = deck?.slides[index];
   const revision = useSlideRevision({ deck, slide, change });
+  // In a lesson, the stage also says what the lesson rules found on this slide: an answer given away, one thing tested twice.
+  const lessonNotes = useMemo(() => (deck ? lessonIssues(deck) : []), [deck]);
+  const stageNotes = [
+    ...(layout?.warnings ?? []),
+    ...lessonNotes.filter((i) => i.slideId === slide?.id).sort((a, b) => Number(a.severity !== 'warning') - Number(b.severity !== 'warning')).map((i) => i.message),
+  ];
 
   // A proposal from the assistant is previewed where it applies: moving to another slide closes the preview,
   // and it takes the stage from a one-slide AI suggestion.
@@ -861,8 +868,8 @@ export default function Studio() {
                       ))}
                     </div>
                   ) : <span className="faint stage-hint">Click to type, drag to move. Drop pictures on the slide.</span>}
-                  {layout?.warnings.length ? (
-                    <StageWarning warnings={layout.warnings} canSplit={canSplit(slide)} onSplit={splitHere} />
+                  {stageNotes.length ? (
+                    <StageWarning warnings={stageNotes} canSplit={canSplit(slide)} onSplit={splitHere} />
                   ) : null}
                   <span className="stage-tools">
                     <button type="button" className="btn btn-ghost btn-sm" aria-pressed={notesOpen} onClick={() => setNotesOpen((v) => !v)} title={notesOpen ? 'Fold the key notes away to give the slide more room' : 'Show the key notes'}>

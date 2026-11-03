@@ -137,12 +137,57 @@ export function teleprompterReply(request: SentRequest): FakeReply {
 }
 
 /**
+ * The lesson the mock drafts, whatever the brief (api/draft-deck.ts): one slide of each kind a lesson uses. The
+ * picture slide gives the boiling point away and two checks ask for it, so the lesson checks have something to find.
+ */
+const LESSON = [
+  { kind: 'title', title: 'The water cycle', minutes: 1, point: 'What today is about', script: 'Today we follow one drop of water.', content: { eyebrow: 'Science', title: 'The water cycle', subtitle: 'From the sea to the sky and back', presenter: '', credit: '' } },
+  { kind: 'image', title: 'Look and predict', minutes: 2, point: 'Predict what happens to a pan of water on the stove', script: 'Look at the pan. What will happen if we keep heating it?', content: { title: 'What will happen next?', body: 'Water boils at 100 °C.', image: '', caption: '' } },
+  { kind: 'bullets', title: 'Before you read', minutes: 1, point: 'Two questions to look for', script: 'Keep these two questions in mind while you read.', content: { title: 'Look for these as you read', bullets: ['What happens when water is heated?', 'How do clouds form?'], reveal: false, image: '' } },
+  { kind: 'text', title: 'Read', minutes: 3, point: 'The passage', script: 'Read the passage on your own first.', content: { title: 'From sea to sky', body: 'When water is heated to 100 °C, it boils and turns into steam. The Sun warms the sea more gently, and water evaporates into the air.\n\nHigh up, the vapour cools and condenses into tiny droplets: clouds. When the droplets join and grow heavy, they fall as rain.' } },
+  { kind: 'question', title: 'Check', minutes: 2, point: 'The boiling point', script: 'Who remembers from the passage?', content: { question: 'At what temperature does water boil?', options: ['50 °C', '100 °C', '200 °C'], correct: 1, answer: 'At sea level, water boils at 100 °C.' } },
+  { kind: 'true-false', title: 'True or false?', minutes: 3, point: 'Facts from the passage', script: 'Thumbs up for true, down for false.', content: { title: 'True or false?', items: [{ statement: 'Water boils at 50 °C.', isTrue: false, correction: 'Water boils at 100 °C.' }, { statement: 'Clouds are made of tiny droplets of water.', isTrue: true, correction: '' }, { statement: 'Rain falls when the droplets grow heavy.', isTrue: true, correction: '' }] } },
+  { kind: 'fill-in', title: 'Fill in the blanks', minutes: 3, point: 'The three steps', script: 'Fill in the blanks from the word bank.', content: { title: 'Fill in the blanks', passage: 'The Sun warms the sea and water [evaporates]. High up, the vapour cools and [condenses] into clouds. Heavy droplets fall as [rain].', bank: [], hideBank: false } },
+  { kind: 'recall', title: 'Retell', minutes: 4, point: 'Retell the cycle in their own words', script: 'Tell your partner the journey of one drop.', content: { title: 'In your own words', cards: [{ prompt: 'Retell the journey of one drop, from the sea to rain.', answer: 'Sea, vapour, cloud, rain' }, { prompt: 'Why do clouds form high up?', answer: 'The air up there is cooler' }] } },
+  { kind: 'summary', title: 'Takeaways', minutes: 1, point: 'What to remember', script: 'Three things to keep.', content: { title: 'Key takeaways', points: ['Heat turns water into vapour', 'Cooling turns vapour into clouds', 'Heavy droplets fall as rain'] } },
+  { kind: 'closing', title: 'Before next time', minutes: 1, point: 'Two follow-up tasks', script: 'Two things for next time.', content: { title: 'Before next time', prompts: ['Draw the water cycle and label each step.', 'Where does the water in a puddle go on a sunny day?'], closing: 'See you next time!' } },
+];
+
+/** A drafting call: the outline, the slides it asks for, or the whole deck at once, from LESSON. */
+export function draftReply(request: SentRequest): FakeReply {
+  const blocks: { type: string; text?: string }[] = request.messages?.[0]?.content ?? [];
+  const task = blocks.map((b) => b.text ?? '').find((t) => t.startsWith('Task: ')) ?? '';
+  const known = new Set<string>(request.output_config?.format?.schema?.properties?.slides?.items?.properties?.kind?.enum ?? []);
+  const plan = LESSON.filter((s) => known.has(s.kind));
+  const slide = (s: (typeof LESSON)[number]) => ({
+    kind: s.kind,
+    contentJson: JSON.stringify(s.content),
+    notes: { script: s.script, keyPoints: [], cues: [], checkQuestion: '', checkAnswer: '', minutes: s.minutes },
+  });
+  let out: Record<string, unknown>;
+  if (task.startsWith('Task: OUTLINE')) {
+    out = { title: 'The water cycle', outline: plan.map(({ title, kind, minutes, point }) => ({ title, kind, minutes, point })), slides: [] };
+  } else if (task.startsWith('Task: SLIDES')) {
+    const wanted = [...task.matchAll(/^→ (\d+)\. /gm)].map((m) => Number(m[1]));
+    out = { title: 'The water cycle', outline: [], slides: wanted.flatMap((n) => (plan[n - 1] ? [{ number: n, ...slide(plan[n - 1]!) }] : [])) };
+  } else {
+    out = { title: 'The water cycle', slides: plan.map(slide) };
+  }
+  return { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify(out) }] };
+}
+
+/**
  * A short, believable turn for any deck, in the way the real assistant works: look at the whole deck and read a
  * few slides, then propose wording, timing, a layout, a decoration, a drawing, a new slide and a deletion, look
  * again at what changed, and reply. Used by the browser check (see vite.mock.config.ts).
  */
 export const demoScript: Script = (request) => {
   if (typeof request.system === 'string' && request.system.startsWith('You write teleprompter notes')) return teleprompterReply(request);
+  if (typeof request.system === 'string' && request.system.startsWith('You plan ')) return draftReply(request);
+  // The questions before drafting: none, so Make goes straight on.
+  if (typeof request.system === 'string' && request.system.startsWith('You help someone turn their own files')) {
+    return { stop_reason: 'end_turn', content: [{ type: 'text', text: JSON.stringify({ title: '', topic: '', purpose: '', questions: [] }) }] };
+  }
   const step = stepOfTurn(request);
   const slides = outlineSlides(request);
   const pick = slides.find((s, i) => i > 0 && s.titled) ?? slides[0];
@@ -216,7 +261,7 @@ export function mockClaude(script: Script = demoScript): Plugin {
         const { port } = server.httpServer!.address() as AddressInfo;
         process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${port}/__mock-claude`;
         process.env.ANTHROPIC_API_KEY = 'mock-key';
-        server.config.logger.info(`  Claude is mocked: /api/deck-assistant and /api/teleprompter answer from tests/mock-claude.ts`);
+        server.config.logger.info(`  Claude is mocked: /api/deck-assistant, /api/teleprompter and lesson drafts answer from tests/mock-claude.ts`);
       });
       server.middlewares.use(async (req: IncomingMessage, res: ServerResponse, next: () => void) => {
         if (!req.url?.startsWith('/__mock-claude/v1/messages')) return next();

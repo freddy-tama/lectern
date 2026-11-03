@@ -72,10 +72,17 @@ const LESSON: PurposeWording = {
   topicPlaceholder: 'Photosynthesis for a Year 7 class: what plants need, what they make, and why it matters for us.',
   notesPlaceholder: '# Lesson title\n\n## First idea\n- A short point\n- Another point\nNotes: what you will say here\n\n## Quick check\nQ: A question?\nA) One  B) Two *',
   people: 'learners',
-  aiRules: `This is a lesson. Teach one idea at a time and check it before moving on.
-- Mix explaining and checking: put a question or quick-recall slide after each main idea. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
+  aiRules: `This is a lesson. Teach less and go deeper: one idea at a time, looked at closely and checked before moving on.
+- Open with a picture or a question about today's content only. Never preview a part this session doesn't cover.
+- Before a passage, a video or a demo, show 1-2 questions to look for, and answer them after it.
+- Ask about facts first, then meaning: what it says or what happened, then why and what it means. Ask more than one question in each section.
+- Before a key moment, show a picture and ask the room to look and predict what happens next.
+- Put a check after each main idea. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
+- Order practice from easy to hard: true or false, or putting things in order, then fill in the blanks, then retelling or explaining in their own words.
+- Never show an answer before the slide that asks for it: not in the opening, a heading, a caption or an earlier slide.
+- Never test one fact twice, for example a question on a date and then a true-or-false on the same date.
 - keyPoints are what a learner must remember, phrased so they make sense without the slide. checkQuestion and checkAnswer test understanding of that slide.
-- Close with takeaways and, when it fits, a closing slide of questions to answer before leaving.
+- Close with takeaways, then at most two follow-up tasks: one to practise what was taught, and one open or preview question about what comes next.
 - A typical pace is one slide per 2-4 minutes.`,
 };
 

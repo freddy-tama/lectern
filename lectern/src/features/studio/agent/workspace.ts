@@ -3,6 +3,7 @@
 // assistant sees its own changes. When the request ends, ops() turns the difference from the deck as it was
 // into proposals the presenter reviews. Nothing here touches the real deck.
 
+import { lessonIssues } from '../../../core/deck/check';
 import { type Deck, type Slide, deckMinutes, deckPurpose } from '../../../core/deck/types';
 import type { SlideLayout } from '../../../core/engine/boxes';
 import { layoutSlide } from '../../../core/engine/layout';
@@ -170,6 +171,9 @@ export class Workspace {
     const t = this.theme;
     const total = deckMinutes(d);
     const planned = this.plannedMinutes ?? d.minutes;
+    // A lesson's slides also carry what the lesson rules found: answers given away, one thing tested twice.
+    const taught = new Map<string, string[]>();
+    for (const issue of lessonIssues(d)) if (issue.slideId) taught.set(issue.slideId, [...(taught.get(issue.slideId) ?? []), issue.message]);
     const lines = [
       `Deck: “${d.title || 'Untitled'}” · a ${deckPurpose(d)} for ${d.audience === 'young' ? 'young learners aged 6-11' : d.audience === 'teen' ? 'teenagers' : 'adults'} · look: ${t.name}`,
       `${planned ? `Planned length: ${planned} min. ` : ''}The slides add up to ${total} min (hidden slides don't count).`,
@@ -177,7 +181,7 @@ export class Workspace {
       ...this.slides.map((s, i) => {
         const def = getKind(s.kind);
         const layout = def?.variants?.length ? ` · layout ${s.variant ?? def.variants[0].id}` : '';
-        const warn = this.warnings(s);
+        const warn = [...this.warnings(s), ...(taught.get(s.id) ?? [])];
         const extras = s.elements?.length ? ` · ${s.elements.length} element${s.elements.length === 1 ? '' : 's'}` : '';
         return `${i + 1}. ${s.id} · ${s.kind} · “${headingOf(s)}” · ${s.notes.minutes} min${layout}${extras}${s.hidden ? ' · hidden' : ''}${warn.length ? ` · ⚠ ${warn.join('; ')}` : ''}${this.state(s.id)}`;
       }),

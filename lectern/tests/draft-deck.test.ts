@@ -176,6 +176,22 @@ describe('catalogue and schemas', () => {
     expect(without).toContain('"contentJson" is a JSON object of its type\'s fields');
   });
 
+  it('marks true-or-false keys, keeps every core type with room for mods, and teaches lessons by the lesson rules', () => {
+    const lesson = readInput(body({ pictures: [] }));
+    const talk = readInput(body({ pictures: [], purpose: 'talk' }));
+    if (typeof lesson === 'string' || typeof talk === 'string') throw new Error('bad input');
+    const system = stagedRequest(lesson, OUTLINE_TASK).system;
+    const line = (k: string) => system.split('\n').find((l) => l.startsWith(`- ${k} (`))!;
+    expect(line('true-false')).toContain('items [objects: statement, isTrue (true/false), correction]');
+    expect(line('fill-in')).toContain('passage [textarea], bank [list], hideBank [toggle]');
+    expect(kinds.map((k) => k.kind)).toEqual(expect.arrayContaining(['true-false', 'fill-in', 'credits']));
+    expect(cleanCatalogue([...kindCatalogue(), ...Array.from({ length: 12 }, (_, i) => ({ kind: `mod.kind${i}`, label: 'M', description: '', fields: [] }))]).at(-1)?.kind).toBe('mod.kind11');
+    for (const rule of ['Never preview a part this session doesn\'t cover', 'Never show an answer before the slide that asks for it', 'Never test one fact twice', 'at most two follow-up tasks']) {
+      expect(system).toContain(rule);
+      expect(stagedRequest(talk, OUTLINE_TASK).system).not.toContain(rule);
+    }
+  });
+
   it('reads content only when it is a JSON object', () => {
     expect(readContent('{"title":"Hi"}')).toEqual({ title: 'Hi' });
     expect(readContent('{"title":"Hi"')).toBeNull();

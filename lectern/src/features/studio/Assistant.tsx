@@ -49,6 +49,12 @@ const emptyChat = (): Chat => ({ history: [], turns: [], kindsKey: null });
 /** What "Review the design" asks for. The system prompt has the checklist; this is the presenter's side of it. */
 export const REVIEW_REQUEST = 'Review the design of every slide and polish it. Look at the whole deck first, then fix what you see: text that overflows or crowds, empty picture frames, bare or monotonous slides, things that collide or sit awkwardly. Change layouts, move and resize boxes, add fitting pictures or your own drawings, and a little decoration where a slide is bare. Keep my wording unless it is too long to fit. Check the slides you changed before you finish.';
 
+/** A lesson's review also checks the teaching, which can mean rewording. */
+export const LESSON_REVIEW = ' This is a lesson, so check the teaching too, as your lesson checklist says: reword or reorder where an answer is given away or one thing is tested twice.';
+
+/** "Review the design" in the presenter's words, for this deck. */
+export const reviewRequest = (deck: Pick<Deck, 'purpose' | 'lessonId'> | null | undefined) => REVIEW_REQUEST + (deck && deckPurpose(deck) === 'lesson' ? LESSON_REVIEW : '');
+
 /** One chat per deck for this session: it survives closing the panel and leaving the studio. */
 const chats = new Map<string, Chat>();
 
@@ -283,7 +289,7 @@ export function useDeckAssistant({ deck, change, plannedMinutes, select, notify 
     if (next) preview(opKey(next)); else setFocus(null);
   }, [focusedOp, pending, discard, preview]);
 
-  const review = useCallback(() => send(REVIEW_REQUEST, { review: true }), [send]);
+  const review = useCallback(() => send(reviewRequest(live.current), { review: true }), [send]);
 
   return {
     chat, current, working, pending, full,

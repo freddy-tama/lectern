@@ -43,6 +43,8 @@ export interface CatalogueField {
   fields?: string[];
   /** For objects fields: the sub-fields that hold a picture. */
   images?: string[];
+  /** For objects fields: the sub-fields that are true or false. */
+  toggles?: string[];
   /** For objects fields: the most items. */
   max?: number;
 }
@@ -121,10 +123,13 @@ function json(data: unknown, status = 200) {
 const text = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 const record = (v: unknown) => (v && typeof v === 'object' && !Array.isArray(v) ? v : {}) as Record<string, unknown>;
 
+/** Most slide types a catalogue may list: the core ones and room for mods. */
+export const MAX_KINDS = 60;
+
 /** Keeps only well-formed kinds and fields from the client's catalogue. */
 export function cleanCatalogue(raw: unknown): CatalogueKind[] {
   if (!Array.isArray(raw)) return [];
-  return raw.slice(0, 40).flatMap((k): CatalogueKind[] => {
+  return raw.slice(0, MAX_KINDS).flatMap((k): CatalogueKind[] => {
     const kind = text(k?.kind, 60);
     if (!KIND.test(kind) || !Array.isArray(k?.fields)) return [];
     const fields = (k.fields as unknown[]).slice(0, 12).flatMap((f): CatalogueField[] => {
@@ -133,12 +138,15 @@ export function cleanCatalogue(raw: unknown): CatalogueKind[] {
       const type = text(o.type, 20);
       if (!KEY.test(key) || !['text', 'textarea', 'list', 'objects', 'toggle', 'image'].includes(type)) return [];
       const sub = Array.isArray(o.fields) ? (o.fields as unknown[]).map((s) => text(s, 40)).filter((s) => KEY.test(s)).slice(0, 6) : undefined;
-      const images = sub && Array.isArray(o.images) ? (o.images as unknown[]).map((s) => text(s, 40)).filter((s) => sub.includes(s)) : [];
+      const named = (v: unknown) => (sub && Array.isArray(v) ? (v as unknown[]).map((s) => text(s, 40)).filter((s) => sub.includes(s)) : []);
+      const images = named(o.images);
+      const toggles = named(o.toggles);
       const max = Number(o.max);
       return [{
         key, type, label: text(o.label, 60),
         ...(sub ? { fields: sub } : {}),
         ...(images.length ? { images } : {}),
+        ...(toggles.length ? { toggles } : {}),
         ...(type === 'objects' && Number.isInteger(max) && max > 0 ? { max: Math.min(max, 12) } : {}),
       }];
     });
@@ -255,12 +263,22 @@ export function audienceRule(audience: string, budget: Budget | null): string {
 const PURPOSES = ['lesson', 'talk', 'pitch', 'report'] as const;
 type Purpose = (typeof PURPOSES)[number];
 
-const PURPOSE_RULES: Record<Purpose, string> = {
-  lesson: `This is a lesson. Teach one idea at a time and check it before moving on.
-- Mix explaining and checking: put a question or quick-recall slide after each main idea. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
+/** How a lesson is taught: less, looked at closely, with questions in order and nothing given away. */
+export const LESSON_RULES = `This is a lesson. Teach less and go deeper: one idea at a time, looked at closely and checked before moving on.
+- Open with a picture or a question about today's content only. Never preview a part this session doesn't cover.
+- Before a passage, a video or a demo, show 1-2 questions to look for, and answer them after it.
+- Ask about facts first, then meaning: what it says or what happened, then why and what it means. Ask more than one question in each section.
+- Before a key moment, show a picture and ask the room to look and predict what happens next.
+- Put a check after each main idea. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
+- Order practice from easy to hard: true or false, or putting things in order, then fill in the blanks, then retelling or explaining in their own words.
+- Never show an answer before the slide that asks for it: not in the opening, a heading, a caption or an earlier slide.
+- Never test one fact twice, for example a question on a date and then a true-or-false on the same date.
 - keyPoints are what a learner must remember, phrased so they make sense without the slide. checkQuestion and checkAnswer test understanding of that slide.
-- Close with takeaways and, when it fits, a closing slide of questions to answer before leaving.
-- A typical pace is one slide per 2-4 minutes.`,
+- Close with takeaways, then at most two follow-up tasks: one to practise what was taught, and one open or preview question about what comes next.
+- A typical pace is one slide per 2-4 minutes.`;
+
+const PURPOSE_RULES: Record<Purpose, string> = {
+  lesson: LESSON_RULES,
   talk: `This is a talk. Give it a story arc: a hook, a few ideas that build on each other, and an ending the audience will remember.
 - One idea per slide. Keep slides sparse and visual; the story lives in notes.script.
 - keyPoints are the takeaways the audience should leave with. checkQuestion is an optional question to put to the audience, and checkAnswer is what you hope to hear or your own answer. Use them on a few slides, not all.
@@ -310,9 +328,10 @@ function fieldLine(f: CatalogueField, pictures: boolean): string[] {
   if (f.type === 'image') return pictures ? [`${f.key} [picture]`] : [];
   if (f.type !== 'objects') return [`${f.key} [${f.type}]`];
   const images = new Set(f.images ?? []);
+  const toggles = new Set(f.toggles ?? []);
   const all = f.fields?.length ? f.fields : ['label'];
   const sub = pictures || all.every((s) => images.has(s)) ? all : all.filter((s) => !images.has(s));
-  return [`${f.key} [objects: ${sub.map((s) => (pictures && images.has(s) ? `${s} (picture)` : s)).join(', ')}]`];
+  return [`${f.key} [objects: ${sub.map((s) => (pictures && images.has(s) ? `${s} (picture)` : toggles.has(s) ? `${s} (true/false)` : s)).join(', ')}]`];
 }
 
 function systemPrompt(kinds: CatalogueKind[], hints: string, purpose: Purpose, pictures: Picture[], staged = false) {
@@ -333,7 +352,8 @@ How to write a deck:
 - Mix slide types so the deck has rhythm. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
 - Use "reveal": true on points or steps that the presenter should build up one at a time.
 - Plan the minutes so the slides add up to the session length.
-- A slide's "contentJson" is a JSON object of its type's fields, written as a string. Give every field the type lists and no others: [text] and [textarea] take a string, [list] an array of strings, [objects] an array of objects with the listed keys, each a string, [toggle] true or false, and [number] a number.${canShow ? ' [picture] fields and (picture) keys take the id of a provided picture, or "".' : ''}
+- A slide's "contentJson" is a JSON object of its type's fields, written as a string. Give every field the type lists and no others: [text] and [textarea] take a string, [list] an array of strings, [objects] an array of objects with the listed keys, each a string except (true/false) keys, which take true or false, [toggle] true or false, and [number] a number.${canShow ? ' [picture] fields and (picture) keys take the id of a provided picture, or "".' : ''}
+- The title slide's "credit" line is for a second name the presenter gives, such as a supervisor. Leave it empty otherwise.
 - Facts in the provided material are authoritative; use them as written and do not contradict them. Do not invent statistics, quotes or sources; if you are not sure a figure is right, leave it out.
 - Write in the language of the topic and material.
 ${pictures.length ? PICTURE_RULES : '- The presenter adds pictures later.'}

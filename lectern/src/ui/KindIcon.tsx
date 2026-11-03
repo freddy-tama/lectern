@@ -1,5 +1,5 @@
 import {
-  AlignLeft, AppWindow, ChartGantt, Clapperboard, Cloud, Contact, Dices, Gauge, Tag, Gamepad2, Globe, LayoutDashboard, QrCode, Timer,
+  AlignLeft, AppWindow, CheckCheck, TextCursorInput, ChartGantt, Clapperboard, Cloud, Contact, Dices, Gauge, Tag, Gamepad2, Globe, LayoutDashboard, QrCode, Timer,
   BookOpen, Bookmark, ChartColumn, ChartLine, ChartNoAxesColumn, ChartPie, CircleHelp, ClipboardList, Code, Columns2, Copyright, DoorOpen,
   FileText, Filter, GalleryHorizontal, Grid2x2, Image, Images, Languages, LayoutGrid, List, ListChecks, ListOrdered, type LucideIcon,
   Megaphone, MessageSquareText, Milestone, Presentation, Puzzle, Quote, RefreshCw, Square, Table, Type, Users, Waypoints,
@@ -19,6 +19,8 @@ const ICONS: Record<string, LucideIcon> = {
   'circle-help': CircleHelp,
   'layout-grid': LayoutGrid,
   'list-checks': ListChecks,
+  'check-check': CheckCheck,
+  'text-cursor-input': TextCursorInput,
   'door-open': DoorOpen,
   puzzle: Puzzle,
   // Extra names mods can use.

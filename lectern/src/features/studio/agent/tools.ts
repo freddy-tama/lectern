@@ -102,7 +102,7 @@ function fieldLine(f: FieldSpec): string {
     case 'video': return `${f.key} (video, stays as it is)`;
     case 'activity': return `${f.key} (activity, stays as it is)`;
     case 'list': return `${f.key} (list of text${f.max ? `, at most ${f.max}` : ''}${f.correctKey ? `; ${f.correctKey} is the index of the ${f.markAs ?? 'correct'} item, or -1` : ''})`;
-    case 'objects': return `${f.key} (list${f.max ? ` of at most ${f.max}` : ''} of {${f.fields.map((x) => (x.type === 'image' ? `${x.key}: picture` : x.key)).join(', ')}})`;
+    case 'objects': return `${f.key} (list${f.max ? ` of at most ${f.max}` : ''} of {${f.fields.map((x) => (x.type === 'image' ? `${x.key}: picture` : x.type === 'toggle' ? `${x.key}: true/false` : x.key)).join(', ')}})`;
   }
 }
 

@@ -65,6 +65,7 @@ export function kindCatalogue() {
       ...(f.type === 'objects' ? {
         fields: f.fields.map((x) => x.key),
         images: f.fields.filter((x) => x.type === 'image').map((x) => x.key),
+        toggles: f.fields.filter((x) => x.type === 'toggle').map((x) => x.key),
         ...(f.max ? { max: f.max } : {}),
       } : {}),
     })),
