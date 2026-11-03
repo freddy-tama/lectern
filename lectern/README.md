@@ -132,7 +132,7 @@ npx cross-env LECTERN_PLUGINS=chinese npm run dev # any shell
 
 Two mods ship in [`plugins/`](plugins):
 
-- **`chinese`**: Characters (a 生字 grid), Word card and Sentences slides with pinyin; a Word list starter that turns `学 xue2 to study` lines into a deck; tone numbers become tone marks; P hides or shows pinyin while you present, without moving anything on the slide.
+- **`chinese`**: Characters (a 生字 grid), Word card and Sentences slides with pinyin; a Reading slide for the 课文 (each 段 indented two characters, pinyin over each character, up to four questions answered one click at a time, a scene picture that shrinks before it is left out); a Fill the blanks slide (选一选，填一填) whose word bank never blanks a name; a Word list starter that turns `学 xue2 to study` lines into a deck; tone numbers become tone marks; P hides or shows pinyin while you present, without moving anything on the slide.
 - **`lesson-plan`** (教案): adds 教学环节, 教学方法, 教师活动, 学生活动, 板书 and 设计意图 to each slide's key notes, and the 说明部分 (试讲人, 教学目标, 重点, 难点…) under **Details** in the studio. **Export → 教案 (Word)** writes an A4 lesson plan in the thirteen-item course format, with 教学过程 grouped into its six stages and each step tied to its slide.
 
 A deck made with a mod still opens without it. Its slides show a short note, and their content and key notes are kept.
