@@ -299,3 +299,26 @@ Every PR run re-runs the whole suite, and credits are limited, so the plan was c
 - **08:34** #17 was merged as `e399901`, and Vercel deploys it to production.
   - This entry went straight to main. A push to the PR would have started another paid run, and TestSprite skips pushes to main.
 - **Credits:** about 13.5 for this run. About 5.5 of the month's 150 are left, not enough for another full run.
+
+## The deck assistant becomes an agent
+
+**2026-10-25** (China time)
+
+- **Before the run:** the branch `claude/deck-agent` reworks the deck assistant and adds free elements to slides:
+  - **The assistant is an agent now.** The loop runs in the browser and makes one call to `/api/deck-assistant` per step.
+    - The server keeps the system prompt, the tools, the step cap and the bill.
+    - The browser runs the tool calls on a copy of the deck. It draws the slides as pictures, so Claude sees them as the audience will.
+    - Claude looks at the deck, changes it and looks again. It can change layouts, move boxes, add pictures, text, shapes and decorations, draw SVG pictures and find free photos.
+    - Every change is still a proposal that the presenter accepts or rejects.
+  - **Review the design:** a button in the assistant, and a next step on the Make result when AI is on.
+  - **Studio:**
+    - An **Insert** button in the stage tools adds a picture, a found picture, a drawing, a text box, a shape or a decoration to any slide. These elements can be dragged, resized, recoloured, restacked and deleted.
+    - A picture dropped on a slide with no picture frame now goes on that slide instead of starting a new slide.
+  - **Make:** each file with pictures gets a menu for what the pictures are for. With AI off, as on the previews, it offers **Put on slides** (the default, as before) and **Leave out**.
+  - **Decorations:** 18 decoration motifs, and 7 new decorations for the looks.
+  - The vitest suite (894 tests), the typecheck and `npm run build` passed. The agent was checked in the browser pane against the mock AI (`npm run dev:mock-ai`); real Claude hasn't been tried yet.
+- **What the suite may notice:**
+  - Studio flows see a new **Insert** button next to the existing stage tools.
+  - Make flows that add a picture see the new menu beside the file.
+  - The assistant and the review need AI, which the previews don't have.
+- **This run:** only about 5.5 of the month's 150 credits are left, and a full run takes about 13.5. TestSprite may stop part-way or not run at all.

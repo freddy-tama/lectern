@@ -2,6 +2,8 @@
 // or to open in another browser. Opening one always makes a new deck.
 
 import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, type Slide, deckPurpose, normalizeNotes, uid } from '../core/deck/types';
+import { cleanElements } from '../core/engine/elements';
+import { cleanOverride } from '../core/engine/overrides';
 import { type Theme, allThemes, getTheme } from '../core/engine/themes';
 import { registerCoreKinds } from '../core/kinds/core-kinds';
 import { getKind } from '../core/kinds/registry';
@@ -96,13 +98,17 @@ export function normalizeDeck(value: unknown): Deck | null {
     let id = typeof s.id === 'string' && s.id ? s.id : uid('s');
     if (seen.has(id)) id = uid('s');
     seen.add(id);
+    const elements = cleanElements(s.elements);
     slides.push({
       id,
       kind: s.kind,
       content: s.content && typeof s.content === 'object' && !Array.isArray(s.content) ? s.content as Record<string, unknown> : {},
       notes: normalizeNotes(s.notes),
       ...(typeof s.variant === 'string' && s.variant ? { variant: s.variant } : {}),
+      ...(s.variantPinned === true ? { variantPinned: true } : {}),
       ...(s.hidden === true ? { hidden: true } : {}),
+      ...overridesOf(s.overrides),
+      ...(elements.length ? { elements } : {}),
     });
   }
   const now = Date.now();
@@ -119,9 +125,21 @@ export function normalizeDeck(value: unknown): Deck | null {
     ...(minutes ? { minutes } : {}),
     createdAt: positive(d.createdAt) ?? now,
     updatedAt: positive(d.updatedAt) ?? now,
+    ...(d.autoStyle === true ? { autoStyle: true } : {}),
     ...(typeof d.source === 'string' && d.source ? { source: d.source } : {}),
     ...(d.extra && typeof d.extra === 'object' && !Array.isArray(d.extra) ? { extra: d.extra as Deck['extra'] } : {}),
   };
+}
+
+/** Boxes moved by hand, as they were saved. */
+function overridesOf(raw: unknown): Pick<Slide, 'overrides'> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: NonNullable<Slide['overrides']> = {};
+  for (const [id, o] of Object.entries(raw)) {
+    const clean = cleanOverride(o);
+    if (clean && id.length <= 80) out[id] = clean;
+  }
+  return Object.keys(out).length ? { overrides: out } : {};
 }
 
 function isSharedAsset(value: unknown): value is SharedAsset {

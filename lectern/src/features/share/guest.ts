@@ -1,21 +1,32 @@
 // The live link on a phone: joins a shared deck by code, saves it on the phone so
 // it keeps working offline, and follows (or, for the presenter, drives) the slides.
+//
+// Staying connected: a first join tries a few times before it gives up, since the
+// connection service and the network often fail once and work the next time. Once
+// joined, a link that drops is tried again and again, waiting a little longer each
+// time, and right away when the phone comes back on screen or back online. The
+// computer pings every few seconds, so a link that died without closing (a phone
+// that slept, a network that changed) is noticed and made again.
 
 import type { DataConnection, Peer } from 'peerjs';
 import { useSyncExternalStore } from 'react';
 import { registerTheme } from '../../core/engine/themes';
 import {
   type CloudResult, type GuestMessage, type HostMessage, type JoinMetadata, type LiveState, PartCollector, type PollResult, type Role,
-  type SharePackage, type ShareOptions, cleanWord, deviceLabel, isPackage, peerIdFor, receivedAsset, wordKey,
+  SILENT_AFTER, type SharePackage, type ShareOptions, cleanWord, deviceLabel, isPackage, peerIdFor, receivedAsset, wordKey,
 } from '../../core/share/protocol';
 import type { PlayerView, QuizStage, QuizView } from '../../core/share/quiz';
 import { db } from '../../data/db';
 import { normalizeLook, saveLook } from '../../data/looks';
-import { openPeer, peerErrorMessage } from './peer';
+import { type JoinTrouble, backoff, openPeer, troubleMessage, troubleOf } from './peer';
 
 export interface LinkSnapshot {
   status: 'idle' | 'connecting' | 'receiving' | 'ready' | 'reconnecting' | 'ended' | 'error';
   error: string | null;
+  /** Tries that failed in a row, while connecting or reconnecting. */
+  attempt: number;
+  /** What went wrong on the last failed try. */
+  trouble: JoinTrouble | null;
   code: string | null;
   role: Role | null;
   title: string;
@@ -47,7 +58,7 @@ export interface SharedRecord {
 }
 
 const idle = (): LinkSnapshot => ({
-  status: 'idle', error: null, code: null, role: null, title: '', progress: 0, deckId: null, options: null, state: null, votes: {}, myVotes: {},
+  status: 'idle', error: null, attempt: 0, trouble: null, code: null, role: null, title: '', progress: 0, deckId: null, options: null, state: null, votes: {}, myVotes: {},
   clouds: {}, myWords: {}, quiz: null, quizAt: 0, stage: 'play', you: null, myAnswers: {}, name: playerName(),
 });
 
@@ -82,11 +93,29 @@ let conn: DataConnection | null = null;
 let token: string | undefined;
 let collector: PartCollector | null = null;
 let mirror: BroadcastChannel | null = null;
-let retries = 0;
 let retryTimer: number | undefined;
-let welcomeTimer: number | undefined;
+let attemptTimer: number | undefined;
 let stallTimer: number | undefined;
+let watchTimer: number | undefined;
 let everReady = false;
+/** Counts tries, so events from an older try are ignored. */
+let run = 0;
+/** A try is under way: opening a peer, or waiting for the computer's welcome. */
+let trying = false;
+/** When the computer last sent anything, and whether it sends pings (older versions don't). */
+let lastHeard = 0;
+let pinged = false;
+/** Since when the computer's code has been missing, after this phone had joined. */
+let missingSince: number | null = null;
+/** The service said the code was missing on some try of this first join. */
+let sawMissing = false;
+
+/** Tries a first join gets before it shows an error. */
+const FIRST_TRIES = 4;
+/** How long one try waits for the computer's welcome. */
+const ATTEMPT_MS = 15_000;
+/** A code that stays missing this long after joining means the presenter stopped sharing. */
+const MISSING_ENDS = 75_000;
 const mirrorId = `live-link-${Math.random().toString(36).slice(2)}`;
 
 /**
@@ -142,7 +171,9 @@ async function onHostMessage(msg: HostMessage) {
   if (!msg || typeof msg !== 'object') return;
   switch (msg.t) {
     case 'welcome': {
-      window.clearTimeout(welcomeTimer);
+      window.clearTimeout(attemptTimer);
+      trying = false;
+      missingSince = null;
       set({ role: msg.role, title: msg.title });
       if (msg.same || msg.parts === 0) {
         const known = (await db.settings.get(linkKey(snap.code ?? '', msg.role)))?.value as { deckId?: string } | undefined;
@@ -193,6 +224,10 @@ async function onHostMessage(msg: HostMessage) {
     case 'you':
       set({ you: msg.you });
       return;
+    case 'ping':
+      pinged = true;
+      sendToHost({ t: 'pong', at: msg.at });
+      return;
     case 'bye':
       end();
       return;
@@ -203,26 +238,29 @@ async function onHostMessage(msg: HostMessage) {
 function watchStall() {
   window.clearTimeout(stallTimer);
   stallTimer = window.setTimeout(() => {
-    if (!collector) return;
-    collector = null;
-    const c = conn;
-    conn = null;
-    try { c?.close(); } catch { /* already closed */ }
-    scheduleRetry();
+    if (collector) failed('silent');
   }, 10_000);
 }
 
 function ready(deckId: string) {
   everReady = true;
-  retries = 0;
-  set({ status: 'ready', deckId, progress: 1, error: null });
+  set({ status: 'ready', deckId, progress: 1, error: null, attempt: 0, trouble: null });
   openMirror(deckId);
 }
 
-function end() {
+function clearTimers() {
   window.clearTimeout(retryTimer);
-  window.clearTimeout(welcomeTimer);
+  window.clearTimeout(attemptTimer);
   window.clearTimeout(stallTimer);
+  window.clearInterval(watchTimer);
+  retryTimer = attemptTimer = stallTimer = watchTimer = undefined;
+}
+
+function end() {
+  clearTimers();
+  unwatch();
+  run++;
+  trying = false;
   const p = peer;
   peer = null;
   conn = null;
@@ -230,46 +268,133 @@ function end() {
   set({ status: everReady ? 'ended' : 'error', error: everReady ? null : 'The presenter stopped sharing.' });
 }
 
+/** Lets go of the current link, if any, and ignores what it still sends. */
+function dropLink() {
+  const c = conn;
+  conn = null;
+  collector = null;
+  try { c?.close(); } catch { /* already closed */ }
+}
+
 async function connect() {
   const code = snap.code;
-  if (!code) return;
+  if (!code || trying) return;
+  const mine = ++run;
+  trying = true;
+  window.clearTimeout(attemptTimer);
+  dropLink();
+  let p: Peer;
   try {
-    if (!peer || peer.destroyed) peer = await openPeer();
-    if (snap.code !== code) return;
-    peer.removeAllListeners('error');
-    peer.on('error', (err) => {
-      if ((err as { type?: string }).type === 'peer-unavailable') {
-        if (everReady) end();
-        else set({ status: 'error', error: peerErrorMessage(err) });
-      } else if (everReady) {
-        scheduleRetry();
-      } else {
-        set({ status: 'error', error: peerErrorMessage(err) });
-      }
-    });
-    peer.on('disconnected', () => { if (peer && !peer.destroyed) peer.reconnect(); });
-    const known = (await db.settings.get(linkKey(code, token ? 'presenter' : 'audience')))?.value as { updatedAt?: number } | undefined;
-    const metadata: JoinMetadata = { token, have: known?.updatedAt, device: deviceLabel(navigator.userAgent), player: playerId(), name: snap.name || undefined };
-    const c = peer.connect(peerIdFor(code), { reliable: true, serialization: 'json', metadata });
-    conn = c;
-    c.on('data', (raw) => { void onHostMessage(raw as HostMessage); });
-    c.on('close', () => { if (conn === c && snap.status !== 'ended' && snap.status !== 'idle') scheduleRetry(); });
-    welcomeTimer = window.setTimeout(() => {
-      if (conn === c && snap.status === 'connecting') set({ status: 'error', error: 'The presenter’s computer didn’t answer. Make sure it’s still sharing, then try again.' });
-    }, 20_000);
+    // A peer that lost the connection service can't make new links: start a fresh one.
+    if (!peer || peer.destroyed || peer.disconnected) {
+      peer?.destroy();
+      peer = null;
+      peer = await openPeer(undefined, 12_000);
+    }
+    p = peer;
   } catch (err) {
-    if (everReady) scheduleRetry();
-    else set({ status: 'error', error: peerErrorMessage(err) });
+    if (mine === run) failed(troubleOf(err));
+    return;
+  }
+  if (mine !== run || snap.code !== code) return;
+  p.removeAllListeners('error');
+  p.on('error', (err) => {
+    if (mine !== run) return;
+    const trouble = troubleOf(err);
+    // Once joined, losing the service doesn't matter: the link itself goes straight to the computer.
+    if (trouble === 'missing' || trying) failed(trouble);
+  });
+  const known = (await db.settings.get(linkKey(code, token ? 'presenter' : 'audience')))?.value as { updatedAt?: number } | undefined;
+  if (mine !== run) return;
+  const metadata: JoinMetadata = { token, have: known?.updatedAt, device: deviceLabel(navigator.userAgent), player: playerId(), name: snap.name || undefined };
+  const c = p.connect(peerIdFor(code), { reliable: true, serialization: 'json', metadata });
+  conn = c;
+  let opened = false;
+  c.on('open', () => { opened = true; });
+  c.on('data', (raw) => {
+    if (conn !== c) return;
+    lastHeard = Date.now();
+    void onHostMessage(raw as HostMessage);
+  });
+  // A link that never opened was blocked by the network; one that opened and then closed was lost.
+  c.on('close', () => { if (conn === c) failed(opened ? 'silent' : 'blocked'); });
+  c.on('error', (err) => { if (conn === c && (err as { type?: string }).type !== 'message-too-big') failed(opened ? 'silent' : 'blocked'); });
+  attemptTimer = window.setTimeout(() => {
+    if (conn === c && trying) failed(opened ? 'silent' : 'blocked');
+  }, ATTEMPT_MS);
+}
+
+/** A try failed, or a link was lost: try again soon, or give up. */
+function failed(trouble: JoinTrouble) {
+  if (['idle', 'ended', 'error'].includes(snap.status)) return;
+  run++;
+  trying = false;
+  window.clearTimeout(attemptTimer);
+  window.clearTimeout(stallTimer);
+  dropLink();
+  const attempt = snap.attempt + 1;
+  if (!everReady) {
+    // The service answers "missing" once per peer and code: the next try needs a fresh peer to hear it again.
+    peer?.destroy();
+    peer = null;
+    if (trouble === 'missing') sawMissing = true;
+    // A try that timed out after others heard "missing" was most likely missing too.
+    if (trouble === 'blocked' && sawMissing) trouble = 'missing';
+    if (attempt >= FIRST_TRIES) {
+      clearTimers();
+      unwatch();
+      set({ status: 'error', error: troubleMessage(trouble), trouble, attempt });
+      return;
+    }
+  }
+  if (everReady && trouble === 'missing') {
+    // The computer left the service: it stopped sharing without a goodbye, or it is reconnecting.
+    missingSince ??= Date.now();
+    if (Date.now() - missingSince > MISSING_ENDS) { end(); return; }
+  }
+  set({ status: everReady ? 'reconnecting' : 'connecting', attempt, trouble });
+  scheduleRetry();
+}
+
+function scheduleRetry(now = false) {
+  window.clearTimeout(retryTimer);
+  retryTimer = undefined;
+  // A phone in a pocket waits, and tries again as soon as it's back on screen.
+  if (!now && document.visibilityState === 'hidden') return;
+  const wait = now ? 0 : backoff(snap.attempt, 800, everReady ? 10_000 : 3000);
+  retryTimer = window.setTimeout(() => { retryTimer = undefined; void connect(); }, wait);
+}
+
+/** Back on screen or back online: check the link, and don't wait for the next try. */
+function wake() {
+  if (document.visibilityState === 'hidden') return;
+  if (snap.status === 'connecting' || snap.status === 'reconnecting') {
+    if (!trying) scheduleRetry(true);
+  } else if (snap.status === 'ready' && (!conn?.open || (pinged && Date.now() - lastHeard > SILENT_AFTER))) {
+    failed('silent');
   }
 }
 
-function scheduleRetry() {
-  if (snap.status === 'ended' || snap.status === 'idle') return;
-  if (retries >= 12) { end(); return; }
-  retries += 1;
-  set({ status: everReady ? 'reconnecting' : 'connecting' });
-  window.clearTimeout(retryTimer);
-  retryTimer = window.setTimeout(() => { void connect(); }, Math.min(8000, 1500 * retries));
+/** While the phone is on screen, a link that went quiet is made again. */
+function check() {
+  if (document.visibilityState === 'hidden' || snap.status !== 'ready') return;
+  if (!conn || (pinged && Date.now() - lastHeard > SILENT_AFTER)) failed('silent');
+}
+
+const onVisibility = () => wake();
+
+function watch() {
+  window.clearInterval(watchTimer);
+  watchTimer = window.setInterval(check, 3000);
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('online', wake);
+  window.addEventListener('pageshow', wake);
+}
+
+function unwatch() {
+  document.removeEventListener('visibilitychange', onVisibility);
+  window.removeEventListener('online', wake);
+  window.removeEventListener('pageshow', wake);
 }
 
 export const liveLink = {
@@ -280,19 +405,22 @@ export const liveLink = {
     liveLink.leave();
     token = presenterToken;
     everReady = false;
-    retries = 0;
+    pinged = false;
+    lastHeard = 0;
+    missingSince = null;
+    sawMissing = false;
     set({ ...idle(), status: 'connecting', code });
+    watch();
     void connect();
   },
   leave() {
-    window.clearTimeout(retryTimer);
-    window.clearTimeout(welcomeTimer);
-    window.clearTimeout(stallTimer);
-    try { conn?.close(); } catch { /* closed */ }
+    clearTimers();
+    unwatch();
+    run++;
+    trying = false;
+    dropLink();
     peer?.destroy();
     peer = null;
-    conn = null;
-    collector = null;
     mirror?.close();
     mirror = null;
     set(idle());

@@ -29,10 +29,21 @@ function base64(blob: Blob): Promise<string> {
   });
 }
 
-/** A small JPEG of a picture, base64, for the AI to see (about 30–80 KB). */
-export async function pictureForAi(file: File): Promise<{ mime: 'image/jpeg'; data: string } | null> {
+/** The most base64 one picture may take in a drafting request (the server refuses more). */
+const MAX_AI_PICTURE = 390_000;
+
+/**
+ * A JPEG of a picture, base64, for the AI to see. A picture to show only needs to be recognised (about
+ * 30–80 KB); one the AI may have to read, such as a photographed page, is sharper, as far as the limit allows.
+ */
+export async function pictureForAi(file: File, role: 'show' | 'read' | 'auto' = 'show'): Promise<{ mime: 'image/jpeg'; data: string } | null> {
+  const tries: [number, number][] = role === 'show' ? [[640, 0.72]] : [[1500, 0.72], [1200, 0.66], [900, 0.62]];
   try {
-    return { mime: 'image/jpeg', data: await base64(await draw(file, 640, 'image/jpeg', 0.72)) };
+    for (const [max, quality] of tries) {
+      const data = await base64(await draw(file, max, 'image/jpeg', quality));
+      if (data.length <= MAX_AI_PICTURE) return { mime: 'image/jpeg', data };
+    }
+    return null;
   } catch {
     return null;
   }

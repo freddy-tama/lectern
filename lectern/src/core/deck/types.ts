@@ -54,6 +54,8 @@ export interface Slide<C = Record<string, unknown>> {
    * The layout places everything first; these replace the places of the boxes named.
    */
   overrides?: Record<string, BoxOverride>;
+  /** Pictures, drawings, shapes, text and decorations placed freely on the slide, over or under its layout. */
+  elements?: SlideElement[];
 }
 
 /** Where a box goes instead of where its layout put it. */
@@ -64,7 +66,73 @@ export interface BoxOverride {
   h: number;
   /** Text and markers scale by this, from resizing by a corner. 1 when missing. */
   scale?: number;
+  /** Left off this slide: a decoration or a box nobody wants here. */
+  hidden?: boolean;
 }
+
+/** A theme colour by name, so elements follow a change of look, or a fixed "#rrggbb". */
+export type ColorRef = 'accent' | 'accent2' | 'ink' | 'muted' | 'surface' | 'bg' | 'line' | 'onAccent' | 'sectionBg' | 'sectionInk' | 'good' | (string & {});
+
+interface ElementBase {
+  id: string;
+  /** Place and size in canvas px (1920 × 1080). */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** "back" draws it under the slide's own content; otherwise it sits on top. */
+  layer?: 'back' | 'front';
+  opacity?: number;
+  /** Reveal step, as for the slide's own boxes. */
+  step?: number;
+}
+
+export interface PictureElement extends ElementBase {
+  type: 'picture';
+  /** "asset:<id>", a data: URL or an http(s) URL. SVG drawings are pictures too. */
+  src: string;
+  fit?: 'cover' | 'contain';
+  radius?: number;
+  alt?: string;
+}
+
+export interface ShapeElement extends ElementBase {
+  type: 'shape';
+  shape: 'rect' | 'ellipse' | 'line';
+  fill?: ColorRef;
+  stroke?: ColorRef;
+  strokeWidth?: number;
+  radius?: number;
+  dash?: boolean;
+}
+
+export interface TextElement extends ElementBase {
+  type: 'text';
+  text: string;
+  /** Largest type size in canvas px; the text shrinks to fit its box. */
+  size?: number;
+  color?: ColorRef;
+  font?: 'display' | 'body' | 'mono';
+  weight?: number;
+  italic?: boolean;
+  align?: 'left' | 'center' | 'right';
+  valign?: 'top' | 'middle' | 'bottom';
+  /** A card behind the text. */
+  fill?: ColorRef;
+}
+
+export interface DecorElement extends ElementBase {
+  type: 'decor';
+  /** A motif from the decoration library (src/core/engine/decor.ts). */
+  motif: string;
+  /** Up to three colours; theme accents when missing. */
+  colors?: ColorRef[];
+  seed?: number;
+  /** Mirrors the motif, to put a corner piece in another corner or hang a band from the top. */
+  flip?: 'x' | 'y' | 'xy';
+}
+
+export type SlideElement = PictureElement | ShapeElement | TextElement | DecorElement;
 
 export interface Deck {
   id: string;

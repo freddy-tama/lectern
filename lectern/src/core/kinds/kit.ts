@@ -2,6 +2,7 @@
 
 import type { Audience } from '../deck/types';
 import { type Box, type FontRole, type ImageBox, type ShapeBox, type TextBox, CANVAS_H, CANVAS_W } from '../engine/boxes';
+import { type DecorColors, type DecorMotif, decorDataUrl } from '../engine/decor';
 import { type Measure, cssFont, fitText, wrapLines } from '../engine/measure';
 import { type Theme, fontFamily, fontWeight } from '../engine/themes';
 
@@ -244,9 +245,91 @@ function decoration(ctx: LayoutContext, mode: 'content' | 'title' | 'section'): 
         shape({ id: 'deco-a', shape: 'ellipse', x: CANVAS_W - (big ? 380 : 170), y: -(big ? 240 : 150), w: big ? 620 : 300, h: big ? 620 : 300, fill: mode === 'section' ? c.surface : c.accent2, opacity: mode === 'section' ? 0.5 : 0.9 }),
         shape({ id: 'deco-b', shape: 'ellipse', x: -(big ? 200 : 110), y: CANVAS_H - (big ? 230 : 120), w: big ? 420 : 220, h: big ? 420 : 220, fill: c.accent, opacity: mode === 'section' ? 0.35 : 0.22 }),
       ];
+    case 'confetti':
+      return mode === 'content'
+        ? [
+          motif(ctx, mode, 'a', 'confetti', topX(ctx, 'right', 420), 0, 420, 96, 3),
+          motif(ctx, mode, 'b', 'confetti', 0, 640, 128, 440, 4),
+          motif(ctx, mode, 'c', 'confetti', M.right, 600, 128, 480, 5),
+        ]
+        : [
+          motif(ctx, mode, 'a', 'confetti', CANVAS_W - 860, 0, 860, 540, 1),
+          motif(ctx, mode, 'b', 'confetti', 0, CANVAS_H - 360, 600, 360, 2),
+        ];
+    case 'waves':
+      return mode === 'content'
+        ? [motif(ctx, mode, 'a', 'waves', topX(ctx, 'left', 1100), 0, 1100, 84, 1, 'y')]
+        : [motif(ctx, mode, 'a', 'waves', 0, CANVAS_H - (big ? 300 : 260), CANVAS_W, big ? 300 : 260, 1)];
+    case 'sprigs':
+      return mode === 'content'
+        ? [
+          motif(ctx, mode, 'a', 'sprigs', 0, 580, 128, 500, 1),
+          motif(ctx, mode, 'b', 'sprigs', M.right, 0, 128, 400, 2, 'y'),
+        ]
+        : [
+          motif(ctx, mode, 'a', 'sprigs', CANVAS_W - 500, CANVAS_H - 500, 500, 500, 1),
+          motif(ctx, mode, 'b', 'sprigs', CANVAS_W - 320, 0, 320, 320, 2, 'y'),
+        ];
+    case 'sparkles':
+      return mode === 'content'
+        ? [
+          motif(ctx, mode, 'a', 'sparkles', topX(ctx, 'right', 420), 0, 420, 96, 1),
+          motif(ctx, mode, 'b', 'sparkles', M.right, 620, 128, 360, 2),
+        ]
+        : [
+          motif(ctx, mode, 'a', 'sparkles', CANVAS_W - 760, 0, 760, 520, 1),
+          motif(ctx, mode, 'b', 'sparkles', CANVAS_W - 380, CANVAS_H - 260, 380, 260, 2),
+        ];
+    case 'ribbons':
+      return mode === 'content'
+        ? [motif(ctx, mode, 'a', 'ribbons', topX(ctx, 'left', 1200), 0, 1200, 88, 1)]
+        : [motif(ctx, mode, 'a', 'ribbons', 0, CANVAS_H - (big ? 360 : 300), CANVAS_W, big ? 360 : 300, 1)];
+    case 'mosaic':
+      return mode === 'content'
+        ? [
+          motif(ctx, mode, 'a', 'mosaic', topX(ctx, 'right', 380), 0, 380, 96, 1, topSide(ctx, 'right') === 'right' ? undefined : 'x'),
+          motif(ctx, mode, 'b', 'mosaic', 0, 760, 128, 320, 2, 'xy'),
+        ]
+        : [
+          motif(ctx, mode, 'a', 'mosaic', CANVAS_W - 620, 0, 620, 620, 1),
+          motif(ctx, mode, 'b', 'mosaic', CANVAS_W - 340, CANVAS_H - 340, 340, 340, 2, 'y'),
+        ];
+    case 'circuit':
+      return mode === 'content'
+        ? [
+          motif(ctx, mode, 'a', 'circuit', M.right, 0, 128, 420, 1),
+          motif(ctx, mode, 'b', 'circuit', M.right, 660, 128, 420, 2),
+        ]
+        : [
+          motif(ctx, mode, 'a', 'circuit', CANVAS_W - 820, 0, 820, 480, 1),
+          motif(ctx, mode, 'b', 'circuit', CANVAS_W - 700, CANVAS_H - 360, 700, 360, 2, 'y'),
+        ];
     default:
       return [];
   }
+}
+
+/** Colours a decoration motif is drawn in: the look's accents, or the section divider's ink. */
+function decorColors(ctx: LayoutContext, mode: 'content' | 'title' | 'section'): DecorColors {
+  const c = ctx.theme.colors;
+  if (mode === 'section') return { a: c.sectionInk, b: c.surface, c: c.sectionInk };
+  return { a: c.accent, b: c.accent2, c: c.muted };
+}
+
+/** A decoration motif as an image box. The part picks the box id and, with the seed, the picture. */
+function motif(ctx: LayoutContext, mode: 'content' | 'title' | 'section', part: string, id: DecorMotif, x: number, y: number, w: number, h: number, seed: number, flip?: 'x' | 'y' | 'xy'): ImageBox {
+  return { type: 'image', id: `deco-${id}-${part}`, src: decorDataUrl(id, decorColors(ctx, mode), w, h, seed, flip), x, y, w, h, fit: 'contain' };
+}
+
+/** Which side the logo leaves free along the top edge, starting from the side you would like. */
+function topSide(ctx: LayoutContext, prefer: 'left' | 'right'): 'left' | 'right' {
+  const pos = ctx.theme.logo ? ctx.theme.logoPosition ?? 'top-right' : '';
+  return pos === `top-${prefer}` ? (prefer === 'left' ? 'right' : 'left') : prefer;
+}
+
+/** Left edge of a w-wide ornament hugging the top-left or top-right corner, whichever the logo leaves free. */
+function topX(ctx: LayoutContext, prefer: 'left' | 'right', w: number) {
+  return topSide(ctx, prefer) === 'right' ? CANVAS_W - w : 0;
 }
 
 /** The theme's logo in its corner, sized to the image's proportions. */

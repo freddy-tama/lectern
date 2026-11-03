@@ -176,6 +176,7 @@ export function kindSamples(): KindSample[] {
     if (def.kind === 'contact') return { ...created(def, { ...def.create(), link: `${qrOrigin()}/welcome` }), def };
     if (def.kind === 'wordcloud') return { ...created(def, { ...def.create(), answers: SAMPLE_CLOUD }), def };
     if (def.kind === 'screenshot') return { ...created(def, { ...def.create(), image: '/samples/app-screen.svg' }), def };
+    if (def.kind === 'designed') return { ...created(def, { ...def.create(), image: '/samples/designed-slide.svg', title: 'Our solar system', text: 'Our solar system\nEight planets, one star' }), def };
     const id = KIND_SAMPLES[def.kind];
     const found = id ? sample(id) : null;
     return { ...(found ?? created(def, def.create())), def, tile: TEXT_TILES[def.kind] };

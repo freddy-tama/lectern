@@ -96,7 +96,7 @@ export interface DraftRequest {
   material?: string;
   title?: string;
   answers?: { question: string; answer: string }[];
-  pictures?: { id: string; name: string; mime: string; data: string }[];
+  pictures?: { id: string; name: string; mime: string; data: string; role?: 'auto' | 'show' | 'read' }[];
   kinds: unknown[];
   hints: string;
   /** How much one slide holds for the audience, from the layout rules (DENSITY in core/kinds/kit). */

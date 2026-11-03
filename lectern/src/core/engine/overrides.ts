@@ -27,6 +27,7 @@ export function cleanOverride(o: unknown): BoxOverride | null {
     w: width,
     h: height,
     ...(Number.isFinite(scale) && scale > 0 && Math.abs(scale - 1) > 0.001 ? { scale: Math.round(Math.min(6, Math.max(0.2, scale)) * 1000) / 1000 } : {}),
+    ...(v.hidden === true ? { hidden: true } : {}),
   };
 }
 
@@ -100,7 +101,9 @@ export function applyOverrides(boxes: Box[], overrides: Record<string, BoxOverri
   }
   if (!valid.size) return boxes;
   const original = new Map(boxes.map((b) => [b.id, b]));
-  return boxes.map((box) => {
+  // A box left off the slide takes the boxes that move with it along.
+  const gone = (box: Box) => valid.get(box.id)?.hidden || Boolean(box.moveWith && valid.get(box.moveWith)?.hidden);
+  return boxes.filter((box) => !gone(box)).map((box) => {
     const own = valid.get(box.id);
     if (own) return place(ctx, box, own, own.scale ?? 1);
     const lead = box.moveWith ? original.get(box.moveWith) : undefined;

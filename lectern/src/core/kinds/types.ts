@@ -79,6 +79,8 @@ export interface SlideKindDefinition<C extends Record<string, unknown> = Record<
   autoVariant?(content: C, auto: AutoContext): string | undefined;
   /** The plugin that registered this kind. Empty for core kinds. */
   plugin?: string;
+  /** False keeps the kind out of AI drafting, for slides only the presenter can supply (a picture of a finished slide). */
+  draft?: false;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -25,6 +25,21 @@ export interface Source {
   recordingId?: string;
   /** Pictures: the file itself, or pictures found inside a document. */
   pictures: File[];
+  /** What its pictures are for: to show on slides, only to read (a page, a scan), or for the AI to decide. */
+  pictureRole?: PictureRole;
+}
+
+export type PictureRole = 'auto' | 'show' | 'read';
+
+export const PICTURE_ROLES: { id: PictureRole; label: string; detail: string }[] = [
+  { id: 'auto', label: 'AI decides', detail: 'Pages and screenshots are read, photos and drawings can go on slides' },
+  { id: 'show', label: 'Put on slides', detail: 'These pictures appear in the deck' },
+  { id: 'read', label: 'Only read', detail: 'Source material, such as book pages or notes: never shown' },
+];
+
+/** The pictures of the ready files, each with what it is for, in the order they are numbered (pic1, pic2…). */
+export function picturesOf(sources: Pick<Source, 'pictures' | 'pictureRole'>[], max = 8): { file: File; role: PictureRole }[] {
+  return sources.flatMap((s) => s.pictures.map((file) => ({ file, role: s.pictureRole ?? 'auto' }))).slice(0, max);
 }
 
 /** What the file picker offers: every document type, pictures, and audio or video. */
@@ -87,7 +102,7 @@ export function hasMaterial(sources: Pick<Source, 'kind' | 'text' | 'pictures'>[
  * A deck draft built offline from the files' headings, for servers without AI.
  * One file reads as it is; several become sections of one deck.
  */
-export function offlineDraft(sources: Pick<Source, 'file' | 'kind' | 'text' | 'pictures'>[], title: string): DeckDraft {
+export function offlineDraft(sources: Pick<Source, 'file' | 'kind' | 'text' | 'pictures' | 'pictureRole'>[], title: string): DeckDraft {
   const parts = sources.filter((s) => s.kind !== 'picture' && s.text.trim());
   // A document with its own title opens the deck; the other files follow as sections.
   const lead = parts.find((p) => p.kind === 'doc' && /^# \S/m.test(p.text));
@@ -100,7 +115,8 @@ export function offlineDraft(sources: Pick<Source, 'file' | 'kind' | 'text' | 'p
     ? parts[0]!.text
     : [lead ? lead.text : `# ${title}`, ...rest.map(section)].join('\n\n');
   const draft = outlineToDraft(outline, title);
-  const pictures = sources.flatMap((s) => s.pictures).slice(0, 4);
+  // Without AI nothing can tell a page from a photo: every picture is shown unless it was marked to be read only.
+  const pictures = sources.filter((s) => s.pictureRole !== 'read').flatMap((s) => s.pictures).slice(0, 4);
   const opening = draft.slides[0];
   if (pictures.length === 1 && opening?.kind === 'title' && !opening.content.image) {
     opening.content = { ...opening.content, image: 'pic1' };

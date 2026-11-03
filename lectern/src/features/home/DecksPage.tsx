@@ -1,7 +1,7 @@
 import { useLiveQuery } from 'dexie-react-hooks';
-import { FileUp, Layers, Plus, Search } from 'lucide-react';
+import { FileUp, Layers, Plus, Presentation, Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { PURPOSES, type DeckPurpose, deckPurpose } from '../../core/deck/types';
 import { getKind } from '../../core/kinds/registry';
 import { db } from '../../data/db';
@@ -12,6 +12,7 @@ import { NewDeckDialog } from '../studio/NewDeckDialog';
 import { DeckCard } from './DeckCard';
 
 export function DecksPage() {
+  const navigate = useNavigate();
   const [query, setQuery] = useState('');
   const [courseId, setCourseId] = useState('all');
   const [purpose, setPurpose] = useState<DeckPurpose | 'all'>('all');
@@ -93,6 +94,9 @@ export function DecksPage() {
         <div className="page-actions">
           <button type="button" className="btn btn-secondary" onClick={() => fileInput.current?.click()} disabled={opening} title="Open a .lectern.json file saved from Export">
             {opening ? <span className="spinner" /> : <FileUp size={16} />} Open a deck file
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => navigate('/finished')} title="Present a PowerPoint you already finished, with AI teleprompter notes">
+            <Presentation size={16} /> Bring finished slides
           </button>
           <button type="button" className="btn btn-brand" onClick={() => setOpen(true)}><Plus size={16} /> New deck</button>
         </div>

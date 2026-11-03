@@ -415,3 +415,37 @@ describe('deck questions', () => {
     expect(res.status).toBe(422);
   });
 });
+
+describe('pictures by role', () => {
+  const roles = () => body({ pictures: [{ ...pictures[0], role: 'show' }, { ...pictures[1], role: 'read' }, { ...pictures[2], role: 'surprise' }] });
+
+  it('labels each picture with what it is for, and offers only those that may go on slides', () => {
+    const input = readInput(roles());
+    if (typeof input === 'string') throw new Error(input);
+    expect(input.pictures.map((p) => p.role)).toEqual(['show', 'read', 'auto']);
+    const r = stagedRequest(input, OUTLINE_TASK);
+    const labels = r.content.flatMap((b) => (b.type === 'text' && b.text.startsWith('Picture ') ? [b.text] : []));
+    expect(labels).toEqual(['Picture pic1 (photo1.png), for the slides:', 'Picture pic2 (photo2.png), material only:', 'Picture pic3 (photo3.png), you decide:']);
+    expect(r.system).toContain('"material only": source material');
+    const schema = stagedSchema(kinds, input.pictures) as Record<string, any>;
+    expect(schema.properties.outline.items.properties.pictures.items.enum).toEqual(['pic1', 'pic3']);
+  });
+
+  it('never puts a picture that is only to read on a slide', async () => {
+    sdk.reply = () => message({ title: 'Volcanoes', outline: [{ title: 'Magma', kind: 'image', minutes: 3, point: 'Up it goes', pictures: ['pic2', 'pic1'] }], slides: [] });
+    const planned = await (await post({ ...roles(), mode: 'outline' })).json();
+    expect(planned.outline[0].pictures).toEqual(['pic1']);
+    sdk.reply = () => message({ title: 'Volcanoes', slides: [{ kind: 'image', contentJson: JSON.stringify({ title: 'Magma', image: 'pic2' }), notes: {} }] });
+    const drafted = await (await post({ ...roles(), mode: 'deck' })).json();
+    expect(drafted.draft.slides[0].content.image).toBe('');
+  });
+
+  it('lists no picture fields when every picture is only to read, but still shows the AI the pictures', () => {
+    const input = readInput(body({ pictures: pictures.map((p) => ({ ...p, role: 'read' })) }));
+    if (typeof input === 'string') throw new Error(input);
+    const r = stagedRequest(input, OUTLINE_TASK);
+    expect(r.content.filter((b) => b.type === 'image')).toHaveLength(3);
+    expect(r.system).not.toContain('picture]');
+    expect((stagedSchema(kinds, input.pictures) as Record<string, any>).properties.outline.items.properties.pictures).toBeUndefined();
+  });
+});

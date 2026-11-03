@@ -126,6 +126,13 @@ export default function JoinPage() {
             ? (link.role === 'presenter' ? 'Getting your script and slides…' : 'Getting the slides…')
             : `Finding presentation ${formatCode(code)}…`}
         </p>
+        {link.status === 'connecting' && link.attempt > 0 && (
+          <p className="faint join-retry">
+            {link.trouble === 'blocked'
+              ? 'Still trying. If this network blocks phones from reaching the computer, try the same Wi-Fi as the presenter, or mobile data.'
+              : 'Still trying…'}
+          </p>
+        )}
       </div>
     </Frame>
   );

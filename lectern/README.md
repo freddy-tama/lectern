@@ -30,6 +30,7 @@ This file is the app's manual. The project's front page is the [repository READM
 | **Hand out a copy** | For rooms where live sharing won't connect. A QR code carries the quiz, or a text-only copy of the slides, inside the link itself, and each phone runs it alone and marks its own answers. Phones can save it as a file for later. **Export ▸ Web page** makes the whole deck one view-only .html file (your reveals, no notes) that opens offline in any browser. |
 | **Study / Review** | Read each slide with its takeaways and explanation, answer the question, flip flashcards, or read a one-page summary. Progress is saved. |
 | **Start a deck** | From an outline (pasted, or a Markdown, Word or PowerPoint file), with AI, blank, or from a mod's starter. |
+| **Finished slides** | Bring a PowerPoint that's already designed and present it as it is. Add its PDF export and every slide keeps its exact look; the .pptx gives the words, speaker notes, order and hidden slides. AI writes teleprompter notes for each slide (a script, takeaways, cues and minutes), starting from your speaker notes. Questions already on the slides, such as A–D choices with the answer in the notes, become phone quizzes. |
 | **Export** | PowerPoint with on-click animations or one slide per step (for Google Slides and Keynote). Charts and tables export as real PowerPoint charts and tables you can edit. YouTube videos go in as online videos that play in PowerPoint, and stored videos as video files. Web pages and activities become a card with a link and a QR code; timers show their time. Also a view-only web page (one .html file that works offline), a key-notes handout to print or save as PDF, and a deck file you can open again. |
 
 ### Presenting keys
@@ -148,6 +149,7 @@ See [docs/mods.md](docs/mods.md) to write your own.
 |---|---|
 | `ANTHROPIC_API_KEY` | Turns on "With AI" drafting, AI class notes from recordings, AI activities and AI drawings. Without it, each explains that it isn't set up, and everything else works, transcription included. |
 | `LECTERN_MODEL` | The model that drafts decks and writes class notes. Default `claude-opus-5-5`. |
+| `LECTERN_NOTES_MODEL` | The model that writes teleprompter notes for finished slides. Default `claude-sonnet-5-5`: half the cost of Opus, with notes just as accurate. |
 | `LECTERN_ACCESS_CODE` | People must enter this code before AI drafting, AI pictures or class notes run, so a public site doesn't spend your credit for strangers. Picture search works without it. For a public site, [accounts](#accounts-and-ai-credits) are the better guard. |
 | `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SECRET_KEY` | Turn on [accounts](#accounts-and-ai-credits): AI then needs a signed-in person with credits left. The legacy `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` work too. The secret key stays on the server. |
 | `LECTERN_DAILY_CREDITS` | With accounts on, the most credits everyone together may spend in a UTC day. Default `4000` ($20); `0` turns the cap off. |
@@ -159,7 +161,9 @@ See [docs/mods.md](docs/mods.md) to write your own.
 | `OPENVERSE_CLIENT_ID`, `OPENVERSE_CLIENT_SECRET` | Optional [Openverse API credentials](https://api.openverse.org/v1/). Anonymous use has low rate limits shared by everyone using your server; search results are cached for an hour to help. |
 | `LECTERN_PLUGINS` | Build with mods, for example `chinese,lesson-plan`. Leave it empty for the general edition. |
 | `VITE_PEER_HOST`, `VITE_PEER_PORT`, `VITE_PEER_PATH`, `VITE_PEER_KEY` | Your own [PeerJS server](https://github.com/peers/peerjs-server) for Share to phones. By default PeerJS's free public server introduces devices; slides, state and votes then go straight between them. |
-| `VITE_ICE_SERVERS` | JSON list of your own STUN/TURN servers, for networks that block direct connections. |
+| `CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN` | A relay for Share to phones, from [Cloudflare's TURN service](https://developers.cloudflare.com/realtime/turn/). Phones on school or guest Wi-Fi that keeps devices apart, and many on mobile data, can only reach the presenter's computer through a relay. `/api/ice` makes short-lived relay passwords for each visitor, so no new build is needed. |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | Any other TURN relay, with fixed details. `TURN_URLS` is comma separated, such as `turn:relay.example.com:3478,turns:relay.example.com:443?transport=tcp`. A relay on port 443 gets through the strictest networks. |
+| `VITE_ICE_SERVERS` | JSON list of your own STUN/TURN servers, built into the app. It replaces the defaults and `/api/ice`. |
 | `VITE_PUBLIC_ORIGIN` | The public address of the site, such as `https://lectern.example.com`. The front page builds its quiz QR code from it, so a code shown on `localhost` or a preview deployment still opens on a phone. Without it, the code uses the address the page was opened at. |
 | `VITE_TESTSPRITE_URL` | A link to the site's TestSprite test results. When it's set, the front page's footer links to it; otherwise the line is left out. |
 
