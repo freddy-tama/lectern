@@ -8,6 +8,7 @@ import { DESIGNED_KINDS } from './designed-kind';
 import { LIVE_KINDS } from './live-kinds';
 import { MEDIA_KINDS } from './media-kinds';
 import { PITCH_KINDS } from './pitch-kinds';
+import { PRACTICE_KINDS } from './practice-kinds';
 import { registerKind } from './registry';
 import { REPORT_KINDS } from './report-kinds';
 import type { AnyKind, KindLayout, SlideKindDefinition } from './types';
@@ -31,7 +32,7 @@ function eyebrow(ctx: LayoutContext, id: string, value: string, x: number, y: nu
 // ─── Open ─────────────────────────────────────────────────────────────
 
 const title: SlideKindDefinition<C> = {
-  kind: 'title', label: 'Title', description: 'Opens the deck: title, subtitle and who is presenting.', icon: 'presentation', group: 'Open',
+  kind: 'title', label: 'Title', description: 'Opens the deck: title, subtitle, who is presenting and an optional second credit line.', icon: 'presentation', group: 'Open',
   variants: [{ id: 'left', label: 'Left aligned' }, { id: 'center', label: 'Centred' }],
   autoVariant: (c) => (read.str(c, 'image').trim() ? 'left' : 'center'),
   fields: [
@@ -39,11 +40,12 @@ const title: SlideKindDefinition<C> = {
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
     { key: 'subtitle', label: 'Subtitle', type: 'textarea', rows: 2 },
     { key: 'presenter', label: 'Presenter or date', type: 'text' },
+    { key: 'credit', label: 'Second credit line', type: 'text', placeholder: 'Supervisor: …', help: 'Under the presenter, for a supervisor, a reviewer or a school.' },
     { key: 'image', label: 'Image', type: 'image', help: 'Shown beside the title in the left-aligned layout.' },
   ],
-  create: () => ({ eyebrow: '', title: 'Untitled deck', subtitle: '', presenter: '', image: '' }),
+  create: () => ({ eyebrow: '', title: 'Untitled deck', subtitle: '', presenter: '', credit: '', image: '' }),
   heading: (c) => read.str(c, 'title') || 'Title',
-  text: (c) => [read.str(c, 'eyebrow'), read.str(c, 'title'), read.str(c, 'subtitle'), read.str(c, 'presenter')].filter(Boolean),
+  text: (c) => [read.str(c, 'eyebrow'), read.str(c, 'title'), read.str(c, 'subtitle'), read.str(c, 'presenter'), read.str(c, 'credit')].filter(Boolean),
   layout(c, ctx, variant) {
     const centered = variant === 'center';
     const src = centered ? '' : imageSrc(ctx, c.image);
@@ -64,8 +66,12 @@ const title: SlideKindDefinition<C> = {
     if (e) { e.y = y; parts.push(e); y += e.h + gap1; }
     t.y = y; parts.push(t); y += t.h;
     if (s) { s.y = y + gap2; if (centered) s.x = (CANVAS_W - s.w) / 2; parts.push(s); }
+    // Credits sit at the foot: the presenter, with the second line under it.
     const presenter = read.str(c, 'presenter');
-    if (presenter) parts.push(text(ctx, { id: 'presenter', text: presenter, x, y: M.bottom - 40, w, h: 48, max: 30, min: 24, weight: 600, color: ctx.theme.colors.muted, maxLines: 1, align, bind: 'presenter' }));
+    const credit = read.str(c, 'credit');
+    const lineH = 48;
+    if (presenter) parts.push(text(ctx, { id: 'presenter', text: presenter, x, y: M.bottom - 40 - (credit ? lineH : 0), w, h: lineH, max: 30, min: 24, weight: 600, color: ctx.theme.colors.muted, maxLines: 1, align, bind: 'presenter' }));
+    if (credit) parts.push(text(ctx, { id: 'credit', text: credit, x, y: M.bottom - 40, w, h: lineH, max: 28, min: 22, color: ctx.theme.colors.muted, maxLines: 1, align, bind: 'credit' }));
     // The image is optional here, so an empty one draws nothing (no placeholder over the title).
     if (src) parts.push({ type: 'image', id: 'image', src, x: 1110, y: 0, w: CANVAS_W - 1110, h: CANVAS_H, fit: 'cover', bind: 'image' });
     return { boxes: parts, frame: src ? 'bare' : 'title' };
@@ -596,6 +602,12 @@ const question: SlideKindDefinition<C> = {
   create: () => ({ question: 'Which of these is a renewable source of energy?', options: ['Coal', 'Wind', 'Natural gas', 'Oil'], correct: 1, answer: 'Wind is renewed by the weather; the others take millions of years to form.' }),
   heading: (c) => read.str(c, 'question').slice(0, 70) || 'Question',
   text: (c) => [read.str(c, 'question'), ...read.list(c, 'options'), read.str(c, 'answer')].filter(Boolean),
+  // The right choice is the answer; an open question's answer is its explanation.
+  checks: (c) => {
+    const q = read.str(c, 'question').trim();
+    const right = read.items(c, 'options')[read.num(c, 'correct')]?.trim();
+    return q ? [{ prompt: q, answer: right || read.str(c, 'answer').trim() }] : [];
+  },
   layout(c, ctx) {
     const boxes: Box[] = [];
     // Blank choices are skipped; each card binds to its choice's place in the stored list.
@@ -665,6 +677,7 @@ const recall: SlideKindDefinition<C> = {
   create: () => ({ title: 'Quick recall', cards: [{ prompt: 'First question', answer: 'Answer' }, { prompt: 'Second question', answer: 'Answer' }, { prompt: 'Third question', answer: 'Answer' }] }),
   heading: (c) => read.str(c, 'title') || 'Quick recall',
   text: (c) => [read.str(c, 'title'), ...read.objects(c, 'cards').flatMap((k) => [String(k.prompt ?? ''), String(k.answer ?? '')])].filter(Boolean),
+  checks: (c) => read.objects(c, 'cards').map((k) => ({ prompt: String(k.prompt ?? '').trim(), answer: String(k.answer ?? '').trim() })).filter((k) => k.prompt || k.answer),
   layout(c, ctx) {
     const items = read.objects<Record<string, unknown>>(c, 'cards').slice(0, 6);
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title') || 'Quick recall');
@@ -774,7 +787,7 @@ const credits: SlideKindDefinition<C> = {
   },
 };
 
-export const CORE_KINDS: AnyKind[] = [title, section, agenda, bullets, compare, image, quote, term, stats, steps, question, recall, summary, closing, credits];
+export const CORE_KINDS: AnyKind[] = [title, section, agenda, bullets, compare, image, quote, term, stats, steps, question, recall, ...PRACTICE_KINDS, summary, closing, credits];
 
 let registered = false;
 export function registerCoreKinds() {

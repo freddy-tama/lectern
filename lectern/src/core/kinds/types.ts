@@ -73,6 +73,11 @@ export interface SlideKindDefinition<C extends Record<string, unknown> = Record<
   /** One line naming the slide, for thumbnails and outlines. */
   heading(content: C): string;
   /**
+   * What the slide asks the room, each with the answer it expects. The deck check reads these to find
+   * answers given away on earlier slides and one thing tested twice. Kinds that ask nothing leave it out.
+   */
+  checks?(content: C): { prompt: string; answer: string }[];
+  /**
    * The layout that suits this content best, for auto style. Kinds without variants leave it out;
    * kinds with variants that leave it out alternate their layouts down the deck.
    */

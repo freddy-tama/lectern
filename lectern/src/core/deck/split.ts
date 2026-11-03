@@ -24,6 +24,7 @@ const RULES: Record<string, SplitRule> = {
   steps: { key: 'steps', shape: 'objects', max: 6 },
   timeline: { key: 'milestones', shape: 'objects', max: 6 },
   scorecard: { key: 'metrics', shape: 'objects', max: 6 },
+  'true-false': { key: 'items', shape: 'objects', fallback: 'True or false?', max: 6 },
   table: { key: 'cells', shape: 'table' },
 };
 

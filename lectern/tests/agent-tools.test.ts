@@ -110,6 +110,18 @@ describe('reading the deck', () => {
   });
 });
 
+describe('the outline of a lesson', () => {
+  it('flags what the lesson rules found beside the slide, and only for lessons', () => {
+    const deck = sampleDeck();
+    deck.slides.splice(4, 0, {
+      id: 's_check', kind: 'true-false', content: { title: 'True or false?', items: [{ statement: 'A TTL of 60 seconds keeps a page fresh for a minute.', isTrue: true, correction: '' }, { statement: 'A TTL of 90 seconds keeps a page fresh for a minute.', isTrue: false, correction: '' }] },
+      notes: { ...deck.slides[4]!.notes },
+    });
+    expect(workspace({ ...deck, purpose: 'lesson' }).outline()).toMatch(/5\. s_check · true-false · “True or false\?” · .*⚠ This slide tests “A TTL of 60 seconds keeps a page fresh for a minu…” twice\./);
+    expect(workspace(deck).outline()).not.toContain('twice');
+  });
+});
+
 describe('proposing wording and order', () => {
   it('edit_slide changes only the fields it names, and the op carries just those', async () => {
     const ws = workspace();
