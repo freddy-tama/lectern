@@ -8,6 +8,7 @@
     "api/draft-deck.ts": { "maxDuration": 300 },
     "api/deck-questions.ts": { "maxDuration": 120 },
     "api/lecture-notes.ts": { "maxDuration": 300 },
+    "api/teleprompter.ts": { "maxDuration": 300 },
     "api/revise-slide.ts": { "maxDuration": 300 },
     "api/deck-assistant.ts": { "maxDuration": 300 },
     "api/make-code.ts": { "maxDuration": 300 },

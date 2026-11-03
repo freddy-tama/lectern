@@ -1,6 +1,6 @@
 import { Upload, Wand2 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { dragHasFiles, handOffFiles } from './handoff';
 import { ACCEPT_ALL } from './make';
 import '../../styles/autodeck.css';
@@ -36,6 +36,7 @@ export function QuickMake({ hero, title, detail }: { hero?: boolean; title?: str
         <span className="qm-actions">
           <button type="button" className="btn btn-brand btn-lg" onClick={() => input.current?.click()}><Upload size={17} /> Choose files</button>
           <button type="button" className="btn btn-secondary btn-lg" onClick={() => navigate('/make')}><Wand2 size={17} /> Describe a topic instead</button>
+          <Link className="qm-finished" to="/finished">Slides already finished? Present them as they are</Link>
         </span>
       ) : (
         <button type="button" className="btn btn-secondary" onClick={() => input.current?.click()}><Upload size={15} /> Choose files</button>

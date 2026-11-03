@@ -1,5 +1,5 @@
 import {
-  AlertCircle, AudioLines, Check, Download, Eye, FileText, Image as ImageIcon, Loader2, MonitorPlay, NotebookPen, Pencil,
+  AlertCircle, AudioLines, Check, Download, Eye, FileText, Image as ImageIcon, Loader2, MonitorPlay, NotebookPen, Pencil, Presentation,
   RotateCcw, Sparkles, Upload, Wand2, X,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -27,6 +27,7 @@ import { SlideView } from '../slides/SlideView';
 import { type AiStatus, aiStatus, kindCatalogue, saveCode, savedCode } from '../studio/ai';
 import { exportPptx } from '../studio/download';
 import { fitSummary } from '../studio/fit-deck';
+import { handOffFinished } from '../finished/handoff';
 import { type AiQuestion, draftOutline, fetchQuestions } from './ai';
 import { approveOutline, createJob, finishJob, recover, runJob, runsSnapshot, saveOutline, stopJob, subscribeRuns, toggleDraftFit } from './drafting';
 import { DraftingView, ResumeCard, useJobPictures } from './DraftingView';
@@ -543,6 +544,17 @@ export default function MakePage() {
                       );
                     })}
                   </ul>
+                )}
+
+                {sources.some((s) => /\.pptx$/i.test(s.file.name)) && (
+                  <p className="ad-finished" role="note">
+                    <Presentation size={16} />
+                    <span>
+                      Is this PowerPoint already finished?{' '}
+                      <button type="button" className="ad-link" onClick={() => { handOffFinished(sources.filter((s) => /\.(pptx|pdf)$/i.test(s.file.name)).map((s) => s.file)); navigate('/finished'); }}>Present it as it is</button>
+                      , with AI teleprompter notes and its questions as phone quizzes.
+                    </span>
+                  </p>
                 )}
 
                 <label className="field ad-brief">

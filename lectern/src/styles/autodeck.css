@@ -757,6 +757,15 @@
   justify-content: center;
 }
 
+.qm-finished {
+  flex-basis: 100%;
+  text-align: center;
+  font-size: 14px;
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 @media (max-width: 860px) {
   .ad-grid {
     grid-template-columns: 1fr;
@@ -1259,5 +1268,23 @@
 
 .ad-fit svg {
   flex: none;
+  color: var(--brand);
+}
+
+.ad-finished {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--brand) 30%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--brand-soft) 55%, var(--panel));
+  font-size: 14.5px;
+}
+
+.ad-finished > svg {
+  flex: none;
+  margin-top: 2px;
   color: var(--brand);
 }
