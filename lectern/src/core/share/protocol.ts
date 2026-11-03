@@ -76,6 +76,8 @@ export type HostMessage =
   | { t: 'options'; options: ShareOptions }
   | { t: 'quiz'; quiz: QuizView; stage: QuizStage }
   | { t: 'you'; you: PlayerView }
+  /** Every few seconds, so a phone notices a link that died without closing. */
+  | { t: 'ping'; at: number }
   | { t: 'bye' };
 
 /** Phone to host. */
@@ -85,7 +87,16 @@ export type GuestMessage =
   | { t: 'word'; slideId: string; text: string }
   | { t: 'answer'; slideId: string; choice: number }
   | { t: 'name'; name: string }
-  | { t: 'stage'; stage: QuizStage };
+  | { t: 'stage'; stage: QuizStage }
+  /** The answer to a ping, so the computer can let go of phones that left without saying so. */
+  | { t: 'pong'; at: number };
+
+/** How often the computer pings each phone. */
+export const PING_EVERY = 4000;
+/** A phone that hears nothing for this long (while it is on screen) reconnects. */
+export const SILENT_AFTER = 13_000;
+/** The computer forgets a phone that answered pings before and then stopped for this long. */
+export const GONE_AFTER = 45_000;
 
 /** Sent when a phone connects. */
 export interface JoinMetadata {
