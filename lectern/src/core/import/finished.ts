@@ -17,11 +17,15 @@ export interface PptxSlide {
   /** Its place in the PowerPoint, from 1, hidden slides included. */
   number: number;
   title: string;
-  /** Every paragraph on the slide, one per line, tables included. */
+  /** Every paragraph on the slide, one per line; a table row is one line, cells split by " | ". */
   text: string;
   /** The speaker notes, one paragraph per line. */
   notes: string;
   hidden: boolean;
+  /** The paragraphs that are neither the title nor in a table. */
+  body?: string[];
+  /** Each table's rows of cells. */
+  tables?: string[][][];
 }
 
 export interface PptxDeck {
@@ -165,7 +169,7 @@ function shapesIn(parent: Element, charts: Map<string, string>, at?: { x: number
       const rows = Array.from(table.getElementsByTagNameNS(A, 'tr'))
         .map((tr) => Array.from(tr.getElementsByTagNameNS(A, 'tc')).map((tc) => Array.from(tc.getElementsByTagNameNS(A, 'p')).map(paragraphText).filter(Boolean).join(' ')))
         .filter((r) => r.some(Boolean));
-      if (rows.length) out.push({ ph: '', ...pos, size: 0, lines: rows.flat().filter(Boolean), rows });
+      if (rows.length) out.push({ ph: '', ...pos, size: 0, lines: rows.map((r) => r.join(' | ')), rows });
     } else if (el.localName === 'grpSp') {
       // A group's members keep their own order, at the group's place on the slide.
       out.push(...shapesIn(el, charts, pos));
@@ -215,23 +219,30 @@ const LINK = /^(?:https?:\/\/|www\.)\S+$|^[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|ed
  * The slide's name: its title placeholder; on a slide without one, the box in the largest
  * type, skipping labels repeated on every slide, web addresses and long passages.
  */
-function pickTitle(shapes: SlideShape[], repeated: Set<string>): string {
+function pickTitle(shapes: SlideShape[], repeated: Set<string>): SlideShape[] {
   const placed = shapes.filter((s) => s.ph === 'title' || s.ph === 'ctrTitle');
-  if (placed.length) return placed.map((s) => s.lines.join(' ')).join(' ');
+  if (placed.length) return placed;
   let best: SlideShape | undefined;
   for (const s of shapes) {
     const words = s.lines.join(' ');
     if (s.rows || s.role || FURNITURE.has(s.ph) || repeated.has(labelKey(s)) || LINK.test(words) || words.length > 90 || s.lines.length > 2) continue;
     if (!best || s.size > best.size) best = s;
   }
-  return best ? best.lines.join(' ') : '';
+  return best ? [best] : [];
 }
 
 /** Title and text of a slide, in reading order. Labels found on most slides are left out. */
-export function slideWords(xml: string, repeated: Set<string> = new Set(), charts: Map<string, string> = new Map()): { title: string; text: string; hidden: boolean } {
+export function slideWords(xml: string, repeated: Set<string> = new Set(), charts: Map<string, string> = new Map()): Omit<PptxSlide, 'number' | 'notes'> {
   const { shapes, hidden } = slideShapes(xml, charts);
   const kept = shapes.filter((s) => !FURNITURE.has(s.ph) && !repeated.has(labelKey(s)));
-  return { title: pickTitle(kept, repeated), text: kept.flatMap((s) => s.lines).join('\n'), hidden };
+  const named = pickTitle(kept, repeated);
+  return {
+    title: named.map((s) => s.lines.join(' ')).join(' '),
+    text: kept.flatMap((s) => s.lines).join('\n'),
+    hidden,
+    body: kept.filter((s) => !s.rows && !named.includes(s)).flatMap((s) => s.lines),
+    tables: kept.flatMap((s) => (s.rows ? [s.rows] : [])),
+  };
 }
 
 /** The speaker notes of a notes slide: the body placeholder's paragraphs. */

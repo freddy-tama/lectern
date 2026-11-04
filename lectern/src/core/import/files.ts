@@ -25,7 +25,15 @@ const SAVE_AS: Record<string, string> = {
   numbers: 'Numbers files can’t be read here. In Numbers, choose File → Export To → Excel, then try again.',
 };
 
-const MAX_BYTES = 40 * 1024 * 1024;
+const MB = 1024 * 1024;
+const MAX_BYTES = 40 * MB;
+/** Zipped documents are read part by part, and their size is mostly pictures. */
+const ZIPPED = new Set(['docx', 'pptx', 'xlsx', 'odt', 'odp', 'ods', 'epub']);
+
+/** The largest file of this type Lectern reads, in bytes. */
+export function sizeLimit(ext: string): number {
+  return ZIPPED.has(ext.toLowerCase()) ? 150 * MB : MAX_BYTES;
+}
 
 /** Whether this looks like a document Lectern can read (by name or type). */
 export function isDocumentFile(file: { name: string; type: string }): boolean {
@@ -33,8 +41,6 @@ export function isDocumentFile(file: { name: string; type: string }): boolean {
 }
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
-const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
 const S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
 const ODF_TEXT = 'urn:oasis:names:tc:opendocument:xmlns:text:1.0';
@@ -74,52 +80,35 @@ function demoteExtraTitles(out: string): string {
   return h1 > 1 ? out.replace(/^# /gm, '## ').replace(/^## /, '# ') : out;
 }
 
-function shapeTexts(doc: Document) {
-  const shapes = Array.from(doc.getElementsByTagNameNS(P, 'sp'));
-  return shapes.map((sp) => {
-    const ph = sp.getElementsByTagNameNS(P, 'ph')[0];
-    const type = ph?.getAttribute('type') ?? '';
-    const paras = Array.from(sp.getElementsByTagNameNS(A, 'p'))
-      .map((p) => Array.from(p.getElementsByTagNameNS(A, 't')).map((t) => t.textContent ?? '').join('').trim())
-      .filter(Boolean);
-    return { type, paras };
-  });
-}
-
+/**
+ * A PowerPoint as an outline, read by the same reader as a finished deck: slides in the
+ * presentation's order, hidden slides left out, headings found on blank layouts, tables as
+ * Markdown tables, and picture descriptions and chart words kept.
+ */
 async function pptxToOutline(buffer: ArrayBuffer): Promise<string> {
-  const zip = await loadZip(buffer);
-  const slideFiles = Object.keys(zip.files)
-    .filter((n) => /^ppt\/slides\/slide\d+\.xml$/.test(n))
-    .sort((a, b) => Number(/(\d+)\.xml$/.exec(a)![1]) - Number(/(\d+)\.xml$/.exec(b)![1]));
-  if (!slideFiles.length) throw new Error('This PowerPoint file has no slides.');
+  const { readPptx } = await import('./finished');
+  const deck = await readPptx(buffer);
+  const shown = deck.slides.filter((s) => !s.hidden);
   const out: string[] = [];
-  for (const [i, name] of slideFiles.entries()) {
-    const doc = parse(await zip.file(name)!.async('string'));
-    const shapes = shapeTexts(doc);
-    const titleShape = shapes.find((s) => s.type === 'title' || s.type === 'ctrTitle');
-    const title = titleShape?.paras.join(' ') ?? '';
-    const body = shapes.filter((s) => s !== titleShape && s.type !== 'sldNum' && s.type !== 'dt' && s.type !== 'ftr').flatMap((s) => s.paras);
-    const relsName = name.replace('slides/', 'slides/_rels/') + '.rels';
-    const rels = await zip.file(relsName)?.async('string');
-    const notesTarget = rels ? /Target="\.\.\/notesSlides\/(notesSlide\d+\.xml)"/.exec(rels)?.[1] : undefined;
-    let notes = '';
-    if (notesTarget) {
-      const nd = parse(await zip.file(`ppt/notesSlides/${notesTarget}`)!.async('string'));
-      notes = shapeTexts(nd).filter((s) => s.type === 'body').flatMap((s) => s.paras).join(' ');
-    }
+  for (const [i, s] of (shown.length ? shown : deck.slides).entries()) {
+    const body = [...(s.body ?? [])];
+    const notes = s.notes.replace(/\s*\n\s*/g, ' ').trim();
+    const tables = (s.tables ?? []).map(markdownTable).filter(Boolean);
     if (i === 0) {
-      out.push(`# ${title || body[0] || 'Imported deck'}`);
-      if (body.length) out.push(body.filter((b) => b !== title).slice(0, 1).join(''));
+      out.push(`# ${s.title || body.shift() || deck.title || 'Imported deck'}`);
+      if (body.length) out.push(body[0]!);
+      for (const t of tables) out.push('', t);
       if (notes) out.push('', `Notes: ${notes}`);
       out.push('');
       continue;
     }
-    out.push(`## ${title || body.shift() || `Slide ${i + 1}`}`);
+    out.push(`## ${s.title || body.shift() || `Slide ${i + 1}`}`);
     out.push(...body.map((b) => `- ${b}`));
+    for (const t of tables) out.push(t, '');
     if (notes) out.push(`Notes: ${notes}`);
     out.push('');
   }
-  return out.join('\n').trim();
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 // ─── Tables ───────────────────────────────────────────────────────────
@@ -460,11 +449,12 @@ export function subtitlesToText(text: string): string {
 
 const stem = (name: string) => name.replace(/\.[^.]+$/, '');
 
-export async function fileToOutline(file: File): Promise<string> {
+export async function fileToOutline(file: File, o: { maxBytes?: number } = {}): Promise<string> {
   const name = file.name.toLowerCase();
   const ext = /\.([a-z0-9]+)$/.exec(name)?.[1] ?? '';
   if (SAVE_AS[ext]) throw new Error(SAVE_AS[ext]);
-  if (file.size > MAX_BYTES) throw new Error('This file is over 40 MB. Choose a smaller file, or split it.');
+  const limit = o.maxBytes ?? sizeLimit(ext);
+  if (file.size > limit) throw new Error(`This file is over ${Math.max(1, Math.round(limit / MB))} MB. Choose a smaller file, or split it.`);
   const title = stem(file.name);
   switch (ext) {
     case 'docx': return docxToOutline(await file.arrayBuffer());

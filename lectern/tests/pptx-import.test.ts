@@ -5,6 +5,7 @@ import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
 import { outlineToDraft } from '../src/core/deck/outline';
 import { findQuestion, finishedDeck, readPptx } from '../src/core/import/finished';
+import { fileToOutline, sizeLimit } from '../src/core/import/files';
 import { bankWords, findPractice } from '../src/core/import/practice';
 
 const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
@@ -145,5 +146,32 @@ describe('F4 · picture descriptions and chart words', () => {
     expect(slides[0]!.text).toBe('(Picture: 3x + 5x)');
     expect(slides[1]!.title).toBe('How many people');
     expect(slides[1]!.text).toBe('How many people\n(Chart: Cases by year · Cases · 2021, 2022, 2023 · People)');
+  });
+});
+
+describe('F5 · the outline import', () => {
+  const table = '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="50" name="Table 1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="914400" y="1828800"/><a:ext cx="7315200" cy="1828800"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl>'
+    + [['Place', 'Rain', 'Sun'], ['Leeds', 'High', 'Low']].map((r) => `<a:tr h="370840">${r.map((c) => `<a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>${c}</a:t></a:r></a:p></a:txBody></a:tc>`).join('')}</a:tr>`).join('')
+    + '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>';
+  const file = async (slides: string[], order?: number[]) => new File([await pptx(slides, { order })], 'deck.pptx');
+
+  it('follows the presentation’s order, leaves hidden slides out and keeps tables', async () => {
+    const out = await fileToOutline(await file([
+      slide(box('Weather', { ph: 'ctrTitle' }) + box('A short study', { ph: 'subTitle' })),
+      slide(box('Where it rains', { ph: 'title' }) + table),
+      slide(box('Spare slide', { ph: 'title' }) + box('Only if asked', { ph: 'body' }), ' show="0"'),
+      slide(box('What we learned', { ph: 'title' }) + box('Rain follows the hills', { ph: 'body' })),
+    ], [0, 3, 1, 2]));
+    expect(out).toBe('# Weather\nA short study\n\n## What we learned\n- Rain follows the hills\n\n## Where it rains\n| Place | Rain | Sun |\n|---|---|---|\n| Leeds | High | Low |');
+    const draft = outlineToDraft(out);
+    expect(draft.slides.map((s) => s.kind)).toEqual(['title', 'bullets', 'table']);
+  });
+
+  it('reads big PowerPoint files and refuses files over the limit', async () => {
+    expect(sizeLimit('pptx')).toBeGreaterThan(45 * 1024 * 1024);
+    expect(sizeLimit('txt')).toBe(40 * 1024 * 1024);
+    const big = await file([slide(box('One', { ph: 'title' }))]);
+    await expect(fileToOutline(big, { maxBytes: 100 })).rejects.toThrow(/over 1 MB/);
+    expect(await fileToOutline(big)).toBe('# One');
   });
 });
