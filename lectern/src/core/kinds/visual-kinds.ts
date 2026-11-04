@@ -3,7 +3,7 @@
 
 import { type Box, type TextBox, CANVAS_H, CANVAS_W } from '../engine/boxes';
 import { fontWeight } from '../engine/themes';
-import { M, type LayoutContext, card, imageSrc, read, shape, slideTitle, sz, text } from './kit';
+import { DENSITY, M, type LayoutContext, card, imageSrc, read, shape, slideTitle, sz, text } from './kit';
 import type { AnyKind, SlideKindDefinition } from './types';
 
 type C = Record<string, unknown>;
@@ -540,7 +540,8 @@ const code: SlideKindDefinition<C> = {
       });
     }
     if (cap) { cap.y = top + panelH + 24; boxes.push(cap); }
-    return { boxes };
+    // Code is read, not said: it takes the audience's budget whatever the deck is for.
+    return { boxes, budget: DENSITY[ctx.audience].words };
   },
 };
 

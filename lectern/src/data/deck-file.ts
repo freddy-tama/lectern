@@ -1,7 +1,7 @@
 // Deck files (*.lectern.json): one deck with its pictures and its look, to keep
 // or to open in another browser. Opening one always makes a new deck.
 
-import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, type Slide, deckPurpose, normalizeNotes, uid } from '../core/deck/types';
+import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, type Slide, deckDensity, deckPurpose, normalizeNotes, uid } from '../core/deck/types';
 import { cleanElements } from '../core/engine/elements';
 import { cleanOverride } from '../core/engine/overrides';
 import { type Theme, allThemes, getTheme } from '../core/engine/themes';
@@ -123,6 +123,7 @@ export function normalizeDeck(value: unknown): Deck | null {
     ...(PURPOSES.some((p) => p.id === d.purpose) ? { purpose: d.purpose as DeckPurpose } : {}),
     ...(typeof d.lessonId === 'string' && d.lessonId ? { lessonId: d.lessonId } : {}),
     ...(minutes ? { minutes } : {}),
+    ...(deckDensity(d.density) ? { density: deckDensity(d.density) } : {}),
     createdAt: positive(d.createdAt) ?? now,
     updatedAt: positive(d.updatedAt) ?? now,
     ...(d.autoStyle === true ? { autoStyle: true } : {}),

@@ -1,7 +1,8 @@
 import { Clock, Download, FileDown, FileCode2, FlipHorizontal2, GraduationCap, MonitorPlay, Pause, Play, Printer, ScrollText } from 'lucide-react';
 import { useId, useMemo, useRef, useState } from 'react';
 import { type SampleView, tryHref } from '../../app/try-samples';
-import { type Deck, deckMinutes } from '../../core/deck/types';
+import { sessionMinutes } from '../../core/deck/timing';
+import type { Deck } from '../../core/deck/types';
 import { formatClock } from '../../ui/hooks';
 import { DEFAULT_PROMPTER_WPM } from '../present/prompter-defaults';
 import { SlideView } from '../slides/SlideView';
@@ -221,7 +222,7 @@ function PresenterMock({ samples, deck }: { samples: Sample[]; deck: Deck }) {
     return run.steps[run.slides.findIndex((s) => s.id === cur.slide.id)] ?? 0;
   }, [deck, cur]);
   // The same planned length the real presenter view shows.
-  const total = formatClock(deckMinutes(deck) * 60_000);
+  const total = formatClock(sessionMinutes(deck) * 60_000);
   return (
     <div className="mock mock-presenter" role="img" aria-label={`Presenter view: slide ${cur.number} with its script and cues, the next slide, and a clock at 0:00 of ${total}`}>
       <div className="mp-top">

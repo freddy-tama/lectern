@@ -49,8 +49,8 @@ describe('applying proposals', () => {
     expect(order(after)).toEqual(['s_title', 's_why', 's_inval', recap, 's_end']);
     const why = after.slides[1];
     expect(why.content).toMatchObject({ title: 'Why cache', image: 'asset:pic1', bullets: ['Faster pages', 'Lower hosting cost', 'Less load on the database'] });
-    expect(why.notes).toMatchObject({ minutes: 2, script: 'Caching makes pages faster.' });
-    expect(after.slides[3]).toMatchObject({ id: recap, kind: 'summary', content: { title: 'Recap', points: ['Cache reads'] }, notes: { minutes: 1 } });
+    expect(why.notes).toMatchObject({ minutes: 1.8, script: 'Caching makes pages faster.' });
+    expect(after.slides[3]).toMatchObject({ id: recap, kind: 'summary', content: { title: 'Recap', points: ['Cache reads'] }, notes: { minutes: 0.98 } });
     // The deck that came in is untouched: the change is a new deck, ready to be one undo step.
     expect(order(deck)).toEqual(['s_title', 's_why', 's_how', 's_inval', 's_end']);
   });

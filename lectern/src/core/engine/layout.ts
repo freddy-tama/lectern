@@ -1,7 +1,7 @@
-import type { Audience, Deck, Slide } from '../deck/types';
+import { type Audience, type Deck, type DeckDensity, type DeckPurpose, type Slide, deckPurpose } from '../deck/types';
 import { countWords } from '../deck/words';
 import { registerCoreKinds } from '../kinds/core-kinds';
-import { DENSITY, type LayoutContext, M, decorate, footer, text } from '../kinds/kit';
+import { type LayoutContext, M, budgetFor, decorate, footer, text, wordBudget } from '../kinds/kit';
 import { getKind } from '../kinds/registry';
 import { toggleDefaults } from '../plugins/registry';
 import { type Box, type SlideLayout, maxStep } from './boxes';
@@ -23,6 +23,9 @@ export interface LayoutOptions {
   deckTitle?: string;
   resolveImage?: (src: string) => string;
   flags?: Record<string, boolean>;
+  /** What the deck is for and its drafted density, which set the word budget. */
+  purpose?: DeckPurpose;
+  density?: DeckDensity;
 }
 
 function wordCount(parts: string[]) {
@@ -43,6 +46,8 @@ export function layoutSlide(slide: Slide, o: LayoutOptions): SlideLayout {
     warnings: [],
     resolveImage: o.resolveImage,
     flags: { ...toggleDefaults(), ...o.flags },
+    purpose: o.purpose,
+    density: o.density,
   };
   const def = getKind(slide.kind);
   if (!def) return missingKind(slide, ctx);
@@ -59,9 +64,11 @@ export function layoutSlide(slide: Slide, o: LayoutOptions): SlideLayout {
       ...elements.front,
     ];
     const words = wordCount(def.text(slide.content ?? {}));
-    const budget = result.budget ?? DENSITY[ctx.audience].words;
+    // Questions, practice and data carry the words of the activity or the figures: the audience's budget, whatever the deck is for.
+    const structured = def.group === 'Engage' || def.group === 'Data';
+    const budget = result.budget ?? (structured ? wordBudget(ctx.audience) : wordBudget(ctx.audience, ctx.purpose, ctx.density));
     if (frame === 'content' && words > budget) {
-      ctx.warnings.push(`${words} words on this slide. For this audience, aim for ${budget} or fewer and move the rest to the key notes.`);
+      ctx.warnings.push(`${words} words on this slide. ${budgetFor(ctx.purpose)}, aim for ${budget} or fewer and move the rest to the key notes.`);
     }
     return {
       background: result.background ?? (frame === 'section' ? o.theme.colors.sectionBg : o.theme.colors.bg),
@@ -96,6 +103,6 @@ export function layoutDeck(deck: Deck, o: Omit<LayoutOptions, 'theme' | 'audienc
   const slides = o.includeHidden ? deck.slides : deck.slides.filter((s) => !s.hidden);
   return slides.map((slide, i) => ({
     slide,
-    layout: layoutSlide(slide, { ...o, theme, audience: deck.audience, slideNumber: i + 1, slideCount: slides.length, deckTitle: deck.title }),
+    layout: layoutSlide(slide, { ...o, theme, audience: deck.audience, slideNumber: i + 1, slideCount: slides.length, deckTitle: deck.title, purpose: deckPurpose(deck), density: deck.density }),
   }));
 }

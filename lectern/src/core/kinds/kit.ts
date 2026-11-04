@@ -1,6 +1,6 @@
 // Layout helpers shared by every slide kind (core and plugin kinds alike).
 
-import type { Audience } from '../deck/types';
+import type { Audience, DeckDensity, DeckPurpose } from '../deck/types';
 import { type Box, type FontRole, type ImageBox, type ShapeBox, type TextBox, CANVAS_H, CANVAS_W } from '../engine/boxes';
 import { type DecorColors, type DecorMotif, decorDataUrl } from '../engine/decor';
 import { type Measure, cssFont, fitText, wrapLines } from '../engine/measure';
@@ -22,6 +22,9 @@ export interface LayoutContext {
   resolveImage?: (src: string) => string;
   /** Presenter toggles registered by mods, for example a pronunciation line. */
   flags: Record<string, boolean>;
+  /** What the deck is for and how much text it was drafted to carry, for the word budget. */
+  purpose?: DeckPurpose;
+  density?: DeckDensity;
 }
 
 /** Safe area on the 1920 × 1080 canvas. */
@@ -29,12 +32,46 @@ export const M = { x: 128, right: CANVAS_W - 128, top: 96, bottom: CANVAS_H - 96
 
 const AUDIENCE_SCALE: Record<Audience, number> = { young: 1.2, teen: 1.07, adult: 1 };
 
-/** Most bullet points a slide should carry for this audience before the studio warns. */
+/** Most bullet points and words a slide should carry for this audience, whatever the deck is for. */
 export const DENSITY: Record<Audience, { bullets: number; words: number }> = {
   young: { bullets: 3, words: 25 },
   teen: { bullets: 5, words: 45 },
   adult: { bullets: 6, words: 70 },
 };
+
+/**
+ * Words a slide carries by what the deck is for, from 53 real decks: talks show a few words and say
+ * the rest (plain talks run about 30 a slide, designed ones under 10), pitches a claim and its number,
+ * presented reports a finding and its evidence. Lessons follow the audience. Never more than the
+ * audience can read. Practice and data slides keep the audience's budget: their words are the
+ * activity or the figures (see layoutSlide).
+ */
+export const PURPOSE_WORDS: Record<DeckPurpose, Record<Audience, number>> = {
+  lesson: { young: 25, teen: 45, adult: 60 },
+  talk: { young: 25, teen: 30, adult: 30 },
+  pitch: { young: 25, teen: 35, adult: 35 },
+  report: { young: 25, teen: 40, adult: 40 },
+};
+
+/** Visual decks: mostly pictures, about 20 words a slide. */
+const VISUAL_WORDS = 20;
+
+/**
+ * The words a slide may carry before the studio suggests trimming. A detailed report is read
+ * without a presenter, so it gets the audience's full budget; a visual deck gets fewer.
+ */
+export function wordBudget(audience: Audience, purpose?: DeckPurpose, density?: DeckDensity): number {
+  const most = DENSITY[audience].words;
+  if (!purpose) return most;
+  if (purpose === 'report' && density === 'detailed') return most;
+  const words = Math.min(most, PURPOSE_WORDS[purpose][audience]);
+  return density === 'visual' ? Math.min(words, VISUAL_WORDS) : words;
+}
+
+/** What a word budget is for, in a warning: "For a talk", or "For this audience" in a lesson. */
+export function budgetFor(purpose?: DeckPurpose): string {
+  return purpose && purpose !== 'lesson' ? `For a ${purpose}` : 'For this audience';
+}
 
 export function sz(ctx: LayoutContext, px: number) {
   return Math.round(px * AUDIENCE_SCALE[ctx.audience] * ctx.theme.sizeBias);

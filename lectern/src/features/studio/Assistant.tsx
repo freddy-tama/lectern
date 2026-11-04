@@ -1,7 +1,8 @@
 import { AlertTriangle, ArrowUp, Check, ChevronLeft, ChevronRight, CircleAlert, CircleCheck, Eye, RotateCcw, Square, SquarePen, Trash2, WandSparkles, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { wording } from '../../core/deck/purpose';
-import { type Deck, type Slide, deckMinutes, deckPurpose } from '../../core/deck/types';
+import { hasSession, sessionMinutes, slideTimeLabel, slideTimes } from '../../core/deck/timing';
+import { type Deck, type Slide, deckPurpose } from '../../core/deck/types';
 import { getKind } from '../../core/kinds/registry';
 import { AiAccessNotice } from '../account/AccountUi';
 import { useAiAccess } from '../account/session';
@@ -329,8 +330,12 @@ function describe(deck: Deck, op: DeckOp): Described {
   if (op.elements !== undefined) changes.push('Pictures and decoration');
   const notes = op.notes ?? {};
   if (Object.keys(notes).some((k) => k !== 'minutes')) changes.push('Key notes');
-  // Slide times are in halves, so they are shown as they are rather than rounded.
-  if (notes.minutes !== undefined && before) changes.push(`${before.notes.minutes} min → ${notes.minutes} min`);
+  if (notes.minutes !== undefined && before) {
+    // Stored minutes are shares of the session: show the slide's time before and after.
+    const was = slideTimes(deck).get(before.id) ?? before.notes.minutes;
+    const will = slideTimes({ ...deck, slides: deck.slides.map((s) => (s.id === before.id && after ? after : s)) }).get(before.id) ?? notes.minutes;
+    changes.push(`${slideTimeLabel(was)} → ${slideTimeLabel(will)}`);
+  }
   const was = headingOf(before);
   const now = headingOf(after);
   const design = op.kind !== undefined || op.variant !== undefined || op.overrides !== undefined || op.elements !== undefined;
@@ -358,11 +363,12 @@ export function AssistantPanel({ assistant, deck, plannedMinutes, onClose }: { a
   useEffect(() => { log.current?.scrollTo({ top: log.current.scrollHeight, behavior: 'smooth' }); }, [chat.turns.length, current?.cards.length, current?.status]);
   useEffect(() => { if (!working && !pending.length) input.current?.focus({ preventScroll: true }); }, [working, pending.length]);
 
-  const total = deckMinutes(deck);
+  const total = sessionMinutes(deck);
   const target = plannedMinutes && total > plannedMinutes ? plannedMinutes : Math.max(5, Math.round((total * 0.7) / 5) * 5);
   const suggestions = [
     'Add pictures where slides are bare',
-    total > 5 ? `Cut this to ${target} minutes` : 'Add more detail where it’s thin',
+    // With a session length, slide times are shares of it: cutting time means cutting slides.
+    hasSession(deck) ? 'Cut slides that repeat a point' : total > 5 ? `Cut this to ${target} minutes` : 'Add more detail where it’s thin',
     'Add a summary at the end',
     'Fill in missing key notes',
   ];

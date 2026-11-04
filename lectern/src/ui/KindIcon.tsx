@@ -1,8 +1,8 @@
 import {
-  AlignLeft, AppWindow, ChartGantt, CheckCheck, Clapperboard, Cloud, Contact, Dices, Gauge, Tag, Gamepad2, Globe, LayoutDashboard, QrCode, Timer,
+  AlignLeft, AppWindow, ArrowDownUp, ChartGantt, CheckCheck, Clapperboard, Cloud, Contact, Dices, Gauge, Tag, Gamepad2, Globe, LayoutDashboard, QrCode, Timer,
   BookOpen, BookOpenText, Bookmark, ChartColumn, ChartLine, ChartNoAxesColumn, ChartPie, CircleHelp, ClipboardList, Code, Columns2, Copyright, DoorOpen,
   FileText, Filter, GalleryHorizontal, Grid2x2, Image, Images, Languages, LayoutGrid, List, ListChecks, ListOrdered, type LucideIcon,
-  Megaphone, MessageSquareText, Milestone, Presentation, Puzzle, Quote, RefreshCw, Square, Table, TextCursorInput, Type, Users, Waypoints,
+  Megaphone, MessageSquareText, Milestone, Presentation, Puzzle, Quote, RefreshCw, Shuffle, Square, Table, TextCursorInput, Type, Users, Waypoints,
 } from 'lucide-react';
 
 const ICONS: Record<string, LucideIcon> = {
@@ -20,6 +20,8 @@ const ICONS: Record<string, LucideIcon> = {
   'layout-grid': LayoutGrid,
   'list-checks': ListChecks,
   'check-check': CheckCheck,
+  'arrow-down-up': ArrowDownUp,
+  shuffle: Shuffle,
   'door-open': DoorOpen,
   puzzle: Puzzle,
   // Extra names mods can use.

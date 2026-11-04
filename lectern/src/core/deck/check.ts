@@ -1,5 +1,5 @@
 // Checks a deck against Lectern's own rules: slides whose text doesn't fit, words over the
-// audience's budget, slides without key notes, and minutes that don't add up to the session.
+// audience's budget, slides without key notes, and a session too short for its slides.
 // Code decides what fails, so the same check can run after an AI draft, on AI suggestions and
 // as a list in the studio. Each rule reads the laid-out deck and returns issues; more rules
 // (repeated layouts, repeated text, long stretches without a question, contrast) join the list.
@@ -9,8 +9,10 @@
 import type { SlideLayout } from '../engine/boxes';
 import { layoutDeck, layoutSlide } from '../engine/layout';
 import { getTheme } from '../engine/themes';
+import { budgetFor } from '../kinds/kit';
 import { getKind } from '../kinds/registry';
 import { isOverflowWarning } from './split';
+import { minutesPerSlide, sessionMinutes } from './timing';
 import { type Deck, type KeyNotes, type Slide, deckMinutes, deckPurpose } from './types';
 
 export type CheckSeverity = 'error' | 'warning' | 'info';
@@ -79,8 +81,8 @@ export const OVERFLOW_RULE: CheckRule = {
 
 export const WORDS_RULE: CheckRule = {
   id: 'words',
-  run: ({ slides }) => slides.flatMap((s): CheckIssue[] => (s.words && s.words.count > s.words.budget
-    ? [{ rule: 'words', severity: 'warning', slideId: s.slide.id, message: `${s.words.count} words. For this audience, aim for ${s.words.budget} or fewer.` }]
+  run: ({ deck, slides }) => slides.flatMap((s): CheckIssue[] => (s.words && s.words.count > s.words.budget
+    ? [{ rule: 'words', severity: 'warning', slideId: s.slide.id, message: `${s.words.count} words. ${budgetFor(deckPurpose(deck))}, aim for ${s.words.budget} or fewer.` }]
     : [])),
 };
 
@@ -89,11 +91,19 @@ export const NOTES_RULE: CheckRule = {
   run: ({ slides }) => slides.filter((s) => notesEmpty(s.slide.notes)).map((s) => ({ rule: 'notes', severity: 'warning', slideId: s.slide.id, message: 'No key notes yet.' })),
 };
 
+/** Slides that get less than this on average, in minutes, go by too fast to present. */
+export const FASTEST_PACE = 1 / 3;
+
+/** Slide times are shares of the session, so they always add up; what can go wrong is too many slides for the time. */
 export const MINUTES_RULE: CheckRule = {
   id: 'minutes',
-  run: ({ minutes: { planned, target } }) => (target && minutesOff(planned, target)
-    ? [{ rule: 'minutes', severity: 'warning', message: `The slides add up to ${fmt(planned)} min. The session is ${fmt(target)} min.` }]
-    : []),
+  run: ({ deck }) => {
+    const shown = deck.slides.filter((s) => !s.hidden).length;
+    const each = minutesPerSlide(deck);
+    return shown > 1 && each < FASTEST_PACE
+      ? [{ rule: 'minutes', severity: 'warning', message: `${shown} slides share ${fmt(sessionMinutes(deck))} min: about ${Math.round(each * 60)} seconds each. Cut slides or give the session more time.` }]
+      : [];
+  },
 };
 
 export const CORE_RULES: CheckRule[] = [OVERFLOW_RULE, WORDS_RULE, NOTES_RULE, MINUTES_RULE];
@@ -239,8 +249,8 @@ export function lessonIssues(deck: Pick<Deck, 'slides' | 'title' | 'purpose' | '
 }
 
 /** One slide laid out as the studio stage draws it: every warning, the overflow ones, and the words against the budget. */
-export function slideProblems(slide: Slide, deck: Pick<Deck, 'themeId' | 'audience' | 'title'>): Pick<SlideCheck, 'overflow' | 'words'> & { warnings: string[] } {
-  const layout = layoutSlide(slide, { theme: getTheme(deck.themeId), audience: deck.audience, mode: 'edit', deckTitle: deck.title, slideCount: 2 });
+export function slideProblems(slide: Slide, deck: Pick<Deck, 'themeId' | 'audience' | 'title'> & Partial<Pick<Deck, 'purpose' | 'lessonId' | 'density'>>): Pick<SlideCheck, 'overflow' | 'words'> & { warnings: string[] } {
+  const layout = layoutSlide(slide, { theme: getTheme(deck.themeId), audience: deck.audience, mode: 'edit', deckTitle: deck.title, slideCount: 2, purpose: deckPurpose(deck), density: deck.density });
   return { warnings: layout.warnings, overflow: layout.warnings.filter(isOverflowWarning), words: layout.words ?? null };
 }
 

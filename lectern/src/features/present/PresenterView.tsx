@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { NotFound } from '../../app/App';
 import { wording } from '../../core/deck/purpose';
+import { slideTimeLabel, slideTimes } from '../../core/deck/timing';
 import { deckPurpose } from '../../core/deck/types';
 import { toggles } from '../../core/plugins/registry';
 import { formatClock, useKeys, useNow } from '../../ui/hooks';
@@ -38,8 +39,11 @@ export default function PresenterView() {
   useEffect(() => { stripRef.current?.querySelector(`[data-i="${index}"]`)?.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' }); }, [index]);
 
   const elapsed = state.startedAt ? (paused ?? now) - state.startedAt : 0;
-  const plannedBefore = slides.slice(0, index).reduce((m, s) => m + s.notes.minutes, 0) * 60_000;
-  const plannedTotal = slides.reduce((m, s) => m + s.notes.minutes, 0) * 60_000;
+  // Each slide's time is its share of the session length.
+  const times = deck ? slideTimes(deck) : new Map<string, number>();
+  const timeOf = (id: string) => times.get(id) ?? 0;
+  const plannedBefore = slides.slice(0, index).reduce((m, s) => m + timeOf(s.id), 0) * 60_000;
+  const plannedTotal = slides.reduce((m, s) => m + timeOf(s.id), 0) * 60_000;
   const drift = elapsed - plannedBefore;
   const pace = Math.abs(drift) < 60_000 ? { label: 'On time', tone: 'good' } : drift > 0 ? { label: `${Math.round(drift / 60_000)} min behind`, tone: 'warn' } : { label: `${Math.round(-drift / 60_000)} min ahead`, tone: 'good' };
 
@@ -125,7 +129,7 @@ export default function PresenterView() {
           <div className="presenter-notes" style={{ fontSize: size }}>
             <div className="presenter-notes-head">
               <span className="eyebrow">Key notes</span>
-              <span className="faint" style={{ fontSize: 13 }}>{n.minutes} min planned</span>
+              <span className="faint" style={{ fontSize: 13 }}>{slideTimeLabel(timeOf(slide.id))} planned</span>
               <span style={{ marginLeft: 'auto', display: 'flex' }}>
                 <button type="button" className="pbtn" onClick={() => setSize((x) => Math.max(14, x - 2))} aria-label="Smaller notes"><AArrowDown size={16} /></button>
                 <button type="button" className="pbtn" onClick={() => setSize((x) => Math.min(44, x + 2))} aria-label="Larger notes"><AArrowUp size={16} /></button>

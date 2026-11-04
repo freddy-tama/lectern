@@ -270,12 +270,14 @@ export const LESSON_RULES = `This is a lesson. Teach less and go deeper: one ide
 - Ask about facts first, then meaning: what it says or what happened, then why and what it means. Ask more than one question in each section.
 - Before a key moment, show a picture and ask the room to look and predict what happens next.
 - Put a check after each main idea. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
-- Order practice from easy to hard: true or false, or putting things in order, then fill in the blanks, then retelling or explaining in their own words.
+- Order practice from easy to hard: true or false, or putting events, steps or sentences in order (an order slide) or matching pairs and sorting into groups (a match slide), then fill in the blanks, then retelling or explaining in their own words.
 - Never show an answer before the slide that asks for it: not in the opening, a heading, a caption or an earlier slide.
 - Never test one fact twice, for example a question on a date and then a true-or-false on the same date.
 - keyPoints are what a learner must remember, phrased so they make sense without the slide. checkQuestion and checkAnswer test understanding of that slide.
 - Close with takeaways, then at most two follow-up tasks: one to practise what was taught, and one open or preview question about what comes next.
-- A typical pace is one slide per 2-4 minutes.`;
+- Keep slides small and the pace quick: about 1-1.5 minutes a slide, and about 1 minute for young learners. A 40-minute lesson has about 25-40 slides.
+- Put a task and its answer on separate slides: the task first, the answer or a model answer on the next slide.
+- Show a passage one chunk at a time: one paragraph or a few sentences on a slide, with its question after it.`;
 
 const PURPOSE_RULES: Record<Purpose, string> = {
   lesson: LESSON_RULES,
@@ -453,7 +455,8 @@ export interface OutlineSlide {
   pictures: string[];
 }
 
-const minutesOf = (v: unknown) => Math.round(Math.max(0.5, Math.min(30, Number(v) || 2)) * 2) / 2;
+/** Quarter minutes from 15 seconds: fast lessons and talks plan slides under a minute. Times are shares of the session. */
+const minutesOf = (v: unknown) => Math.round(Math.max(0.25, Math.min(30, Number(v) || 2)) * 4) / 4;
 
 /**
  * Keeps outline slides of known kinds, at sensible sizes. A picture goes to at most one slide,
@@ -530,7 +533,7 @@ export function cleanNotes(raw: unknown): SlideNotes {
     keyPoints: Array.isArray(n.keyPoints) ? n.keyPoints.map((p) => text(p, 300)).filter(Boolean).slice(0, 6) : [],
     cues: Array.isArray(n.cues) ? n.cues.map((p) => text(p, 60)).filter(Boolean).slice(0, 4) : [],
     check: question ? { question, answer: text(n.checkAnswer, 400) } : null,
-    minutes: Math.max(0.5, Math.min(30, Number(n.minutes) || 2)),
+    minutes: Math.max(0.25, Math.min(30, Number(n.minutes) || 2)),
     links: [],
   };
 }

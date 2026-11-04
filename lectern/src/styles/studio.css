@@ -2252,3 +2252,41 @@ body.is-dragging-box * {
     transition: none;
   }
 }
+
+.slide-time-note {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+}
+
+.chip-button {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12.5px;
+}
+
+.chip-button:hover {
+  filter: brightness(0.96);
+}
+
+.session-menu {
+  display: grid;
+}
+
+.session-length {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 6px;
+}
+
+.session-length .input {
+  width: 72px;
+  text-align: center;
+}
+
+.session-note {
+  margin: 0;
+  padding: 0 10px 8px;
+  font-size: 12.5px;
+}

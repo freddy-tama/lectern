@@ -37,7 +37,7 @@ import { fitDeck } from '../src/core/deck/fit';
 import { CONT, fitsOnSlide } from '../src/core/deck/split';
 import { type Deck, type Slide, deckMinutes, emptyNotes } from '../src/core/deck/types';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
-import { DENSITY } from '../src/core/kinds/kit';
+import { DENSITY, wordBudget } from '../src/core/kinds/kit';
 import { getKind } from '../src/core/kinds/registry';
 import { fitDraft, fitSummary } from '../src/features/studio/fit-deck';
 import { checkRevision, fitSlide, kindSpec } from '../src/features/studio/slide-ai';
@@ -127,9 +127,10 @@ describe('fit, then re-check, then split', () => {
     const [call] = sdk.calls;
     const user = call.messages[0].content;
     expect(user).toContain('- This list is too long for one slide. Split it or shorten the points.');
-    expect(user).toContain(`For this audience a slide holds at most ${DENSITY.adult.bullets} points and about ${DENSITY.adult.words} words. This slide has`);
+    // The deck has no purpose, so it is a talk: fewer words than the audience could read.
+    expect(user).toContain(`For this audience a slide holds at most ${DENSITY.adult.bullets} points and about ${wordBudget('adult', 'talk')} words. This slide has`);
     expect(user).toContain('Change only what is needed to make the slide fit, and keep its meaning, facts and language.');
-    expect(call.system).toContain(`At most ${DENSITY.adult.bullets} points on a slide and about ${DENSITY.adult.words} words.`);
+    expect(call.system).toContain(`At most ${DENSITY.adult.bullets} points on a slide and about ${wordBudget('adult', 'talk')} words.`);
     expect(call.output_config.effort).toBe('low');
     const spec = cleanKind(JSON.parse(JSON.stringify(kindSpec(getKind('bullets')!))))!;
     expect(call.output_config.format.schema).toEqual(responseSchema(spec, 'revise'));

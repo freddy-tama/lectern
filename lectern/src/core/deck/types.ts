@@ -3,8 +3,16 @@
 
 export type Audience = 'young' | 'teen' | 'adult';
 
-/** What a deck is for. It sets the wording of key notes, study mode, the handout and AI drafting. */
+/** What a deck is for. It sets the wording of key notes, study mode, the handout, word budgets and AI drafting. */
 export type DeckPurpose = 'lesson' | 'talk' | 'pitch' | 'report';
+
+/** How much text slides carry, as chosen when the deck was drafted: mostly pictures, balanced, or full enough to read alone. */
+export type DeckDensity = 'visual' | 'balanced' | 'detailed';
+
+/** A density as stored or sent, or undefined when it is none of them. */
+export function deckDensity(value: unknown): DeckDensity | undefined {
+  return value === 'visual' || value === 'balanced' || value === 'detailed' ? value : undefined;
+}
 
 export interface CheckQuestion {
   question: string;
@@ -30,7 +38,10 @@ export interface KeyNotes {
   cues: string[];
   /** One question that checks understanding, with its answer. */
   check: CheckQuestion | null;
-  /** Planned minutes for this slide. */
+  /**
+   * Planned minutes for this slide, as its share of the deck's session length: when the deck has
+   * one, the slide's time is minutes × session ÷ what all shown slides add up to (see timing.ts).
+   */
   minutes: number;
   links: NoteLink[];
   /** Fields added by mods, keyed by mod id. Kept even when the mod is not installed. */
@@ -144,8 +155,10 @@ export interface Deck {
   purpose?: DeckPurpose;
   /** Lesson this deck belongs to, when it was made from a lesson. */
   lessonId?: string;
-  /** Planned length of the session in minutes. */
+  /** Planned length of the session in minutes. Slide times are shares of it (see timing.ts). */
   minutes?: number;
+  /** How much text the slides were drafted to carry. A detailed report is read alone, so its slides may say more. */
+  density?: DeckDensity;
   /** Lectern picks each slide's layout to suit its content (see autoVariants). */
   autoStyle?: boolean;
   createdAt: number;
@@ -207,7 +220,8 @@ export function normalizeNotes(value: unknown): KeyNotes {
     check: check && String(check.question ?? '').trim()
       ? { question: String(check.question).trim(), answer: String(check.answer ?? '').trim() }
       : null,
-    minutes: Number.isFinite(minutes) && minutes > 0 ? Math.min(60, Math.round(minutes * 2) / 2) : 2,
+    // Kept to the hundredth: minutes are a slide's share of the session (see timing.ts), and shares survive rescaling.
+    minutes: Number.isFinite(minutes) && minutes > 0 ? Math.min(180, Math.max(0.01, Math.round(minutes * 100) / 100)) : 2,
     links: Array.isArray(v.links)
       ? (v.links as Record<string, unknown>[])
           .map((l) => ({ label: String(l?.label ?? '').trim(), url: String(l?.url ?? '').trim() }))
@@ -217,6 +231,7 @@ export function normalizeNotes(value: unknown): KeyNotes {
   };
 }
 
+/** What the shown slides' stored minutes add up to. For the deck's length, use sessionMinutes (timing.ts). */
 export function deckMinutes(deck: Pick<Deck, 'slides'>): number {
   return deck.slides.filter((s) => !s.hidden).reduce((sum, s) => sum + (s.notes?.minutes || 0), 0);
 }

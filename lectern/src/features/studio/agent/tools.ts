@@ -4,7 +4,8 @@
 
 import { DECOR_MOTIFS } from '../../../core/engine/decor';
 import { makeSlide } from '../../../core/deck/draft';
-import { type KeyNotes, type Slide, type SlideElement, deckMinutes, uid } from '../../../core/deck/types';
+import { sessionMinutes, slideTimeLabel, slideTimes, weightFor } from '../../../core/deck/timing';
+import { type KeyNotes, type Slide, type SlideElement, uid } from '../../../core/deck/types';
 import type { Box, SlideLayout } from '../../../core/engine/boxes';
 import { ELEMENT_BOX, cleanElement, elementIdOf, findElement, updateElement, withElement, withoutElement } from '../../../core/engine/elements';
 import { withOverride, withoutOverrides } from '../../../core/engine/overrides';
@@ -51,6 +52,8 @@ export function asData(label: string, body: string): string {
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 const halfMinutes = (m: number) => Math.max(0.5, Math.min(30, Math.round(m * 2) / 2));
+/** The deck's length for the agent's replies, like "40 min". */
+const length = (deck: Parameters<typeof sessionMinutes>[0]) => `${Math.round(sessionMinutes(deck) * 10) / 10} min`;
 const shot = (s: SlideShot): ToolBlock => ({ type: 'image', source: { type: 'base64', media_type: s.mime, data: s.data } });
 
 // ─── Input checks ──────────────────────────────────────────────────────────────
@@ -458,7 +461,8 @@ export const RUNS: Record<string, Run> = {
       const answer = input.checkAnswer != null ? str(input, 'checkAnswer', 400, { empty: true }) : slide.notes.check?.answer ?? '';
       patch.check = question.trim() ? { question: question.trim(), answer: answer.trim() } : null;
     }
-    if (input.minutes != null) patch.minutes = halfMinutes(minutes(input, 'minutes'));
+    // The minutes asked for are the slide's time; stored, they are its share of the session.
+    if (input.minutes != null) patch.minutes = weightFor(ws.deck, slide.id, halfMinutes(minutes(input, 'minutes')));
     if (!Object.keys(patch).length) throw new Error('Nothing to change: give at least one field that isn’t null.');
     const notes = { ...slide.notes, ...patch };
     const changed = (Object.keys(patch) as (keyof KeyNotes)[]).filter((k) => !same(notes[k], slide.notes[k]));
@@ -467,8 +471,8 @@ export const RUNS: Record<string, Run> = {
     ws.replace(slide.id, { ...slide, notes }, reason);
     const onlyTime = changed.length === 1 && changed[0] === 'minutes';
     return {
-      content: `Proposed: slide ${n} (${slide.id}) key notes, ${changed.join(', ')} changed.${changed.includes('minutes') ? ` It is now ${notes.minutes} min; the deck adds up to ${deckMinutes(ws.deck)} min.` : ''}`,
-      label: onlyTime ? `Proposed ${notes.minutes} min for slide ${n}` : `Proposed key notes for slide ${n}`,
+      content: `Proposed: slide ${n} (${slide.id}) key notes, ${changed.join(', ')} changed.${changed.includes('minutes') ? ` It now gets ${slideTimeLabel(slideTimes(ws.deck).get(slide.id) ?? 0)} of the ${length(ws.deck)} session.` : ''}`,
+      label: onlyTime ? `Proposed ${slideTimeLabel(slideTimes(ws.deck).get(slide.id) ?? 0)} for slide ${n}` : `Proposed key notes for slide ${n}`,
       detail: reason || undefined,
     };
   },
@@ -482,14 +486,14 @@ export const RUNS: Record<string, Run> = {
     const layout = input.layout == null ? undefined : str(input, 'layout', 40).trim();
     if (layout && !def.variants?.some((v) => v.id === layout)) throw new Error(`${def.kind} has no layout "${clip(layout, 30)}". ${def.variants?.length ? `It offers: ${def.variants.map((v) => v.id).join(', ')}.` : 'It has one layout: pass null.'}`);
     const reason = str(input, 'reason', 300, { empty: true }).trim();
-    const base = makeSlide(def.kind, undefined, { script: str(input, 'script', 6_000, { empty: true }), keyPoints: strList(input, 'keyPoints', 8), minutes: halfMinutes(minutes(input, 'minutes')) }, layout);
+    const base = makeSlide(def.kind, undefined, { script: str(input, 'script', 6_000, { empty: true }), keyPoints: strList(input, 'keyPoints', 8), minutes: weightFor(ws.deck, null, halfMinutes(minutes(input, 'minutes'))) }, layout);
     const { content, warnings } = await readContent(def, str(input, 'content_json', 60_000), base.content, ctx);
     const slide: Slide = { ...base, id: uid('s'), content, ...(layout && ws.deck.autoStyle ? { variantPinned: true } : {}) };
     const index = ws.anchor(after) + 1;
     ws.insert(index, slide, reason);
     const warn = ws.warnings(slide);
     return {
-      content: `Proposed: a new ${def.kind} slide at number ${index + 1}, id ${slide.id}. The deck adds up to ${deckMinutes(ws.deck)} min.${warnings.length ? ` Note: ${warnings.join('; ')}.` : ''}${warn.length ? ` Now: ⚠ ${warn.join('; ')}.` : ''}`,
+      content: `Proposed: a new ${def.kind} slide at number ${index + 1}, id ${slide.id}. The session is ${length(ws.deck)}.${warnings.length ? ` Note: ${warnings.join('; ')}.` : ''}${warn.length ? ` Now: ⚠ ${warn.join('; ')}.` : ''}`,
       label: `Proposed a new ${def.label.toLowerCase()} slide at ${index + 1}`,
       detail: reason || undefined,
     };
@@ -508,7 +512,7 @@ export const RUNS: Record<string, Run> = {
     const reason = str(input, 'reason', 300, { empty: true }).trim();
     const { slide, wasNew } = ws.remove(ref, reason);
     if (wasNew) return { content: `Took back the new slide ${slide.id}; it won't be proposed.`, label: `Took back the new slide ${n}` };
-    return { content: `Proposed: delete slide ${n} (${slide.id}). The deck adds up to ${deckMinutes(ws.deck)} min.`, label: `Proposed deleting slide ${n}`, detail: reason || undefined };
+    return { content: `Proposed: delete slide ${n} (${slide.id}). The session is ${length(ws.deck)}.`, label: `Proposed deleting slide ${n}`, detail: reason || undefined };
   },
 
   async set_layout(input, { ws }) {

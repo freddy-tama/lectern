@@ -2,7 +2,8 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { AudioLines, BookOpen, CalendarDays, Check, Clock, MonitorPlay, NotebookPen, Pencil, Plus, ScrollText, Sparkles } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { type Deck, PURPOSES, deckMinutes, deckPurpose } from '../../core/deck/types';
+import { sessionMinutes } from '../../core/deck/timing';
+import { type Deck, PURPOSES, deckPurpose } from '../../core/deck/types';
 import { type Course, type Lesson, type Note, db } from '../../data/db';
 import { type ChecklistItem, checklistItems, noteTitle, openTasks, stripMarks, toggleChecklistItem, updateNote } from '../../data/notes';
 import { type Focus, shows, useProfile } from '../../data/profile';
@@ -236,7 +237,7 @@ function Rehearse({ deck }: { deck: Deck }) {
           </div>
           <h2 id="rehearse-title"><Link to={`/studio/${deck.id}`}>{deck.title}</Link></h2>
           <div className="up-next-meta faint" style={{ fontSize: 13 }}>
-            <Clock size={14} /> {plural(count, 'slide')} · about {Math.max(1, Math.round(deckMinutes(deck)))} min with speaker notes
+            <Clock size={14} /> {plural(count, 'slide')} · about {Math.max(1, Math.round(sessionMinutes(deck)))} min with speaker notes
           </div>
           <div className="up-next-actions">
             <button type="button" className="btn btn-primary btn-lg" onClick={() => navigate(`/present/${deck.id}`)}><MonitorPlay size={18} /> Present</button>

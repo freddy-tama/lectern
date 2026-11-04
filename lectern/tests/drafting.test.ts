@@ -243,7 +243,8 @@ describe('finishing', () => {
     expect(after.decks[0]!.deckId).toBe(id);
     // Five 2-minute slides for a 30-minute session: the check only retimes them.
     expect(after.decks[0]!.fit!.report).toMatchObject({ found: 0, retimed: true });
-    expect(saved!.slides.reduce((t, s) => t + s.notes.minutes, 0)).toBe(30);
+    expect(saved!.minutes).toBe(30);
+    expect(saved!.slides.reduce((t, s) => t + s.notes.minutes, 0)).toBeCloseTo(30, 1);
     expect(after.checking).toBeUndefined();
     expect(await openJob()).toBeUndefined();
   });
