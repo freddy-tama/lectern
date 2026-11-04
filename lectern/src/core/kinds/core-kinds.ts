@@ -592,21 +592,30 @@ function stepsDown(ctx: LayoutContext, items: Record<string, unknown>[], bottom:
 
 const LETTERS = 'ABCDEF';
 
+/** The question asked: as written, or, for a claim to judge, whether the room agrees. */
+function questionOf(c: C): string {
+  const q = read.str(c, 'question');
+  return q.trim() || !read.str(c, 'claim').trim() ? q : 'Do you agree? Why?';
+}
+
 const question: SlideKindDefinition<C> = {
-  kind: 'question', label: 'Question or poll', description: 'Ask the audience a question or run a quick poll. Choices are optional; the answer appears on click.', icon: 'circle-help', group: 'Engage',
+  kind: 'question', label: 'Question or poll', description: 'Ask the audience a question or run a quick poll. Choices are optional; the answer appears on click. To have the room judge a claim, put who says it in "speaker" and what they say in "claim", and ask if they are right and why.', icon: 'circle-help', group: 'Engage',
   fields: [
     { key: 'question', label: 'Question', type: 'textarea', rows: 3 },
+    { key: 'speaker', label: 'Who says it', type: 'text', more: true, help: 'To judge a claim: a name, such as Sam or a customer.' },
+    { key: 'claim', label: 'What they say', type: 'textarea', rows: 2, more: true, help: 'The claim to agree or disagree with. Leave the question empty to ask “Do you agree? Why?”' },
     { key: 'options', label: 'Choices', type: 'list', itemLabel: 'Choice', max: 6, correctKey: 'correct', help: 'Leave empty for an open question. Mark the correct choice.' },
     { key: 'answer', label: 'Answer or explanation', type: 'textarea', rows: 2, help: 'Shown when you click.' },
   ],
   create: () => ({ question: 'Which of these is a renewable source of energy?', options: ['Coal', 'Wind', 'Natural gas', 'Oil'], correct: 1, answer: 'Wind is renewed by the weather; the others take millions of years to form.' }),
-  heading: (c) => read.str(c, 'question').slice(0, 70) || 'Question',
-  text: (c) => [read.str(c, 'question'), ...read.list(c, 'options'), read.str(c, 'answer')].filter(Boolean),
-  // The right choice is the answer; an open question's answer is its explanation.
+  heading: (c) => (read.str(c, 'question') || read.str(c, 'claim')).slice(0, 70) || 'Question',
+  text: (c) => [read.str(c, 'speaker'), read.str(c, 'claim'), questionOf(c), ...read.list(c, 'options'), read.str(c, 'answer')].filter(Boolean),
+  // The right choice is the answer; an open question's answer is its explanation. A claim is part of what is asked.
   checks: (c) => {
-    const q = read.str(c, 'question').trim();
+    const q = questionOf(c).trim();
+    const claim = read.str(c, 'claim').trim();
     const right = read.items(c, 'options')[read.num(c, 'correct')]?.trim();
-    return q ? [{ prompt: q, answer: right || read.str(c, 'answer').trim() }] : [];
+    return q ? [{ prompt: claim ? `${claim} ${q}` : q, answer: right || read.str(c, 'answer').trim() }] : [];
   },
   layout(c, ctx) {
     const boxes: Box[] = [];
@@ -617,7 +626,20 @@ const question: SlideKindDefinition<C> = {
     const answer = read.str(c, 'answer');
     const eb = eyebrow(ctx, 'eyebrow', 'Question', M.x, M.top, 600);
     boxes.push(eb);
-    const q = text(ctx, { id: 'question', text: read.str(c, 'question') || ' ', x: M.x, y: eb.y + eb.h + 20, w: M.w - 120, h: options.length ? 260 : 420, role: 'display', max: 72, min: 44, hug: true, bind: 'question' });
+    let top = eb.y + eb.h + 20;
+    // A claim to judge: who says it and what they say, in a card above the question.
+    const claim = read.str(c, 'claim').trim();
+    if (claim) {
+      const speaker = read.str(c, 'speaker').trim();
+      const pad = sz(ctx, 32);
+      const w = M.w - 120;
+      const name = speaker ? text(ctx, { id: 'speaker', text: speaker, x: M.x + pad, y: top + pad, w: w - pad * 2, h: sz(ctx, 46), max: 34, min: 24, weight: 750, color: ctx.theme.colors.accent, maxLines: 1, hug: true, bind: 'speaker' }) : null;
+      const saidY = name ? name.y + name.h + sz(ctx, 8) : top + pad;
+      const said = text(ctx, { id: 'claim', text: `“${claim}”`, x: M.x + pad, y: saidY, w: w - pad * 2, h: options.length ? 190 : 280, role: 'display', max: 56, min: 32, hug: true, bind: 'claim' });
+      boxes.push(card(ctx, 'claim-card', M.x, top, w, said.y + said.h + pad - top, { stroke: ctx.theme.colors.accent, strokeWidth: 3 }), ...(name ? [name] : []), said);
+      top = said.y + said.h + pad + sz(ctx, 28);
+    }
+    const q = text(ctx, { id: 'question', text: questionOf(c) || ' ', x: M.x, y: top, w: M.w - 120, h: options.length ? (claim ? 150 : 260) : 420, role: 'display', max: claim ? 52 : 72, min: claim ? 32 : 44, hug: true, bind: 'question' });
     boxes.push(q);
     let y = q.y + q.h + sz(ctx, 52);
     const answerH = answer ? Math.min(220, heightAt(ctx, answer, sz(ctx, 34), M.w - 140) + 72) : 0;

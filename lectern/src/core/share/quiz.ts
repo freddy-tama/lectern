@@ -89,7 +89,11 @@ export function quizItem(slide: Pick<Slide, 'id' | 'kind' | 'content'> | undefin
   if (!slide || !choices) return null;
   const correct = Number((slide.content as { correct?: unknown }).correct);
   if (!Number.isInteger(correct) || correct < 0 || correct >= choices.length) return null;
-  const question = String((slide.content as { question?: unknown }).question ?? '').trim();
+  const content = slide.content as { question?: unknown; claim?: unknown; speaker?: unknown };
+  const claim = String(content.claim ?? '').trim();
+  const asked = String(content.question ?? '').trim() || (claim ? 'Do you agree? Why?' : '');
+  // A claim to judge travels with its question, so phones show what is being judged.
+  const question = claim ? `${String(content.speaker ?? '').trim() ? `${String(content.speaker).trim()}: ` : ''}“${claim}” ${asked}` : asked;
   return { slideId: slide.id, question, choices, correct };
 }
 

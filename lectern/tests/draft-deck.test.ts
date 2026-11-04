@@ -182,7 +182,8 @@ describe('catalogue and schemas', () => {
     if (typeof lesson === 'string' || typeof talk === 'string') throw new Error('bad input');
     const system = stagedRequest(lesson, OUTLINE_TASK).system;
     const line = (k: string) => system.split('\n').find((l) => l.startsWith(`- ${k} (`))!;
-    expect(line('true-false')).toContain('items [objects: statement, isTrue (true/false), correction]');
+    expect(line('true-false')).toContain('items [objects: statement, isTrue (true/false), correction, reason, otherReason]');
+    expect(line('question')).toContain('question [textarea], speaker [text], claim [textarea]');
     expect(line('fill-in')).toContain('passage [textarea], bank [list], hideBank [toggle]');
     expect(kinds.map((k) => k.kind)).toEqual(expect.arrayContaining(['true-false', 'fill-in', 'credits']));
     expect(cleanCatalogue([...kindCatalogue(), ...Array.from({ length: 12 }, (_, i) => ({ kind: `mod.kind${i}`, label: 'M', description: '', fields: [] }))]).at(-1)?.kind).toBe('mod.kind11');

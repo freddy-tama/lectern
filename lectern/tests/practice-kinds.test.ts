@@ -8,6 +8,7 @@ import { getTheme } from '../src/core/engine/themes';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
 import { blanksOf, inOrder, isOn, shownOrder } from '../src/core/kinds/practice-kinds';
 import { getKind } from '../src/core/kinds/registry';
+import { quizItem } from '../src/core/share/quiz';
 
 registerCoreKinds();
 
@@ -67,6 +68,33 @@ describe('true or false', () => {
     const parts = splitSlide(many);
     expect(parts?.map((p) => (p.content.items as unknown[]).length)).toEqual([3, 3]);
     expect(parts?.[1].content.title).toBe('Check (cont.)');
+  });
+});
+
+describe('true or false, with a reason', () => {
+  const content = {
+    title: 'True or false, and why?',
+    items: [
+      { statement: 'Plants get their food from the soil.', isTrue: false, correction: 'They make it in their leaves.', reason: 'they use light to make sugar', otherReason: 'roots take in food' },
+      { statement: 'Leaves are green because of chlorophyll.', isTrue: true, correction: '', reason: 'chlorophyll reflects green light' },
+    ],
+  };
+
+  it('offers two reasons to pick from, and the click rings the right one', () => {
+    for (const audience of ['young', 'teen', 'adult'] as const) {
+      const layout = lay('true-false', content, { audience });
+      expect(layout.warnings.filter((w) => !w.includes('words on this slide'))).toEqual([]);
+      inside(layout.boxes);
+    }
+    const { boxes } = lay('true-false', content);
+    const chips = texts(boxes).filter((b) => /^reason-0-\d-text$/.test(b.id));
+    expect(chips.map((b) => b.text).sort()).toEqual(['because roots take in food', 'because they use light to make sugar']);
+    const right = chips.findIndex((b) => b.text === 'because they use light to make sugar');
+    expect(byId(boxes, `reason-0-${right}-ring`)).toMatchObject({ step: 1, reveal: 'answer' });
+    expect(byId(boxes, `reason-0-${1 - right}-dim`)).toMatchObject({ step: 1, reveal: 'answer' });
+    expect(byId(boxes, 'correction-0')).toMatchObject({ text: 'They make it in their leaves.', step: 1, reveal: 'answer' });
+    // With one reason, it appears with the verdict.
+    expect(byId(boxes, 'correction-1')).toMatchObject({ text: 'Because chlorophyll reflects green light', step: 2, bind: 'items.1.reason' });
   });
 });
 
@@ -227,6 +255,27 @@ describe('match or sort', () => {
     expect(matched.warnings).toEqual([]);
     expect(matched.boxes.filter((b) => b.type === 'image')).toHaveLength(2);
     expect(lay('match', { items: pairs.slice(0, 1) }, { mode: 'edit' }).warnings).toEqual(['Add at least two items, each with its match or group.']);
+  });
+});
+
+describe('judging a claim', () => {
+  it('shows who says what in a card above the question, and asks whether they are right', () => {
+    const claim = { speaker: 'Sam', claim: 'Heavier objects fall faster.', question: '', options: ['Agree', 'Disagree'], correct: 1, answer: 'Without air, everything falls at the same rate.' };
+    for (const audience of ['young', 'teen', 'adult'] as const) {
+      const layout = lay('question', claim, { audience });
+      expect(layout.warnings).toEqual([]);
+      inside(layout.boxes);
+    }
+    const { boxes } = lay('question', claim);
+    expect(byId(boxes, 'speaker')).toMatchObject({ text: 'Sam', bind: 'speaker' });
+    expect(byId(boxes, 'claim')).toMatchObject({ text: '“Heavier objects fall faster.”', bind: 'claim' });
+    const card = byId(boxes, 'claim-card')!;
+    expect(byId(boxes, 'question')).toMatchObject({ text: 'Do you agree? Why?' });
+    expect(byId(boxes, 'question')!.y).toBeGreaterThan(card.y + card.h);
+    const def = getKind('question')!;
+    expect(def.checks!(claim)).toEqual([{ prompt: 'Heavier objects fall faster. Do you agree? Why?', answer: 'Disagree' }]);
+    expect(def.heading(claim)).toBe('Heavier objects fall faster.');
+    expect(quizItem({ id: 'q', kind: 'question', content: claim })).toMatchObject({ question: 'Sam: “Heavier objects fall faster.” Do you agree? Why?', correct: 1 });
   });
 });
 

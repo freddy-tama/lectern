@@ -21,22 +21,37 @@ interface Statement {
   statement: string;
   isTrue: boolean;
   correction: string;
+  /** Why it is true or false. */
+  reason: string;
+  /** A tempting reason that is wrong: with one, the room picks between the two. */
+  otherReason: string;
 }
 
 function statements(c: C): Statement[] {
   return read.objects<C>(c, 'items')
-    .map((o, i) => ({ i, statement: read.str(o, 'statement').trim(), isTrue: isOn(o.isTrue), correction: read.str(o, 'correction').trim() }))
+    .map((o, i) => ({
+      i, statement: read.str(o, 'statement').trim(), isTrue: isOn(o.isTrue), correction: read.str(o, 'correction').trim(),
+      reason: read.str(o, 'reason').trim(), otherReason: read.str(o, 'otherReason').trim(),
+    }))
     .filter((s) => s.statement || s.correction);
 }
 
+/** What appears with the verdict: the correction of a false statement, and why. */
+function verdictLine(s: Statement): string {
+  const why = s.reason && !s.otherReason ? `Because ${s.reason.replace(/^because\s+/i, '')}` : '';
+  return [s.isTrue ? '' : s.correction, why].filter(Boolean).join(' ');
+}
+
 const trueFalse: SlideKindDefinition<C> = {
-  kind: 'true-false', label: 'True or false', description: 'Statements to judge true or false. Each verdict appears on its own click, with the correction of a false one.', icon: 'check-check', group: 'Engage',
+  kind: 'true-false', label: 'True or false', description: 'Statements to judge true or false. Each verdict appears on its own click, with the correction of a false one. A "reason" asks why too; add an "otherReason" that sounds right but isn’t, and the room picks between them.', icon: 'check-check', group: 'Engage',
   fields: [
     { key: 'title', label: 'Title', type: 'text' },
     { key: 'items', label: 'Statements', type: 'objects', itemLabel: 'Statement', max: 6, min: 1, fields: [
       { key: 'statement', label: 'Statement', type: 'textarea', rows: 2 },
       { key: 'isTrue', label: 'It’s true', type: 'toggle' },
       { key: 'correction', label: 'Correction', type: 'text', help: 'For a false statement: what is true. It appears with the verdict.' },
+      { key: 'reason', label: 'Because…', type: 'text', help: 'Why it is true or false. It appears with the verdict.' },
+      { key: 'otherReason', label: 'A wrong because…', type: 'text', help: 'A reason that sounds right but isn’t. The room then picks one of the two.' },
     ] },
   ],
   create: () => ({
@@ -48,7 +63,7 @@ const trueFalse: SlideKindDefinition<C> = {
     ],
   }),
   heading: (c) => read.str(c, 'title') || 'True or false',
-  text: (c) => [read.str(c, 'title'), ...statements(c).flatMap((s) => [s.statement, s.isTrue ? '' : s.correction])].filter(Boolean),
+  text: (c) => [read.str(c, 'title'), ...statements(c).flatMap((s) => [s.statement, s.isTrue ? '' : s.correction, s.reason, s.otherReason])].filter(Boolean),
   checks: (c) => statements(c).filter((s) => s.statement).map((s) => ({ prompt: s.statement, answer: s.isTrue ? s.statement : s.correction })),
   layout(c, ctx) {
     const items = statements(c).slice(0, 6);
@@ -58,7 +73,9 @@ const trueFalse: SlideKindDefinition<C> = {
     if (!n) return { boxes };
     const colors = ctx.theme.colors;
     const gap = sz(ctx, 24);
-    const rowH = Math.min(sz(ctx, 190), (M.bottom - bottom - gap * (n - 1)) / n);
+    // Statements with two reasons to pick from need room for them.
+    const picks = items.some((s) => s.reason && s.otherReason);
+    const rowH = Math.min(sz(ctx, picks ? 320 : 190), (M.bottom - bottom - gap * (n - 1)) / n);
     const padX = sz(ctx, 32);
     const padY = Math.min(sz(ctx, 18), rowH * 0.12);
     const numW = sz(ctx, 60);
@@ -69,13 +86,34 @@ const trueFalse: SlideKindDefinition<C> = {
       const y = bottom + k * (rowH + gap);
       const at = `items.${s.i}`;
       const step = k + 1;
-      const fix = !s.isTrue && s.correction;
-      const statementH = fix ? (rowH - padY * 2) * 0.56 : rowH - padY * 2;
+      const pick = s.reason && s.otherReason;
+      const line = verdictLine(s);
+      const inner = rowH - padY * 2;
+      // With two reasons to pick from, a false statement's correction still appears with the verdict, between them.
+      const fixH = pick && !s.isTrue && s.correction ? inner * 0.22 : 0;
+      const statementH = pick ? inner * (fixH ? 0.34 : 0.48) : line ? inner * 0.56 : inner;
       boxes.push(card(ctx, `item-${k}`, M.x, y, M.w, rowH));
       boxes.push(text(ctx, { id: `num-${k}`, text: String(k + 1), x: M.x + padX, y, w: numW, h: rowH, max: 36, min: 24, weight: 750, color: colors.accent, valign: 'middle', maxLines: 1 }));
-      boxes.push(text(ctx, { id: `statement-${k}`, text: s.statement || ' ', x: textX, y: y + padY, w: textW, h: statementH, max: 42, min: 24, weight: 600, valign: fix ? 'bottom' : 'middle', bind: `${at}.statement` }));
-      if (fix) {
-        boxes.push(text(ctx, { id: `correction-${k}`, text: s.correction, x: textX, y: y + padY + statementH, w: textW, h: rowH - padY * 2 - statementH, max: 34, min: 22, weight: 650, color: colors.good, valign: 'top', step, reveal: 'answer', bind: `${at}.correction` }));
+      boxes.push(text(ctx, { id: `statement-${k}`, text: s.statement || ' ', x: textX, y: y + padY, w: textW, h: statementH, max: 42, min: 24, weight: 600, valign: line || pick ? 'bottom' : 'middle', bind: `${at}.statement` }));
+      if (pick) {
+        // Two reasons side by side, in a steady mixed-up order; the click rings the right one and dims the other.
+        const chipGap = sz(ctx, 16);
+        if (fixH) boxes.push(text(ctx, { id: `correction-${k}`, text: s.correction, x: textX, y: y + padY + statementH, w: textW, h: fixH, max: 32, min: 18, weight: 650, color: colors.good, valign: 'middle', maxLines: 1, step, reveal: 'answer', bind: `${at}.correction` }));
+        const chipY = y + padY + statementH + fixH + sz(ctx, 10);
+        const chipH = inner - statementH - fixH - sz(ctx, 10);
+        const chipW = (textW - chipGap) / 2;
+        const both = [{ value: s.reason, right: true, key: 'reason' }, { value: s.otherReason, right: false, key: 'otherReason' }];
+        const order = shownOrder([s.reason, s.otherReason]).map((i) => both[i]!);
+        order.forEach((r, j) => {
+          const x = textX + j * (chipW + chipGap);
+          boxes.push(card(ctx, `reason-${k}-${j}`, x, chipY, chipW, chipH, { fill: colors.bg }));
+          boxes.push(text(ctx, { id: `reason-${k}-${j}-text`, text: `because ${r.value.replace(/^because\s+/i, '')}`, x: x + sz(ctx, 16), y: chipY, w: chipW - sz(ctx, 32), h: chipH, max: 30, min: 18, weight: 550, valign: 'middle', bind: `${at}.${r.key}` }));
+          boxes.push(r.right
+            ? shape({ id: `reason-${k}-${j}-ring`, shape: 'rect', x: x - 3, y: chipY - 3, w: chipW + 6, h: chipH + 6, stroke: colors.good, strokeWidth: 6, radius: ctx.theme.radius + 3, step, reveal: 'answer' })
+            : shape({ id: `reason-${k}-${j}-dim`, shape: 'rect', x, y: chipY, w: chipW, h: chipH, fill: colors.surface, opacity: 0.65, radius: ctx.theme.radius, step, reveal: 'answer' }));
+        });
+      } else if (line) {
+        boxes.push(text(ctx, { id: `correction-${k}`, text: line, x: textX, y: y + padY + statementH, w: textW, h: inner - statementH, max: 34, min: 20, weight: 650, color: colors.good, valign: 'top', step, reveal: 'answer', bind: `${at}.${!s.isTrue && s.correction ? 'correction' : 'reason'}` }));
       }
       // An empty ring until the click; then a tick or a cross, in the verdict's colour.
       const bx = M.right - padX - d;
