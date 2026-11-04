@@ -3,10 +3,11 @@ import { type ReactNode, useState } from 'react';
 import { SPEAKING_WPM, completeNotes, estimateMinutes } from '../../core/deck/draft';
 import { wording } from '../../core/deck/purpose';
 import { MIN_SLIDE_MINUTES, slideTimeLabel, stepTime } from '../../core/deck/timing';
-import type { DeckPurpose, KeyNotes, Slide } from '../../core/deck/types';
+import type { DeckPurpose, KeyNotes, NoteLink, Slide } from '../../core/deck/types';
 import { countWords, lengthLabel } from '../../core/deck/words';
 import { installedPlugins } from '../../core/plugins/registry';
 import { minutesLabel } from '../../ui/format';
+import { asLink } from '../autodeck/links';
 import { Fields } from './Fields';
 import { ModField } from './ModField';
 
@@ -35,6 +36,15 @@ export function NotesPanel({ slide, purpose = 'talk', onChange, aside, time, onT
     const v = value.trim();
     if (v && !notes.cues.includes(v)) set({ cues: [...notes.cues, v] }, 'cues');
     setCue('');
+  };
+  const [link, setLink] = useState('');
+  const links = notes.links ?? [];
+  const setLinks = (next: NoteLink[]) => set({ links: next }, 'links');
+  /** A pasted address becomes a link labelled with its site, which the presenter can rename. */
+  const addLink = (value: string) => {
+    const url = asLink(value);
+    if (url && !links.some((l) => l.url === url)) setLinks([...links, { label: new URL(url).hostname.replace(/^www\./, ''), url }]);
+    if (url || !value.trim()) setLink('');
   };
 
   return (
@@ -107,6 +117,27 @@ export function NotesPanel({ slide, purpose = 'talk', onChange, aside, time, onT
             />
             <datalist id="cue-ideas">{w.cueIdeas.map((c) => <option key={c} value={c} />)}</datalist>
           </div>
+        </fieldset>
+
+        <fieldset className="field note-links">
+          <legend className="field-label">Sources and links</legend>
+          {links.map((l, i) => (
+            <div key={i} className="note-link">
+              <input className="input" value={l.label} placeholder="Label, such as the site and year" aria-label={`Label of link ${i + 1}`} onChange={(e) => setLinks(links.map((x, k) => (k === i ? { ...x, label: e.target.value } : x)))} />
+              <input className="input" value={l.url} aria-label={`Address of link ${i + 1}`} onChange={(e) => setLinks(links.map((x, k) => (k === i ? { ...x, url: e.target.value } : x)))} />
+              <button type="button" className="icon-btn" aria-label={`Remove link ${l.label || l.url}`} onClick={() => setLinks(links.filter((_, k) => k !== i))}><X size={14} /></button>
+            </div>
+          ))}
+          <input
+            className="input"
+            value={link}
+            placeholder="Paste a link and press Enter"
+            onChange={(e) => setLink(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addLink(link); } }}
+            onBlur={() => link && addLink(link)}
+            aria-label="Add a link"
+          />
+          <span className="field-help">Where this slide’s facts come from. Shown in Review mode, on the handout and in the PowerPoint’s speaker notes.</span>
         </fieldset>
 
         <div className="field">

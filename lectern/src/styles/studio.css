@@ -544,6 +544,18 @@
   font-size: 13.5px;
 }
 
+.note-link {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.note-link .input,
+.note-links > .input {
+  font-size: 13.5px;
+}
+
 .stepper {
   display: flex;
   align-items: center;
