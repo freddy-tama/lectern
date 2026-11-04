@@ -128,3 +128,22 @@ describe('F3 · worksheet practice', () => {
     expect(kinds).not.toContain('fill-in');
   });
 });
+
+describe('F4 · picture descriptions and chart words', () => {
+  const pic = (descr: string, x = 1) => `<p:pic><p:nvPicPr><p:cNvPr id="${ids++}" name="Picture ${ids}" descr="${descr}"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill/><p:spPr><a:xfrm><a:off x="${x * 914400}" y="914400"/><a:ext cx="914400" cy="914400"/></a:xfrm></p:spPr></p:pic>`;
+  const chartFrame = '<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="40" name="Chart 1"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="914400" y="1828800"/><a:ext cx="7315200" cy="3657600"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" r:id="rId2"/></a:graphicData></a:graphic></p:graphicFrame>';
+  const chartXml = '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><c:chart><c:title><c:tx><c:rich><a:p><a:r><a:t>Cases by </a:t></a:r><a:r><a:t>year</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:barChart><c:ser><c:tx><c:strRef><c:strCache><c:pt idx="0"><c:v>Cases</c:v></c:pt></c:strCache></c:strRef></c:tx><c:cat><c:strRef><c:strCache><c:pt idx="0"><c:v>2021</c:v></c:pt><c:pt idx="1"><c:v>2022</c:v></c:pt><c:pt idx="2"><c:v>2023</c:v></c:pt></c:strCache></c:strRef></c:cat></c:ser></c:barChart><c:valAx><c:title><c:tx><c:rich><a:p><a:r><a:t>People</a:t></a:r></a:p></c:rich></c:tx></c:title></c:valAx></c:plotArea></c:chart></c:chartSpace>';
+
+  it('keeps a picture’s description and a chart’s words, marked as such', async () => {
+    const { slides } = await readPptx(await pptx([
+      slide(pic('3x + 5x') + pic('A picture containing text Description automatically generated', 3)),
+      slide(box('How many people', { x: 1, y: 0.5, size: 36 }) + chartFrame),
+    ], { files: {
+      'ppt/slides/_rels/slide2.xml.rels': `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="${REL}/chart" Target="../charts/chart1.xml"/></Relationships>`,
+      'ppt/charts/chart1.xml': chartXml,
+    } }));
+    expect(slides[0]!.text).toBe('(Picture: 3x + 5x)');
+    expect(slides[1]!.title).toBe('How many people');
+    expect(slides[1]!.text).toBe('How many people\n(Chart: Cases by year · Cases · 2021, 2022, 2023 · People)');
+  });
+});

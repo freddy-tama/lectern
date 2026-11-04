@@ -85,6 +85,34 @@ export interface SlideShape {
   lines: string[];
   /** A table's rows of cells. */
   rows?: string[][];
+  /** A picture's description or a chart's words, written "(Picture: …)" or "(Chart: …)". */
+  role?: 'picture' | 'chart';
+}
+
+const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+
+/** Descriptions Office writes by itself, or that only name the file. */
+const NO_DESCRIPTION = /automatically generated|^(?:picture|image|graphic|图片|图像)\s*\d*$|\.(?:png|jpe?g|gif|bmp|svg|emf|wmf|tiff?)$/i;
+
+const textIn = (el: Element | undefined, ns: string, name: string, sep: string) =>
+  el ? tidy(Array.from(el.getElementsByTagNameNS(ns, name)).map((t) => t.textContent ?? '').join(sep)) : '';
+
+/** A native chart's words: its title, series names, first categories and axis titles. */
+export function chartWords(xml: string): string {
+  const doc = parse(xml);
+  const named = (el: Element | undefined) => {
+    const tx = el && child(el, C, 'tx');
+    return textIn(tx, A, 't', '') || textIn(tx, C, 'v', ' ');
+  };
+  const chart = doc.getElementsByTagNameNS(C, 'chart')[0];
+  const title = chart ? named(child(chart, C, 'title')) : '';
+  const series = Array.from(doc.getElementsByTagNameNS(C, 'ser'));
+  const names = [...new Set(series.map((s) => named(s)).filter(Boolean))];
+  const cat = series[0] && child(series[0], C, 'cat');
+  const cats = cat ? Array.from(cat.getElementsByTagNameNS(C, 'pt')).map((pt) => tidy(child(pt, C, 'v')?.textContent ?? '')).filter(Boolean) : [];
+  const axes = ['catAx', 'dateAx', 'valAx'].flatMap((n) => Array.from(doc.getElementsByTagNameNS(C, n)))
+    .map((ax) => named(child(ax, C, 'title'))).filter(Boolean);
+  return [title, names.join(', '), cats.slice(0, 12).join(', ') + (cats.length > 12 ? '…' : ''), axes.join(', ')].filter(Boolean).join(' · ');
 }
 
 const child = (el: Element, ns: string, name: string) =>
@@ -108,12 +136,12 @@ function sizeOf(body: Element): number {
   return most / 100;
 }
 
-function shapesIn(parent: Element, at?: { x: number; y: number }): SlideShape[] {
+function shapesIn(parent: Element, charts: Map<string, string>, at?: { x: number; y: number }): SlideShape[] {
   const out: SlideShape[] = [];
   for (const el of Array.from(parent.children)) {
     if (el.localName === 'AlternateContent') {
       const pick = child(el, el.namespaceURI ?? '', 'Fallback') ?? child(el, el.namespaceURI ?? '', 'Choice');
-      if (pick) out.push(...shapesIn(pick, at));
+      if (pick) out.push(...shapesIn(pick, charts, at));
       continue;
     }
     if (el.namespaceURI !== P) continue;
@@ -124,7 +152,14 @@ function shapesIn(parent: Element, at?: { x: number; y: number }): SlideShape[] 
       if (!body || !lines.length) continue;
       const ph = el.getElementsByTagNameNS(P, 'ph')[0];
       out.push({ ph: ph ? ph.getAttribute('type') ?? 'body' : '', ...pos, size: sizeOf(body), lines });
+    } else if (el.localName === 'pic') {
+      const info = el.getElementsByTagNameNS(P, 'cNvPr')[0];
+      const said = tidy(info?.getAttribute('descr') || info?.getAttribute('title') || '');
+      if (said && !NO_DESCRIPTION.test(said)) out.push({ ph: '', ...pos, size: 0, lines: [`(Picture: ${said})`], role: 'picture' });
     } else if (el.localName === 'graphicFrame') {
+      const id = el.getElementsByTagNameNS(C, 'chart')[0]?.getAttributeNS(R, 'id');
+      const words = id ? charts.get(id) : '';
+      if (words) { out.push({ ph: '', ...pos, size: 0, lines: [`(Chart: ${words})`], role: 'chart' }); continue; }
       const table = el.getElementsByTagNameNS(A, 'tbl')[0];
       if (!table) continue;
       const rows = Array.from(table.getElementsByTagNameNS(A, 'tr'))
@@ -133,7 +168,7 @@ function shapesIn(parent: Element, at?: { x: number; y: number }): SlideShape[] 
       if (rows.length) out.push({ ph: '', ...pos, size: 0, lines: rows.flat().filter(Boolean), rows });
     } else if (el.localName === 'grpSp') {
       // A group's members keep their own order, at the group's place on the slide.
-      out.push(...shapesIn(el, pos));
+      out.push(...shapesIn(el, charts, pos));
     }
   }
   return out;
@@ -147,10 +182,10 @@ const ROW = 182_880;
  * every box has a place on the slide (blank-layout decks are often built in any order);
  * otherwise in the file's order, which placeholder layouts keep sensible.
  */
-export function slideShapes(xml: string): { shapes: SlideShape[]; hidden: boolean } {
+export function slideShapes(xml: string, charts: Map<string, string> = new Map()): { shapes: SlideShape[]; hidden: boolean } {
   const doc = parse(xml);
   const tree = doc.getElementsByTagNameNS(P, 'spTree')[0];
-  const shapes = tree ? shapesIn(tree) : [];
+  const shapes = tree ? shapesIn(tree, charts) : [];
   if (shapes.every((s) => Number.isFinite(s.x) && Number.isFinite(s.y))) {
     shapes.sort((a, b) => Math.round(a.y / ROW) - Math.round(b.y / ROW) || a.x - b.x);
   }
@@ -186,15 +221,15 @@ function pickTitle(shapes: SlideShape[], repeated: Set<string>): string {
   let best: SlideShape | undefined;
   for (const s of shapes) {
     const words = s.lines.join(' ');
-    if (s.rows || FURNITURE.has(s.ph) || repeated.has(labelKey(s)) || LINK.test(words) || words.length > 90 || s.lines.length > 2) continue;
+    if (s.rows || s.role || FURNITURE.has(s.ph) || repeated.has(labelKey(s)) || LINK.test(words) || words.length > 90 || s.lines.length > 2) continue;
     if (!best || s.size > best.size) best = s;
   }
   return best ? best.lines.join(' ') : '';
 }
 
 /** Title and text of a slide, in reading order. Labels found on most slides are left out. */
-export function slideWords(xml: string, repeated: Set<string> = new Set()): { title: string; text: string; hidden: boolean } {
-  const { shapes, hidden } = slideShapes(xml);
+export function slideWords(xml: string, repeated: Set<string> = new Set(), charts: Map<string, string> = new Map()): { title: string; text: string; hidden: boolean } {
+  const { shapes, hidden } = slideShapes(xml, charts);
   const kept = shapes.filter((s) => !FURNITURE.has(s.ph) && !repeated.has(labelKey(s)));
   return { title: pickTitle(kept, repeated), text: kept.flatMap((s) => s.lines).join('\n'), hidden };
 }
@@ -257,13 +292,20 @@ export async function readPptx(buffer: ArrayBuffer): Promise<PptxDeck> {
       .sort((a, b) => Number(/(\d+)\.xml$/.exec(a)![1]) - Number(/(\d+)\.xml$/.exec(b)![1]));
   }
   if (!files.length) throw new Error('This PowerPoint file has no slides.');
-  const xml = await Promise.all(files.map(async (f) => (await read(f)) ?? ''));
-  const repeated = repeatedLabels(xml.map((x) => slideShapes(x).shapes));
-  const slides: PptxSlide[] = [];
-  for (const [i, file] of files.entries()) {
-    const words = slideWords(xml[i]!, repeated);
+  const parts = await Promise.all(files.map(async (file) => {
     const folder = file.slice(0, file.lastIndexOf('/'));
     const slideRels = relationships(await read(`${folder}/_rels/${file.slice(folder.length + 1)}.rels`), folder);
+    const charts = new Map<string, string>();
+    for (const [id, rel] of slideRels) {
+      const chart = rel.type.endsWith('/chart') ? await read(rel.target) : undefined;
+      if (chart) charts.set(id, chartWords(chart));
+    }
+    return { xml: (await read(file)) ?? '', slideRels, charts };
+  }));
+  const repeated = repeatedLabels(parts.map((p) => slideShapes(p.xml, p.charts).shapes));
+  const slides: PptxSlide[] = [];
+  for (const [i, { xml, slideRels, charts }] of parts.entries()) {
+    const words = slideWords(xml, repeated, charts);
     const notesPart = [...slideRels.values()].find((r) => r.type.endsWith('/notesSlide'))?.target;
     const notesXml = notesPart ? await read(notesPart) : undefined;
     slides.push({ number: i + 1, ...words, notes: notesXml ? notesWords(notesXml) : '' });
