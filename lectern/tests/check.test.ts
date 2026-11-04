@@ -50,19 +50,19 @@ describe('checkDeck', () => {
     expect(report.issues.filter((i) => i.rule === 'notes')).toEqual([{ rule: 'notes', severity: 'warning', slideId: 'e', message: 'No key notes yet.' }]);
   });
 
-  it('compares the planned minutes with the session length', () => {
-    const slides = [short('a'), short('b'), short('c')]; // 6 min
-    expect(checkDeck(deckOf(slides, { minutes: 6 })).issues.some((i) => i.rule === 'minutes')).toBe(false);
-    const off = checkDeck(deckOf(slides, { minutes: 40 }));
-    expect(off.minutes).toEqual({ planned: 6, target: 40 });
-    expect(off.issues.at(-1)).toEqual({ rule: 'minutes', severity: 'warning', message: 'The slides add up to 6 min. The session is 40 min.' });
+  it('warns when the session is too short for its slides, since slide times are shares of it', () => {
+    const slides = [short('a'), short('b'), short('c')]; // 6 min of stored minutes
+    expect(checkDeck(deckOf(slides, { minutes: 40 })).issues.some((i) => i.rule === 'minutes')).toBe(false);
+    const off = checkDeck(deckOf(slides, { minutes: 0.5 }));
+    expect(off.minutes).toEqual({ planned: 6, target: 0.5 });
+    expect(off.issues.at(-1)).toEqual({ rule: 'minutes', severity: 'warning', message: '3 slides share 0.5 min: about 10 seconds each. Cut slides or give the session more time.' });
     expect(checkDeck(deckOf(slides)).minutes.target).toBeNull();
     expect(minutesOff(38, 40)).toBe(false);
     expect(minutesOff(30, 40)).toBe(true);
   });
 
   it('skips hidden slides and lists slide issues in deck order before deck issues', () => {
-    const report = checkDeck(deckOf([long('a'), long('h', 16), { ...short('e'), notes: emptyNotes() }].map((s) => (s.id === 'h' ? { ...s, hidden: true } : s)), { minutes: 60 }));
+    const report = checkDeck(deckOf([long('a'), long('h', 16), { ...short('e'), notes: emptyNotes() }].map((s) => (s.id === 'h' ? { ...s, hidden: true } : s)), { minutes: 0.5 }));
     expect(report.slides.map((s) => s.slide.id)).toEqual(['a', 'e']);
     expect(report.issues.map((i) => [i.rule, i.slideId])).toEqual([['overflow', 'a'], ['words', 'a'], ['notes', 'e'], ['minutes', undefined]]);
   });
@@ -174,14 +174,15 @@ describe('deterministic fixes', () => {
     expect(splitToFit(long('x', 30), fits, 2)).toBeNull();
   });
 
-  it('rescales minutes to the session length in half minutes', () => {
+  it('sets the session length and scales each slide to its share', () => {
     const slides = [short('a'), short('b'), { ...short('c'), notes: emptyNotes({ minutes: 6 }) }, { ...short('h'), hidden: true }];
     const next = retimeDeck(deckOf(slides), 25);
+    expect(next.minutes).toBe(25);
     expect(deckMinutes(next)).toBe(25);
-    expect(next.slides.map((s) => s.notes.minutes)).toEqual([5, 5, 15, 2]);
+    // The hidden slide keeps its share for when it is shown again.
+    expect(next.slides.map((s) => s.notes.minutes)).toEqual([5, 5, 15, 5]);
     const odd = retimeDeck(deckOf([short('a'), short('b'), short('c')]), 10);
-    expect(deckMinutes(odd)).toBe(10);
-    expect(odd.slides.every((s) => s.notes.minutes * 2 === Math.round(s.notes.minutes * 2))).toBe(true);
+    expect(deckMinutes(odd)).toBeCloseTo(10, 1);
     expect(retimeDeck(deckOf([]), 10).slides).toEqual([]);
   });
 });

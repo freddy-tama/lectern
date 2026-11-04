@@ -3,7 +3,7 @@ import { BookOpen, ChevronRight, Download, MonitorPlay, MoreHorizontal, Pencil, 
 import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { NotFound } from '../../app/App';
-import { deckMinutes } from '../../core/deck/types';
+import { sessionMinutes } from '../../core/deck/timing';
 import { db } from '../../data/db';
 import { deleteLesson, isoDate, updateLesson } from '../../data/repo';
 import { Menu } from '../../ui/Menu';
@@ -124,7 +124,7 @@ export function LessonPage() {
             <div className="deck-panel-head">
               <div>
                 <h2 id="slides-title" style={{ fontSize: 18 }}>Slides</h2>
-                {deck && <p className="faint" style={{ fontSize: 13 }}>{plural(visible.length, 'slide')} · about {minutesLabel(deckMinutes(deck))}{lesson.durationMinutes ? ` of ${lesson.durationMinutes} planned` : ''}</p>}
+                {deck && <p className="faint" style={{ fontSize: 13 }}>{plural(visible.length, 'slide')} · about {minutesLabel(sessionMinutes(deck))}{lesson.durationMinutes ? ` of ${lesson.durationMinutes} planned` : ''}</p>}
               </div>
               {deck && <Link className="btn btn-secondary btn-sm" to={`/studio/${deck.id}`}><Pencil size={15} /> Edit slides</Link>}
             </div>
@@ -197,7 +197,7 @@ export function LessonPage() {
               </div>
               <div className="stat-row">
                 <div className="stat"><strong className="tabular">{visible.length}</strong><span>Slides</span></div>
-                <div className="stat"><strong className="tabular">{Math.round(deckMinutes(deck))}</strong><span>Minutes</span></div>
+                <div className="stat"><strong className="tabular">{Math.round(sessionMinutes(deck))}</strong><span>Minutes</span></div>
                 <div className="stat"><strong className="tabular">{checks}</strong><span>Checks</span></div>
               </div>
               <Link className="btn btn-secondary" to={`/print/${deck.id}`}><Download size={16} /> Key notes handout</Link>

@@ -1,6 +1,7 @@
 import { Copy, MoreHorizontal, Pencil, Play, Trash2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { PURPOSES, deckMinutes, deckPurpose, type Deck } from '../../core/deck/types';
+import { sessionMinutes } from '../../core/deck/timing';
+import { PURPOSES, deckPurpose, type Deck } from '../../core/deck/types';
 import type { Course } from '../../data/db';
 import { deleteDeck, duplicateDeck } from '../../data/repo';
 import { Menu } from '../../ui/Menu';
@@ -28,7 +29,7 @@ export function DeckCard({ deck, course }: { deck: Deck; course?: Course }) {
           {course && <><span className="dot" /> <span>{course.title}</span> <span aria-hidden>·</span></>}
           <span>{plural(count, 'slide')}</span>
           <span aria-hidden>·</span>
-          <span>{minutesLabel(deckMinutes(deck))}</span>
+          <span>{minutesLabel(sessionMinutes(deck))}</span>
         </div>
         <div className="deck-card-meta">
           {isSampleDeck(deck) && <span className="chip chip-brand" title="A sample deck that comes with Lectern">Sample</span>}

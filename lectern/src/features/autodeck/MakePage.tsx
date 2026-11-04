@@ -7,7 +7,8 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { Link, useNavigate } from 'react-router-dom';
 import { draftToDeck } from '../../core/deck/draft';
 import { fitChanged } from '../../core/deck/fit';
-import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, deckMinutes, uid } from '../../core/deck/types';
+import { sessionMinutes } from '../../core/deck/timing';
+import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, uid } from '../../core/deck/types';
 import { allThemes, fontFamily } from '../../core/engine/themes';
 import { DENSITY } from '../../core/kinds/kit';
 import { documentPictures, fileToOutline } from '../../core/import/files';
@@ -773,7 +774,7 @@ function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, 
         <p className="eyebrow ad-ready"><Sparkles size={14} /> Your deck is ready</p>
         <h1 id="ad-result-title" className="display">{deck.title}</h1>
         <p className="muted">
-          {shown.length} slides with speaker notes · about {Math.round(deckMinutes(deck))} min · {purposeLabel(deck.purpose ?? 'talk')} · {AUDIENCES.find((a) => a.id === deck.audience)?.label}
+          {shown.length} slides with speaker notes · about {Math.round(sessionMinutes(deck))} min · {purposeLabel(deck.purpose ?? 'talk')} · {AUDIENCES.find((a) => a.id === deck.audience)?.label}
         </p>
         {fit?.text && (
           <p className="ad-fit" role="status">

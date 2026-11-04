@@ -259,7 +259,7 @@ describe('cleaning the outline', () => {
       { title: 'Gallery', kind: 'gallery', minutes: 2, point: 'Look', pictures: ['pic1', 'pic2', 'pic9', 'pic3'] },
     ], kinds, ['pic1', 'pic2', 'pic3']);
     expect(cleaned).toEqual([
-      { title: 'Opening', kind: 'title', minutes: 0.5, point: 'Hello', pictures: ['pic1'] },
+      { title: 'Opening', kind: 'title', minutes: 0.25, point: 'Hello', pictures: ['pic1'] },
       { title: 'Quote', kind: 'quote', minutes: 30, point: 'Words', pictures: [] },
       { title: 'Gallery', kind: 'gallery', minutes: 2, point: 'Look', pictures: ['pic2', 'pic3'] },
     ]);

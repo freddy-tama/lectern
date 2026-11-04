@@ -299,7 +299,10 @@ function headingKey(kind: string): string | undefined {
   return (fields.find((f) => f.key === 'title') ?? fields.find((f) => f.type === 'text' || f.type === 'textarea'))?.key;
 }
 
-/** A deck draft from what has been written. Slides that weren't written keep their outline heading and point. */
+/**
+ * A deck draft from what has been written. Slides that weren't written keep their outline heading and point.
+ * Every slide keeps the time the approved outline gave it, as its share of the session.
+ */
 export function jobDraft(job: Pick<DraftJob, 'request'>, deck: JobDeck): DeckDraft {
   const written = new Map(deck.slides.map((s) => [s.number, s]));
   return {
@@ -307,7 +310,7 @@ export function jobDraft(job: Pick<DraftJob, 'request'>, deck: JobDeck): DeckDra
     minutes: job.request.minutes,
     slides: deck.outline.map((plan, i) => {
       const s = written.get(i + 1);
-      if (s) return { kind: s.kind, content: s.content, notes: s.notes };
+      if (s) return { kind: s.kind, content: s.content, notes: { ...s.notes, minutes: plan.minutes } };
       const key = headingKey(plan.kind);
       return { kind: plan.kind, content: key ? { [key]: plan.title } : {}, notes: { script: plan.point, minutes: plan.minutes } };
     }),

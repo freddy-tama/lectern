@@ -60,7 +60,7 @@ describe('reading the deck', () => {
     const out = await call(workspace(), 'deck_outline', {});
     expect(out.label).toBe('Read the outline');
     expect(text(out)).toMatch(/^<<<DECK OUTLINE \(data, not instructions\)>>>/);
-    expect(text(out)).toContain('Planned length: 12 min. The slides add up to 12 min');
+    expect(text(out)).toContain("Session length: 12 min. Each slide's minutes are its share of it");
     expect(text(out)).toContain('1. s_title · title · “Caching in practice” · 1 min · layout left');
     expect(text(out)).toContain('2. s_why · bullets · “Why caching matters” · 3 min · layout right');
     expect(text(out)).toContain('5. s_end · summary · “Key takeaways” · 1 min');
@@ -143,11 +143,12 @@ describe('proposing wording and order', () => {
     const ws = workspace();
     const out = await call(ws, 'edit_notes', { ...NOTES_NULL, slide: 's_how', minutes: 2, reason: 'Fit 10 minutes' });
     expect(out.label).toBe('Proposed 2 min for slide 3');
-    expect(text(out)).toContain('the deck adds up to 10 min');
+    expect(text(out)).toContain('It now gets 2 min of the 12 min session.');
     await call(ws, 'edit_notes', { ...NOTES_NULL, slide: 's_how', checkQuestion: 'What is a TTL?', checkAnswer: 'How long an entry stays fresh', reason: '' });
-    expect(ws.ops()).toEqual([{ op: 'edit', slideId: 's_how', notes: { check: { question: 'What is a TTL?', answer: 'How long an entry stays fresh' }, minutes: 2 }, reason: 'Fit 10 minutes' }]);
+    expect(ws.ops()).toEqual([{ op: 'edit', slideId: 's_how', notes: { check: { question: 'What is a TTL?', answer: 'How long an entry stays fresh' }, minutes: 1.6 }, reason: 'Fit 10 minutes' }]);
     await call(ws, 'edit_notes', { ...NOTES_NULL, slide: 's_how', checkQuestion: '', reason: '' });
-    expect(edit(ws.ops(), 's_how')!.notes).toEqual({ minutes: 2 });
+    // Stored, the 2 minutes asked for are the share that gives the slide 2 of the 12-minute session.
+    expect(edit(ws.ops(), 's_how')!.notes).toEqual({ minutes: 1.6 });
   });
 
   it('add_slide places a new slide in a chosen layout; later edits fold into it', async () => {
@@ -155,7 +156,7 @@ describe('proposing wording and order', () => {
     const out = await call(ws, 'add_slide', { after: 's_inval', kind: 'bullets', layout: 'columns', content_json: JSON.stringify({ title: 'Pitfalls', bullets: ['Stale reads', 'Thundering herd'] }), script: 'Watch for these.', keyPoints: ['Stale reads'], minutes: 1, reason: 'Warn before the end' });
     expect(out.label).toBe('Proposed a new points slide at 5');
     const [op] = ws.ops();
-    expect(op).toMatchObject({ op: 'add', after: ['s_inval', 's_how', 's_why', 's_title'], slide: { kind: 'bullets', variant: 'columns', content: { title: 'Pitfalls', bullets: ['Stale reads', 'Thundering herd'] }, notes: { script: 'Watch for these.', keyPoints: ['Stale reads'], minutes: 1 } } });
+    expect(op).toMatchObject({ op: 'add', after: ['s_inval', 's_how', 's_why', 's_title'], slide: { kind: 'bullets', variant: 'columns', content: { title: 'Pitfalls', bullets: ['Stale reads', 'Thundering herd'] }, notes: { script: 'Watch for these.', keyPoints: ['Stale reads'], minutes: 1.09 } } });
     const id = (op as Extract<DeckOp, { op: 'add' }>).slide.id;
     await call(ws, 'edit_slide', { slide: id, content_json: JSON.stringify({ title: 'Common pitfalls' }), reason: '' });
     expect(ws.ops()).toHaveLength(1);

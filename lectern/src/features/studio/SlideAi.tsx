@@ -370,7 +370,6 @@ export function NotesPreview({ notes, keyPointsLabel, checkLabel }: { notes: Key
           </div>
         )}
         {notes.cues.length > 0 && <div className="cue-list is-static">{notes.cues.map((c) => <span key={c} className="chip">{c}</span>)}</div>}
-        <span className="faint">{notes.minutes} min on this slide</span>
       </div>
     </div>
   );

@@ -6,7 +6,8 @@
 import { AlertCircle, Check, FileImage, FileText, Loader2, MonitorPlay, Pencil, Presentation, ScrollText, Smartphone, Upload, Wand2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { type Audience, AUDIENCES, type Deck, type DeckPurpose, PURPOSES, deckMinutes } from '../../core/deck/types';
+import { sessionMinutes } from '../../core/deck/timing';
+import { type Audience, AUDIENCES, type Deck, type DeckPurpose, PURPOSES } from '../../core/deck/types';
 import { type FinishedSlide, type PptxDeck, finishedDeck, pairPages, readPptx } from '../../core/import/finished';
 import { getProfile } from '../../data/profile';
 import { addDeck, saveAsset, saveDeck } from '../../data/repo';
@@ -101,7 +102,7 @@ function Result({ made, onAgain }: { made: Made; onAgain(): void }) {
         <li>{plural(visible.length, 'slide')}, as you designed them</li>
         <li>{scripted === visible.length ? 'Teleprompter notes on every slide' : `Teleprompter notes on ${scripted} of ${visible.length}`}</li>
         {made.quizzes > 0 && <li>{plural(made.quizzes, 'quiz question')} for phones</li>}
-        <li>About {Math.round(deckMinutes(deck))} min</li>
+        <li>About {Math.round(sessionMinutes(deck))} min</li>
       </ul>
       {made.warning && <p className="notice" role="note"><AlertCircle size={16} /> {made.warning}</p>}
       {made.missed > 0 && (

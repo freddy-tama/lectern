@@ -6,35 +6,16 @@
 import { getKind } from '../kinds/registry';
 import { checkDeck, minutesOff } from './check';
 import { fitsOnSlide, splitSlide } from './split';
+import { setSessionMinutes } from './timing';
 import { type Deck, type Slide, deckMinutes } from './types';
 import { countWords } from './words';
 
-/** Whole and half minutes, never below half a minute. */
-const half = (m: number) => Math.max(0.5, Math.round(m * 2) / 2);
-
 /**
- * Scales the visible slides' minutes so they add up to the session length, in half minutes.
- * Each slide keeps its share; rounding is evened out on the longest slides.
+ * Sets the session length and scales every slide's minutes to its share of it (see timing.ts).
+ * Kept as the fitter's name for it.
  */
 export function retimeDeck(deck: Deck, target: number): Deck {
-  const shown = deck.slides.filter((s) => !s.hidden);
-  const planned = deckMinutes(deck);
-  if (!shown.length || !(target > 0) || planned <= 0) return deck;
-  const minutes = new Map(shown.map((s) => [s.id, half((s.notes.minutes || 0) * (target / planned))]));
-  const longest = [...shown].sort((a, b) => (b.notes.minutes || 0) - (a.notes.minutes || 0)).map((s) => s.id);
-  let drift = Math.round((target - [...minutes.values()].reduce((a, b) => a + b, 0)) * 2) / 2;
-  for (let i = 0; drift !== 0 && i < longest.length * 4; i++) {
-    const id = longest[i % longest.length];
-    const m = minutes.get(id)!;
-    const step = drift > 0 ? 0.5 : -0.5;
-    if (m + step < 0.5) continue;
-    minutes.set(id, m + step);
-    drift -= step;
-  }
-  return {
-    ...deck,
-    slides: deck.slides.map((s) => (minutes.has(s.id) ? { ...s, notes: { ...s.notes, minutes: minutes.get(s.id)! } } : s)),
-  };
+  return target > 0 && deck.slides.length ? setSessionMinutes(deck, target) : deck;
 }
 
 /**

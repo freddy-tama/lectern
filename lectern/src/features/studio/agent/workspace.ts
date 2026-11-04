@@ -4,7 +4,8 @@
 // into proposals the presenter reviews. Nothing here touches the real deck.
 
 import { lessonIssues } from '../../../core/deck/check';
-import { type Deck, type Slide, deckMinutes, deckPurpose } from '../../../core/deck/types';
+import { hasSession, sessionMinutes, slideTimeLabel, slideTimes } from '../../../core/deck/timing';
+import { type Deck, type Slide, deckPurpose } from '../../../core/deck/types';
 import type { SlideLayout } from '../../../core/engine/boxes';
 import { layoutSlide } from '../../../core/engine/layout';
 import { getTheme } from '../../../core/engine/themes';
@@ -169,21 +170,24 @@ export class Workspace {
   outline(): string {
     const d = this.deck;
     const t = this.theme;
-    const total = deckMinutes(d);
-    const planned = this.plannedMinutes ?? d.minutes;
+    const total = sessionMinutes(d);
+    const times = slideTimes(d);
+    const planned = this.plannedMinutes && this.plannedMinutes !== total ? this.plannedMinutes : null;
     // A lesson's slides also carry what the lesson rules found: answers given away, one thing tested twice.
     const taught = new Map<string, string[]>();
     for (const issue of lessonIssues(d)) if (issue.slideId) taught.set(issue.slideId, [...(taught.get(issue.slideId) ?? []), issue.message]);
     const lines = [
       `Deck: “${d.title || 'Untitled'}” · a ${deckPurpose(d)} for ${d.audience === 'young' ? 'young learners aged 6-11' : d.audience === 'teen' ? 'teenagers' : 'adults'} · look: ${t.name}`,
-      `${planned ? `Planned length: ${planned} min. ` : ''}The slides add up to ${total} min (hidden slides don't count).`,
+      hasSession(d)
+        ? `Session length: ${Math.round(total * 10) / 10} min. Each slide's minutes are its share of it: more time on one slide is taken from the others, and a new slide shortens the rest. Hidden slides take no time.${planned ? ` The lesson is planned for ${planned} min.` : ''}`
+        : `${planned ? `Planned length: ${planned} min. ` : ''}The slides add up to ${Math.round(total * 10) / 10} min (hidden slides don't count).`,
       `${this.slides.length} slides:`,
       ...this.slides.map((s, i) => {
         const def = getKind(s.kind);
         const layout = def?.variants?.length ? ` · layout ${s.variant ?? def.variants[0].id}` : '';
         const warn = [...this.warnings(s), ...(taught.get(s.id) ?? [])];
         const extras = s.elements?.length ? ` · ${s.elements.length} element${s.elements.length === 1 ? '' : 's'}` : '';
-        return `${i + 1}. ${s.id} · ${s.kind} · “${headingOf(s)}” · ${s.notes.minutes} min${layout}${extras}${s.hidden ? ' · hidden' : ''}${warn.length ? ` · ⚠ ${warn.join('; ')}` : ''}${this.state(s.id)}`;
+        return `${i + 1}. ${s.id} · ${s.kind} · “${headingOf(s)}” · ${s.hidden ? 'no time' : slideTimeLabel(times.get(s.id) ?? 0)}${layout}${extras}${s.hidden ? ' · hidden' : ''}${warn.length ? ` · ⚠ ${warn.join('; ')}` : ''}${this.state(s.id)}`;
       }),
     ];
     if (this.deleted.size) lines.push(`Proposed for deletion: ${[...this.deleted.values()].map(({ slide }) => `${slide.id} “${headingOf(slide)}”`).join(', ')}`);

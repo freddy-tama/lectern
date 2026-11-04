@@ -7,10 +7,6 @@ import type { PlannedSlide } from '../../data/draft-jobs';
 /** The most slides an outline can hold. The server keeps no more than this. */
 export const MAX_OUTLINE = 60;
 
-export function outlineMinutes(slides: Pick<PlannedSlide, 'minutes'>[]): number {
-  return slides.reduce((t, s) => t + (Number(s.minutes) || 0), 0);
-}
-
 /**
  * How many planned pictures a slide type shows: one per image field, and each item of a list of pictures.
  * Fields drafting leaves alone, such as a quote's photo of the speaker, take none.

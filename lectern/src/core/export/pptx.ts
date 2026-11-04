@@ -5,6 +5,7 @@
 
 import JSZip from 'jszip';
 import PptxGenJS from 'pptxgenjs';
+import { slideTimeLabel, withSlideTimes } from '../deck/timing';
 import type { Deck, KeyNotes } from '../deck/types';
 import { type Box, type ChartBox, type EmbedBox, type ImageBox, type ShapeBox, type TableBox, type TextBox, type VideoBox, PT_PER_PX, PX_PER_INCH } from '../engine/boxes';
 import { layoutDeck } from '../engine/layout';
@@ -66,7 +67,7 @@ export function keyNotesText(notes: KeyNotes): string {
   const cues = (notes.cues ?? []).filter(Boolean);
   if (cues.length) lines.push(`Cues: ${cues.join(' · ')}`);
   if (notes.check?.question) lines.push(`Check: ${notes.check.question}${notes.check.answer ? ` — ${notes.check.answer}` : ''}`);
-  if (notes.minutes > 0) lines.push(`About ${notes.minutes} min`);
+  if (notes.minutes > 0) lines.push(`About ${slideTimeLabel(notes.minutes)}`);
   const links = (notes.links ?? []).filter((l) => l.url);
   if (links.length) lines.push(`Links: ${links.map((l) => (l.label ? `${l.label} — ${l.url}` : l.url)).join('; ')}`);
   if (lines.length) blocks.push(lines.join('\n'));
@@ -604,7 +605,9 @@ async function loadImages(sources: string[], options: PptxOptions, warnings: str
   return out;
 }
 
-export async function exportDeckToPptx(deck: Deck, options: PptxOptions = {}): Promise<PptxResult> {
+export async function exportDeckToPptx(input: Deck, options: PptxOptions = {}): Promise<PptxResult> {
+  // Slide times are shares of the session: the notes say each slide's time, not its share.
+  const deck = withSlideTimes(input);
   const mode: StepMode = options.steps ?? 'animate';
   const includeNotes = options.includeNotes ?? true;
   const warnings: string[] = [];

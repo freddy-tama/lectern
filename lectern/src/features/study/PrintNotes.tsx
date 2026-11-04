@@ -3,7 +3,8 @@ import { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { NotFound } from '../../app/App';
 import { wording } from '../../core/deck/purpose';
-import { deckMinutes, deckPurpose } from '../../core/deck/types';
+import { sessionMinutes, slideTimeLabel, slideTimes } from '../../core/deck/timing';
+import { deckPurpose } from '../../core/deck/types';
 import { getKind } from '../../core/kinds/registry';
 import { slidePictures } from '../../core/pictures/credits';
 import { minutesLabel } from '../../ui/format';
@@ -22,6 +23,7 @@ export default function PrintNotes() {
   if (deck === undefined) return null;
   if (deck === null) return <NotFound message="This deck was deleted." />;
   const w = wording(deckPurpose(deck));
+  const times = slideTimes(deck);
   return (
     <div className="print-page">
       <div className="print-toolbar no-print">
@@ -41,7 +43,7 @@ export default function PrintNotes() {
       <header className="print-head">
         <p className="eyebrow">{forLearners ? w.handoutAudienceHeading : 'Key notes'}</p>
         <h1 className="display">{deck.title}</h1>
-        <p className="muted">{slides.length} slides · about {minutesLabel(deckMinutes(deck))}</p>
+        <p className="muted">{slides.length} slides · about {minutesLabel(sessionMinutes(deck))}</p>
       </header>
       {slides.map((s, i) => {
         const def = getKind(s.kind);
@@ -51,7 +53,7 @@ export default function PrintNotes() {
           <section key={s.id} className="print-row">
             <div className="print-thumb"><SlideView slide={s} deck={deck} number={i + 1} count={slides.length} framed /></div>
             <div className="print-notes">
-              <h2><span className="faint tabular">{i + 1}</span> {def ? def.heading(s.content) : 'Slide'}{!forLearners && <span className="faint print-min">{n.minutes} min</span>}</h2>
+              <h2><span className="faint tabular">{i + 1}</span> {def ? def.heading(s.content) : 'Slide'}{!forLearners && <span className="faint print-min">{slideTimeLabel(times.get(s.id) ?? 0)}</span>}</h2>
               {n.keyPoints.length > 0 && <ul>{n.keyPoints.map((p, k) => <li key={k}>{p}</li>)}</ul>}
               {n.script && (forLearners ? <p className="print-script">{n.script}</p> : <p className="print-script">{n.script}</p>)}
               {!forLearners && n.cues.length > 0 && <p className="faint">Cues: {n.cues.join(' · ')}</p>}

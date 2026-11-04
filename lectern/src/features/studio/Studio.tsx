@@ -14,7 +14,8 @@ import { lessonIssues } from '../../core/deck/check';
 import { canSplit, fitsOnSlide, isOverflowWarning, splitInDeck, splitSlide } from '../../core/deck/split';
 import { autoVariants } from '../../core/deck/auto-style';
 import { fieldAt, getAt, insertItem, isListItem, isTextBind, removeItem, setAt, splitBind } from '../../core/deck/paths';
-import { type BoxOverride, type Deck, type KeyNotes, type Slide, type SlideElement, deckMinutes, deckPurpose } from '../../core/deck/types';
+import { hasSession, sessionMinutes, setSlideMinutes, slideTimes } from '../../core/deck/timing';
+import { type BoxOverride, type Deck, type KeyNotes, type Slide, type SlideElement, deckPurpose } from '../../core/deck/types';
 import type { Box, SlideLayout, TextBox } from '../../core/engine/boxes';
 import { ELEMENT_BOX, elementIdOf, findElement, restackElement, updateElement, withElement, withoutElement } from '../../core/engine/elements';
 import { hasOverrides, withOverride, withoutOverrides } from '../../core/engine/overrides';
@@ -26,7 +27,6 @@ import { imageDataUrl } from '../../data/repo';
 import { KindIcon } from '../../ui/KindIcon';
 import { Menu } from '../../ui/Menu';
 import { useToast } from '../../ui/Toast';
-import { minutesLabel } from '../../ui/format';
 import { useStoredFlag } from '../../ui/hooks';
 import { SlideNotesButton } from '../notes/SlideNotesButton';
 import { PictureContext, type PictureSlideContext } from '../pictures/context';
@@ -51,6 +51,7 @@ import { openShare, useLiveHost } from '../share/host';
 import { KindPicker } from './KindPicker';
 import { LookMenu } from './LookMenu';
 import { NotesPanel } from './NotesPanel';
+import { SessionMenu } from './SessionMenu';
 import { SlideRail } from './SlideRail';
 import { AiMenu, ProposalBar, ProposalNotes, ProposalStage, useSlideRevision } from './SlideAi';
 import { useDeckEditor } from './useDeckEditor';
@@ -650,7 +651,6 @@ export default function Studio() {
     }
   };
 
-  const minutes = deck ? deckMinutes(deck) : 0;
   const planned = context?.lesson?.durationMinutes;
   const def = slide ? getKind(slide.kind) : undefined;
   const flags = useMemo(() => ({}), []);
@@ -711,9 +711,7 @@ export default function Studio() {
         <div className="studio-tools">
           <button type="button" className="icon-btn" onClick={undo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl Z)"><Undo2 size={17} /></button>
           <button type="button" className="icon-btn" onClick={redo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl Shift Z)"><Redo2 size={17} /></button>
-          <span className={`chip ${planned && minutes > planned ? 'chip-warn' : ''}`} title="Planned time from the key notes">
-            {minutesLabel(minutes)}{planned ? ` of ${planned}` : ''}
-          </span>
+          <SessionMenu deck={deck} change={change} planned={planned} />
           <button
             type="button"
             className={`btn btn-ghost btn-sm ${assistantOpen ? 'is-on' : ''}`}
@@ -889,6 +887,8 @@ export default function Studio() {
                 slide={slide}
                 purpose={deckPurpose(deck)}
                 onChange={(notes: KeyNotes, key) => updateSlide(slide.id, (s) => ({ ...s, notes }), key)}
+                time={{ minutes: slideTimes(deck).get(slide.id) ?? 0, session: sessionMinutes(deck), fixed: hasSession(deck), hidden: Boolean(slide.hidden) }}
+                onTime={(m) => change((d) => setSlideMinutes(d, slide.id, m), `${slide.id}:notes:min`)}
                 aside={<SlideNotesButton deckId={deck.id} slideId={slide.id} slideNumber={index + 1} lessonId={context?.lesson?.id} courseId={context?.course?.id} />}
               />
             )}

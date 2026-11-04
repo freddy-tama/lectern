@@ -2,19 +2,34 @@ import { Minus, Plus, Wand2, X } from 'lucide-react';
 import { type ReactNode, useState } from 'react';
 import { SPEAKING_WPM, completeNotes, estimateMinutes } from '../../core/deck/draft';
 import { wording } from '../../core/deck/purpose';
+import { MIN_SLIDE_MINUTES, slideTimeLabel, stepTime } from '../../core/deck/timing';
 import type { DeckPurpose, KeyNotes, Slide } from '../../core/deck/types';
 import { countWords, lengthLabel } from '../../core/deck/words';
 import { installedPlugins } from '../../core/plugins/registry';
+import { minutesLabel } from '../../ui/format';
 import { Fields } from './Fields';
 import { ModField } from './ModField';
 
-/** `aside` sits beside the panel's heading, for example the button for your own notes on the slide. */
-export function NotesPanel({ slide, purpose = 'talk', onChange, aside }: { slide: Slide; purpose?: DeckPurpose; onChange(notes: KeyNotes, key: string): void; aside?: ReactNode }) {
+/** The slide's time: its share of the session in minutes, the session's length, and whether that length is set. */
+export interface SlideTime {
+  minutes: number;
+  session: number;
+  fixed: boolean;
+  hidden: boolean;
+}
+
+/**
+ * `aside` sits beside the panel's heading, for example the button for your own notes on the slide.
+ * `time` and `onTime` give the slide's share of the session; the deck rebalances the other slides.
+ */
+export function NotesPanel({ slide, purpose = 'talk', onChange, aside, time, onTime }: { slide: Slide; purpose?: DeckPurpose; onChange(notes: KeyNotes, key: string): void; aside?: ReactNode; time?: SlideTime; onTime?(minutes: number): void }) {
   const w = wording(purpose);
   const notes = slide.notes;
   const [cue, setCue] = useState('');
   const talk = countWords(notes.script) / SPEAKING_WPM;
   const set = (patch: Partial<KeyNotes>, key: string) => onChange({ ...notes, ...patch }, `${slide.id}:notes:${key}`);
+  const minutes = time?.minutes ?? notes.minutes;
+  const setTime = (m: number) => (onTime ? onTime(m) : set({ minutes: Math.max(MIN_SLIDE_MINUTES, m) }, 'min'));
   const modGroups = installedPlugins().filter((p) => p.notesFields?.length).map((p) => ({ plugin: p.id, name: p.name, fields: p.notesFields! }));
   const addCue = (value: string) => {
     const v = value.trim();
@@ -96,12 +111,19 @@ export function NotesPanel({ slide, purpose = 'talk', onChange, aside }: { slide
 
         <div className="field">
           <span className="field-label">Time on this slide</span>
-          <div className="stepper">
-            <button type="button" className="icon-btn" aria-label="Less time" onClick={() => set({ minutes: Math.max(0.5, notes.minutes - 0.5) }, 'min')}><Minus size={15} /></button>
-            <span className="tabular">{notes.minutes} min</span>
-            <button type="button" className="icon-btn" aria-label="More time" onClick={() => set({ minutes: Math.min(60, notes.minutes + 0.5) }, 'min')}><Plus size={15} /></button>
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => set({ minutes: estimateMinutes(notes, slide.kind) }, 'min')}>Estimate</button>
-          </div>
+          {time?.hidden ? <p className="faint slide-time-note">Hidden slides take no time.</p> : (
+            <>
+              <div className="stepper">
+                <button type="button" className="icon-btn" aria-label="Less time" onClick={() => setTime(stepTime(minutes, false))} disabled={minutes <= MIN_SLIDE_MINUTES}><Minus size={15} /></button>
+                <span className="tabular">{slideTimeLabel(minutes)}</span>
+                <button type="button" className="icon-btn" aria-label="More time" onClick={() => setTime(stepTime(minutes, true))} disabled={Boolean(time?.fixed && minutes >= time.session - MIN_SLIDE_MINUTES)}><Plus size={15} /></button>
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setTime(estimateMinutes(notes, slide.kind))} title="Time from what the script takes to say">Estimate</button>
+              </div>
+              {time?.fixed && time.session > 0 && (
+                <p className="faint slide-time-note">{Math.max(1, Math.round((minutes / time.session) * 100))}% of the {minutesLabel(time.session)} session. More here takes time from the other slides.</p>
+              )}
+            </>
+          )}
         </div>
 
         {modGroups.map((g) => (

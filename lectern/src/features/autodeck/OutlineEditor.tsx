@@ -6,6 +6,7 @@ import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, v
 import { CSS } from '@dnd-kit/utilities';
 import { ArrowDown, ArrowUp, GripVertical, ImagePlus, MoreHorizontal, Plus, Trash2, Wand2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { MIN_SLIDE_MINUTES, giveTime, shares, slideTimeLabel } from '../../core/deck/timing';
 import { uid } from '../../core/deck/types';
 import { allKinds, getKind } from '../../core/kinds/registry';
 import type { AnyKind } from '../../core/kinds/types';
@@ -13,7 +14,7 @@ import type { DraftJob, PlannedSlide } from '../../data/draft-jobs';
 import { KindIcon } from '../../ui/KindIcon';
 import { Menu } from '../../ui/Menu';
 import { useToast } from '../../ui/Toast';
-import { MAX_OUTLINE, outlineMinutes, pictureRoom, withKind } from './outline';
+import { MAX_OUTLINE, pictureRoom, withKind } from './outline';
 
 interface Props {
   job: DraftJob;
@@ -45,8 +46,13 @@ export function OutlineEditor({ job, pictureUrls, onChange, onWrite, onDiscard }
   }, [job.request.kinds]);
   const pictures = pictureUrls.map((url, i) => ({ id: `pic${i + 1}`, url, name: job.pictures[i]?.name ?? `Picture ${i + 1}` }));
   const used = new Set(slides.flatMap((s) => s.pictures));
-  const total = outlineMinutes(slides);
+  // Slide times are shares of the session: the rows show each one's share, and giving one more takes from the rest.
   const target = job.request.minutes;
+  const times = shares(slides.map((s) => s.minutes), target);
+  const setTime = (index: number, minutes: number) => {
+    const next = giveTime(slides.map((s) => s.minutes), index, minutes, target);
+    setSlides(slides.map((s, i) => ({ ...s, minutes: Math.round(next[i] * 100) / 100 })));
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -64,7 +70,8 @@ export function OutlineEditor({ job, pictureUrls, onChange, onWrite, onDiscard }
   const add = (at: number) => {
     const kind = kinds.find((k) => k.kind === 'bullets') ?? kinds[0];
     if (!kind || slides.length >= MAX_OUTLINE) return;
-    const slide: PlannedSlide = { id: uid('o'), title: '', kind: kind.kind, minutes: 2, point: '', pictures: [] };
+    // A new slide takes an average share; the others make room.
+    const slide: PlannedSlide = { id: uid('o'), title: '', kind: kind.kind, minutes: slides.length ? target / slides.length : 2, point: '', pictures: [] };
     setSlides((all) => [...all.slice(0, at), slide, ...all.slice(at)]);
     setFocusId(slide.id);
   };
@@ -75,9 +82,7 @@ export function OutlineEditor({ job, pictureUrls, onChange, onWrite, onDiscard }
     toast.show(`Removed “${gone.title || `slide ${index + 1}`}”`, { action: { label: 'Undo', run: () => setSlides(before) } });
   };
 
-  const minutesNote = Math.abs(total - target) < Math.max(2, target * 0.1)
-    ? `about ${Math.round(total)} min`
-    : total > target ? `${Math.round(total)} min, ${Math.round(total - target)} over your ${target}` : `${Math.round(total)} min, ${Math.round(target - total)} under your ${target}`;
+  const minutesNote = slides.length ? `${target} min · about ${slideTimeLabel(target / slides.length)} a slide` : `${target} min`;
 
   return (
     <section className="ol" aria-labelledby="ol-title">
@@ -101,6 +106,9 @@ export function OutlineEditor({ job, pictureUrls, onChange, onWrite, onDiscard }
                 pictures={pictures}
                 used={used}
                 autoFocus={focusId === s.id}
+                minutes={times[i] ?? 0}
+                most={Math.max(MIN_SLIDE_MINUTES, target - MIN_SLIDE_MINUTES * (slides.length - 1))}
+                onMinutes={(m) => setTime(i, m)}
                 onChange={(patch) => update(s.id, patch)}
                 onKind={(kind) => update(s.id, withKind(s, kind))}
                 onMove={(to) => move(i, to)}
@@ -136,6 +144,10 @@ interface RowProps {
   pictures: { id: string; url: string; name: string }[];
   used: Set<string>;
   autoFocus: boolean;
+  /** The slide's share of the session, and the most it can take. */
+  minutes: number;
+  most: number;
+  onMinutes(minutes: number): void;
   onChange(patch: Partial<PlannedSlide>): void;
   onKind(kind: string): void;
   onMove(to: number): void;
@@ -143,7 +155,7 @@ interface RowProps {
   onRemove(): void;
 }
 
-function OutlineRow({ slide, number, count, kinds, pictures, used, autoFocus, onChange, onKind, onMove, onAddBelow, onRemove }: RowProps) {
+function OutlineRow({ slide, number, count, kinds, pictures, used, autoFocus, minutes, most, onMinutes, onChange, onKind, onMove, onAddBelow, onRemove }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: slide.id });
   const titleRef = useRef<HTMLInputElement>(null);
   useEffect(() => { if (autoFocus) titleRef.current?.focus(); }, [autoFocus]);
@@ -197,12 +209,13 @@ function OutlineRow({ slide, number, count, kinds, pictures, used, autoFocus, on
           <label className="ol-minutes">
             <input
               type="number"
-              min={0.5}
-              max={30}
+              min={MIN_SLIDE_MINUTES}
+              max={Math.round(most * 10) / 10}
               step={0.5}
-              value={slide.minutes}
-              onChange={(e) => onChange({ minutes: Math.max(0.5, Math.min(30, Number(e.target.value) || 0.5)) })}
-              aria-label={`Slide ${number} minutes`}
+              value={Math.round(minutes * 10) / 10}
+              onChange={(e) => onMinutes(Math.min(most, Number(e.target.value) || MIN_SLIDE_MINUTES))}
+              aria-label={`Slide ${number} minutes, a share of the session`}
+              title="A share of the session: more here takes time from the other slides"
             />
             <span aria-hidden>min</span>
           </label>
