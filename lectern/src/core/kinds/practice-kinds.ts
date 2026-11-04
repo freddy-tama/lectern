@@ -1,8 +1,9 @@
-// Practice slide types: true or false, fill in the blanks, and put in order. Registered with the
-// core kinds, next to the question and quick recall slides. Answers appear one click at a time.
+// Practice slide types: true or false, fill in the blanks, put in order, and match or sort.
+// Registered with the core kinds, next to the question and quick recall slides. Answers appear
+// one click at a time.
 
 import type { Box } from '../engine/boxes';
-import { M, card, heightAt, read, shape, slideTitle, sz, text } from './kit';
+import { type LayoutContext, M, card, heightAt, imageSrc, read, shape, slideTitle, sz, text } from './kit';
 import type { AnyKind, SlideKindDefinition } from './types';
 
 type C = Record<string, unknown>;
@@ -217,7 +218,7 @@ export function inOrder(items: string[]): string {
 const isShort = (s: string) => (CJK.test(s) ? s.replace(/\s/g, '').length <= 8 : s.trim().split(/\s+/).length <= 3);
 const tilesFit = (items: string[]) => items.length >= 3 && items.every(isShort);
 
-const LETTERS = 'ABCDEFGH';
+const LETTERS = 'ABCDEFGHIJKL';
 
 /** The place in the stored list of each kept item, blanks included, for binds. */
 function storedIndexes(c: C): number[] {
@@ -309,4 +310,163 @@ const order: SlideKindDefinition<C> = {
   },
 };
 
-export const PRACTICE_KINDS: AnyKind[] = [trueFalse, fillIn, order];
+// ─── Match or sort ────────────────────────────────────────────────────
+
+interface Pair {
+  /** Place in the stored list, for binds. */
+  i: number;
+  item: string;
+  picture: string;
+  match: string;
+}
+
+function pairsOf(c: C): Pair[] {
+  return read.objects<C>(c, 'items')
+    .map((o, i) => ({ i, item: read.str(o, 'item').trim(), picture: read.str(o, 'picture').trim(), match: read.str(o, 'match').trim() }))
+    .filter((p) => (p.item || p.picture) && p.match);
+}
+
+/** The groups items are sorted into, in the order they first appear. */
+const groupsOf = (pairs: Pair[]) => [...new Set(pairs.map((p) => p.match))];
+
+/** Items that share a match are sorted into groups; otherwise each item has a match of its own. */
+const isSort = (pairs: Pair[]) => groupsOf(pairs).length < pairs.length;
+
+/** An item as text: its words, or its letter when it is only a picture. */
+const itemLabel = (p: Pair, letter: string) => p.item || `(${letter})`;
+
+/** A card with a picture on its left, when it has one, and its words beside it or under it. */
+function itemCard(ctx: LayoutContext, id: string, p: Pair, x: number, y: number, w: number, h: number, o: { pad: number; size: number; stacked?: boolean }): Box[] {
+  const boxes: Box[] = [card(ctx, `${id}-card`, x, y, w, h)];
+  const src = imageSrc(ctx, p.picture);
+  const bind = `items.${p.i}`;
+  if (src && o.stacked) {
+    const textH = p.item ? Math.min(h * 0.32, sz(ctx, 52)) : 0;
+    boxes.push({ type: 'image', id: `${id}-picture`, src, x: x + o.pad / 2, y: y + o.pad / 2, w: w - o.pad, h: h - o.pad - textH, fit: 'cover', radius: ctx.theme.radius, bind: `${bind}.picture` });
+    if (p.item) boxes.push(text(ctx, { id: `${id}-text`, text: p.item, x: x + o.pad / 2, y: y + h - o.pad / 2 - textH, w: w - o.pad, h: textH, max: o.size * 0.8, min: 18, weight: 650, align: 'center', valign: 'middle', maxLines: 1, bind: `${bind}.item` }));
+    return boxes;
+  }
+  let left = x + o.pad;
+  if (src) {
+    const side = h - o.pad;
+    const pw = p.item ? side : w - o.pad;
+    boxes.push({ type: 'image', id: `${id}-picture`, src, x: x + o.pad / 2, y: y + o.pad / 2, w: pw, h: side, fit: 'cover', radius: ctx.theme.radius, bind: `${bind}.picture` });
+    left = x + o.pad / 2 + pw + o.pad / 2;
+  }
+  if (p.item) boxes.push(text(ctx, { id: `${id}-text`, text: p.item, x: left, y: y + sz(ctx, 8), w: x + w - o.pad - left, h: h - sz(ctx, 16), max: o.size, min: 20, weight: 600, valign: 'middle', bind: `${bind}.item` }));
+  return boxes;
+}
+
+const match: SlideKindDefinition<C> = {
+  kind: 'match', label: 'Match or sort', description: 'Items to match with a partner (a word and its meaning, a term and a picture) or to sort into groups. Each row is an item and its match; when several items share a match, they are sorted into the group it names. The answers appear on click.', icon: 'shuffle', group: 'Engage',
+  variants: [{ id: 'pairs', label: 'Pairs' }, { id: 'groups', label: 'Groups' }],
+  autoVariant: (c) => (isSort(pairsOf(c)) ? 'groups' : 'pairs'),
+  fields: [
+    { key: 'title', label: 'Title', type: 'text' },
+    { key: 'items', label: 'Items', type: 'objects', itemLabel: 'Item', max: 12, min: 2, fields: [
+      { key: 'item', label: 'Item', type: 'text' },
+      { key: 'match', label: 'Its match, or its group', type: 'text', help: 'Items with the same group are sorted together. The matches are shown mixed up.' },
+      { key: 'picture', label: 'Picture', type: 'image' },
+    ] },
+  ],
+  create: () => ({
+    title: 'Match each word to its meaning',
+    items: [
+      { item: 'evaporate', match: 'turn from liquid into gas', picture: '' },
+      { item: 'condense', match: 'turn from gas into liquid', picture: '' },
+      { item: 'precipitation', match: 'water falling from clouds', picture: '' },
+    ],
+  }),
+  heading: (c) => read.str(c, 'title') || (isSort(pairsOf(c)) ? 'Sort into groups' : 'Match'),
+  text: (c) => {
+    const pairs = pairsOf(c);
+    const answers = isSort(pairs) ? groupsOf(pairs) : pairs.map((p) => p.match);
+    return [read.str(c, 'title'), ...pairs.map((p) => p.item), ...answers].filter(Boolean);
+  },
+  // Items sorted into groups share their answers, so like blanks they ask without a prompt of their own.
+  checks: (c) => {
+    const pairs = pairsOf(c);
+    const sort = isSort(pairs);
+    return pairs.map((p) => ({ prompt: sort ? '' : p.item, answer: p.match }));
+  },
+  layout(c, ctx, variant) {
+    const all = pairsOf(c);
+    const sort = (variant ?? (isSort(all) ? 'groups' : 'pairs')) === 'groups';
+    const pairs = all.slice(0, sort ? 12 : 6);
+    const { box, bottom } = slideTitle(ctx, read.str(c, 'title') || (sort ? 'Sort into groups' : 'Match'));
+    const boxes: Box[] = [box];
+    if (pairs.length < 2) {
+      if (ctx.mode === 'edit') ctx.warnings.push('Add at least two items, each with its match or group.');
+      return { boxes };
+    }
+    if (all.length > pairs.length && ctx.mode === 'edit') ctx.warnings.push(`Only the first ${pairs.length} items fit. Split the rest onto another slide.`);
+    const colors = ctx.theme.colors;
+    const gap = sz(ctx, 22);
+    const pad = sz(ctx, 24);
+    const n = pairs.length;
+    const badge = (id: string, x: number, y: number, d: number, value: string, step: number): Box[] => [
+      shape({ id: `${id}-dot`, shape: 'ellipse', x, y, w: d, h: d, fill: colors.accent, step, reveal: 'answer' }),
+      { type: 'text', id, x, y, w: d, h: d, text: value, step, reveal: 'answer',
+        style: { font: 'body', size: Math.round(d * 0.46), weight: 800, color: colors.onAccent, align: 'center', valign: 'middle', lineHeight: 1 } },
+    ];
+
+    if (!sort) {
+      // Items down the left with letters, their matches mixed up down the right with numbers.
+      // Each click puts the number of an item's match beside it.
+      const matches = pairs.map((p) => p.match);
+      const shown = shownOrder(matches);
+      const place = new Map(shown.map((i, at) => [i, at]));
+      const mid = sz(ctx, 120);
+      const colW = (M.w - mid) / 2;
+      const rowH = Math.min(sz(ctx, 150), (M.bottom - bottom - gap * (n - 1)) / n);
+      const d = Math.min(rowH * 0.7, sz(ctx, 70));
+      const letterW = sz(ctx, 48);
+      pairs.forEach((p, k) => {
+        const y = bottom + k * (rowH + gap);
+        boxes.push(text(ctx, { id: `letter-${k}`, text: LETTERS[k]!, x: M.x, y, w: letterW, h: rowH, max: 34, min: 22, weight: 750, color: colors.accent, valign: 'middle', maxLines: 1 }));
+        boxes.push(...itemCard(ctx, `item-${k}`, p, M.x + letterW, y, colW - letterW, rowH, { pad, size: 38 }));
+        boxes.push(...badge(`answer-${k}`, M.x + colW + (mid - d) / 2, y + (rowH - d) / 2, d, String(place.get(k)! + 1), k + 1));
+      });
+      shown.forEach((i, at) => {
+        const y = bottom + at * (rowH + gap);
+        const x = M.x + colW + mid;
+        boxes.push(card(ctx, `match-${at}-card`, x, y, colW, rowH));
+        boxes.push(text(ctx, { id: `match-${at}-number`, text: String(at + 1), x: x + pad, y, w: letterW, h: rowH, max: 34, min: 22, weight: 750, color: colors.muted, valign: 'middle', maxLines: 1 }));
+        boxes.push(text(ctx, { id: `match-${at}`, text: pairs[i]!.match, x: x + pad + letterW, y: y + sz(ctx, 8), w: colW - pad * 2 - letterW, h: rowH - sz(ctx, 16), max: 38, min: 20, weight: 600, valign: 'middle', bind: `items.${pairs[i]!.i}.match` }));
+      });
+      return { boxes };
+    }
+
+    // The items mixed up in a pool with letters, a column per group underneath. Each click fills a group.
+    const groups = groupsOf(pairs).slice(0, 4);
+    if (groupsOf(pairs).length > 4 && ctx.mode === 'edit') ctx.warnings.push('Sort into at most four groups.');
+    const shown = shownOrder(pairs.map((p) => `${p.item}\u0002${p.picture}\u0002${p.match}`));
+    const letterOf = new Map(shown.map((i, at) => [i, LETTERS[at] ?? String(at + 1)]));
+    const pictures = pairs.some((p) => p.picture);
+    const cols = Math.min(n, pictures ? 6 : 4);
+    const rows = Math.ceil(n / cols);
+    const tileW = (M.w - gap * (cols - 1)) / cols;
+    const tileH = sz(ctx, pictures ? 150 : 84);
+    const letterW = sz(ctx, 40);
+    shown.forEach((i, at) => {
+      const x = M.x + (at % cols) * (tileW + gap);
+      const y = bottom + Math.floor(at / cols) * (tileH + gap);
+      boxes.push(...itemCard(ctx, `item-${at}`, pairs[i]!, x + letterW, y, tileW - letterW, tileH, { pad: sz(ctx, 16), size: 32, stacked: pictures }));
+      boxes.push(text(ctx, { id: `letter-${at}`, text: letterOf.get(i)!, x, y, w: letterW, h: tileH, max: 30, min: 20, weight: 750, color: colors.accent, valign: 'middle', maxLines: 1 }));
+    });
+    const top = bottom + rows * (tileH + gap) + gap;
+    const colW = (M.w - gap * (groups.length - 1)) / groups.length;
+    const headH = sz(ctx, 76);
+    groups.forEach((g, k) => {
+      const x = M.x + k * (colW + gap);
+      boxes.push(card(ctx, `group-${k}-card`, x, top, colW, M.bottom - top));
+      boxes.push(shape({ id: `group-${k}-head`, shape: 'rect', x, y: top, w: colW, h: headH, fill: colors.accent, radius: ctx.theme.radius }));
+      boxes.push(text(ctx, { id: `group-${k}`, text: g, x: x + pad, y: top, w: colW - pad * 2, h: headH, max: 36, min: 20, weight: 750, color: colors.onAccent, align: 'center', valign: 'middle', maxLines: 1 }));
+      const members = pairs.map((p, i) => ({ p, i })).filter(({ p }) => p.match === g).map(({ p, i }) => `${letterOf.get(i)}  ${itemLabel(p, letterOf.get(i)!)}`);
+      boxes.push(text(ctx, { id: `group-${k}-items`, text: members.join('\n'), x: x + pad, y: top + headH + pad / 2, w: colW - pad * 2, h: M.bottom - top - headH - pad, max: 34, min: 18, weight: 600, color: colors.good, align: 'center', valign: 'top', step: k + 1, reveal: 'answer' }));
+    });
+    return { boxes };
+  },
+};
+
+export const PRACTICE_KINDS: AnyKind[] = [trueFalse, fillIn, order, match];

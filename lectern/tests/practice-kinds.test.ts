@@ -161,6 +161,75 @@ describe('put in order', () => {
   });
 });
 
+describe('match or sort', () => {
+  const pairs = [
+    { item: 'evaporate', match: 'turn from liquid into gas', picture: '' },
+    { item: 'condense', match: 'turn from gas into liquid', picture: '' },
+    { item: 'precipitation', match: 'water falling from clouds', picture: '' },
+    { item: 'run-off', match: 'water flowing over land', picture: '' },
+  ];
+  const sorts = [
+    { item: 'lion', match: 'Mammals', picture: '' },
+    { item: 'eagle', match: 'Birds', picture: '' },
+    { item: 'whale', match: 'Mammals', picture: '' },
+    { item: 'owl', match: 'Birds', picture: '' },
+    { item: 'bat', match: 'Mammals', picture: '' },
+    { item: 'shark', match: 'Fish', picture: '' },
+  ];
+
+  it('mixes the matches up, and each click puts the number of an item’s match beside it', () => {
+    for (const audience of ['young', 'teen', 'adult'] as const) {
+      const layout = lay('match', { title: 'Match', items: pairs }, { audience });
+      expect(layout.warnings.filter((w) => !w.includes('words on this slide'))).toEqual([]);
+      expect(layout.steps).toBe(4);
+      inside(layout.boxes);
+    }
+    const { boxes } = lay('match', { title: 'Match', items: pairs });
+    const shown = shownOrder(pairs.map((p) => p.match));
+    shown.forEach((i, at) => expect(byId(boxes, `match-${at}`)).toMatchObject({ text: pairs[i]!.match, bind: `items.${i}.match` }));
+    pairs.forEach((p, k) => {
+      expect(byId(boxes, `item-${k}-text`)).toMatchObject({ text: p.item, bind: `items.${k}.item` });
+      expect(byId(boxes, `answer-${k}`)).toMatchObject({ text: String(shown.indexOf(k) + 1), step: k + 1, reveal: 'answer' });
+    });
+    expect(getKind('match')!.checks!({ items: pairs })[0]).toEqual({ prompt: 'evaporate', answer: 'turn from liquid into gas' });
+  });
+
+  it('sorts items that share a match into groups, filling one group a click', () => {
+    const def = getKind('match')!;
+    expect(def.autoVariant!({ items: sorts }, { index: 0, count: 1, nth: 0 })).toBe('groups');
+    expect(def.autoVariant!({ items: pairs }, { index: 0, count: 1, nth: 0 })).toBe('pairs');
+    for (const audience of ['young', 'teen', 'adult'] as const) {
+      const layout = lay('match', { title: 'Sort the animals', items: sorts }, { audience });
+      expect(layout.warnings.filter((w) => !w.includes('words on this slide'))).toEqual([]);
+      expect(layout.steps).toBe(3);
+      inside(layout.boxes);
+    }
+    const { boxes } = lay('match', { title: 'Sort the animals', items: sorts });
+    expect(['group-0', 'group-1', 'group-2'].map((id) => (byId(boxes, id) as TextBox).text)).toEqual(['Mammals', 'Birds', 'Fish']);
+    const mammals = byId(boxes, 'group-0-items') as TextBox;
+    expect(mammals).toMatchObject({ step: 1, reveal: 'answer' });
+    expect(mammals.text.split('\n').map((l) => l.replace(/^[A-L] +/, ''))).toEqual(['lion', 'whale', 'bat']);
+    // The pool shows every item from the start, lettered A to F.
+    expect(texts(boxes).filter((b) => b.id.startsWith('letter-')).map((b) => b.text)).toEqual(['A', 'B', 'C', 'D', 'E', 'F']);
+    expect(boxes.filter((b) => b.id.startsWith('item-')).every((b) => !b.step)).toBe(true);
+    // Sorted items share their answers, so they ask without prompts of their own, like blanks.
+    expect(def.checks!({ items: sorts }).every((c) => c.prompt === '')).toBe(true);
+    expect(def.text({ title: 'T', items: sorts })).toEqual(['T', 'lion', 'eagle', 'whale', 'owl', 'bat', 'shark', 'Mammals', 'Birds', 'Fish']);
+  });
+
+  it('shows pictures as items, with or without words', () => {
+    const withPictures = sorts.slice(0, 4).map((s, i) => ({ ...s, item: i % 2 ? s.item : '', picture: `https://example.com/${s.item}.jpg` }));
+    const layout = lay('match', { items: withPictures });
+    inside(layout.boxes);
+    expect(layout.boxes.filter((b) => b.type === 'image')).toHaveLength(4);
+    expect((byId(layout.boxes, 'group-0-items') as TextBox).text).toMatch(/\([A-D]\)/);
+    const matched = lay('match', { items: pairs.slice(0, 2).map((p) => ({ ...p, item: '', picture: 'https://example.com/p.jpg' })) }, { mode: 'edit' });
+    expect(matched.warnings).toEqual([]);
+    expect(matched.boxes.filter((b) => b.type === 'image')).toHaveLength(2);
+    expect(lay('match', { items: pairs.slice(0, 1) }, { mode: 'edit' }).warnings).toEqual(['Add at least two items, each with its match or group.']);
+  });
+});
+
 describe('title credits', () => {
   it('puts a second credit line under the presenter, in both layouts', () => {
     for (const variant of ['left', 'center']) {

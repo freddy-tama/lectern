@@ -270,7 +270,7 @@ export const LESSON_RULES = `This is a lesson. Teach less and go deeper: one ide
 - Ask about facts first, then meaning: what it says or what happened, then why and what it means. Ask more than one question in each section.
 - Before a key moment, show a picture and ask the room to look and predict what happens next.
 - Put a check after each main idea. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
-- Order practice from easy to hard: true or false, or putting events, steps or sentences in order (an order slide), then fill in the blanks, then retelling or explaining in their own words.
+- Order practice from easy to hard: true or false, or putting events, steps or sentences in order (an order slide) or matching pairs and sorting into groups (a match slide), then fill in the blanks, then retelling or explaining in their own words.
 - Never show an answer before the slide that asks for it: not in the opening, a heading, a caption or an earlier slide.
 - Never test one fact twice, for example a question on a date and then a true-or-false on the same date.
 - keyPoints are what a learner must remember, phrased so they make sense without the slide. checkQuestion and checkAnswer test understanding of that slide.
