@@ -151,10 +151,13 @@ const PITCH: PurposeWording = {
   topicPlaceholder: 'A scheduling app for small clinics: who it is for, why now, the traction so far, and the funding we are asking for.',
   notesPlaceholder: '# Company or product\n\n## The problem\n- Who has it\n- What it costs them\nNotes: what you will say here\n\n## The ask\n- What you need, and what it unlocks',
   people: 'the audience',
-  aiRules: `This is a pitch. Follow this order: the problem, the solution, proof that it works (traction, numbers, customers, a demo), the market and why now, the plan, and the ask.
+  aiRules: `This is a pitch. Follow the order investors expect: what the company does in one line, the problem, the solution, the market and why now, the product, the business model, traction, the competition, the team, and the ask.
+- The business model says who pays, how much and how often (a pricing slide fits). Traction is proof that it works: numbers, customers, a demo.
+- The competition slide names the alternatives and says why you win, for example on a 2 by 2 diagram with you in the best corner. The team slide shows the people and why they are the ones to do this (a people slide).
+- A short pitch may merge the solution and the product, or the market and why now, but keeps the business model, the competition, the team and the ask.
 - Lead with the problem in the audience's terms. One claim per slide, each backed by a number or an example from the material.
 - keyPoints are what the audience should believe after the slide. checkQuestion is a question they will likely ask about the slide and checkAnswer is your answer, short and direct.
-- End with a slide that states the ask: what you want, how much, and what it makes possible.
+- End with a slide that states the ask: the amount, what it buys (where the money goes, or the milestones it reaches), and what it makes possible.
 - Do not invent traction, customers or figures. If the material has none, leave that slide to placeholders the presenter can fill, written as plain statements rather than made-up numbers.`,
 };
 

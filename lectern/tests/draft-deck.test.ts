@@ -190,6 +190,19 @@ describe('catalogue and schemas', () => {
       expect(system).toContain(rule);
       expect(stagedRequest(talk, OUTLINE_TASK).system).not.toContain(rule);
     }
+    expect(system).toContain('about 1-1.5 minutes a slide');
+    expect(system).toContain('Put a task and its answer on separate slides');
+    expect(line('order')).toContain('items [list]');
+    expect(line('match')).toContain('items [objects: item, match]');
+  });
+
+  it('plans a pitch in the order investors expect, with a team, a business model, the competition and a priced ask', () => {
+    const pitch = readInput(body({ pictures: [], purpose: 'pitch' }));
+    if (typeof pitch === 'string') throw new Error('bad input');
+    const system = stagedRequest(pitch, OUTLINE_TASK).system;
+    expect(system).toContain('the market and why now, the product, the business model, traction, the competition, the team, and the ask');
+    expect(system).toContain('keeps the business model, the competition, the team and the ask');
+    expect(system).toContain('the amount, what it buys');
   });
 
   it('reads content only when it is a JSON object', () => {

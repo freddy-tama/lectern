@@ -286,10 +286,13 @@ const PURPOSE_RULES: Record<Purpose, string> = {
 - keyPoints are the takeaways the audience should leave with. checkQuestion is an optional question to put to the audience, and checkAnswer is what you hope to hear or your own answer. Use them on a few slides, not all.
 - Use quotes, big numbers and images to give the talk rhythm.
 - Close with the takeaways and a closing line.`,
-  pitch: `This is a pitch. Follow this order: the problem, the solution, proof that it works (traction, numbers, customers, a demo), the market and why now, the plan, and the ask.
+  pitch: `This is a pitch. Follow the order investors expect: what the company does in one line, the problem, the solution, the market and why now, the product, the business model, traction, the competition, the team, and the ask.
+- The business model says who pays, how much and how often (a pricing slide fits). Traction is proof that it works: numbers, customers, a demo.
+- The competition slide names the alternatives and says why you win, for example on a 2 by 2 diagram with you in the best corner. The team slide shows the people and why they are the ones to do this (a people slide).
+- A short pitch may merge the solution and the product, or the market and why now, but keeps the business model, the competition, the team and the ask.
 - Lead with the problem in the audience's terms. One claim per slide, each backed by a number or an example from the material.
 - keyPoints are what the audience should believe after the slide. checkQuestion is a question they will likely ask about the slide and checkAnswer is your answer, short and direct.
-- End with a slide that states the ask: what you want, how much, and what it makes possible.
+- End with a slide that states the ask: the amount, what it buys (where the money goes, or the milestones it reaches), and what it makes possible.
 - Do not invent traction, customers or figures. If the material has none, say what the slide should show in plain words rather than making numbers up.`,
   report: `This is a report. Lead with the summary: the answer or main finding comes first, then the evidence.
 - Use numbers wherever the material has them: big-number, chart and table slides before bullet lists. Say what each number means in notes.script.
