@@ -337,7 +337,18 @@ export function isoDay(raw: string | null | undefined): string {
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   const t = Date.parse(s);
-  return Number.isFinite(t) && /\d{4}/.test(s) ? new Date(t).toISOString().slice(0, 10) : '';
+  return Number.isFinite(t) && /\d{4}/.test(s) ? dayOf(t, s) : '';
+}
+
+/**
+ * The calendar day of a parsed date. Text with a time zone ("… GMT", "…+07:00") gives its UTC day;
+ * a bare date ("March 2, 2025") parses at local midnight, so its local day is the one it names.
+ */
+export function dayOf(t: number, text: string): string {
+  const d = new Date(t);
+  if (/(GMT|UTC|Z|[+-]\d{2}:?\d{2})\s*$/i.test(text.trim())) return d.toISOString().slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 const firstOf = (...values: (string | null | undefined)[]) => values.map((v) => clean(v ?? '')).find(Boolean) ?? '';

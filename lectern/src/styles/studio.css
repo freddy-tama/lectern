@@ -28,6 +28,16 @@
   align-content: start;
 }
 
+.new-deck-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.new-deck-row > .field {
+  flex: 1 1 160px;
+}
+
 .dropzone {
   display: grid;
   gap: 10px;

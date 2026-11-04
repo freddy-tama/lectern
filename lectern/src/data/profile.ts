@@ -33,6 +33,12 @@ export interface DeckPrefs {
   themeId: string;
   minutes: number;
   density: Density;
+  /** The language decks are written in, by its English name ("Simplified Chinese"); unset means the files' language. */
+  language?: string;
+  /** Search the web for recent facts before drafting. */
+  research?: boolean;
+  /** Find photos in free libraries for the slides that would show one. */
+  findPictures?: boolean;
 }
 
 /** An answer to one of the AI's questions that the person asked Lectern to keep. */
@@ -121,6 +127,9 @@ export function normalizeProfile(raw: unknown): Profile {
       themeId: typeof deck.themeId === 'string' && deck.themeId ? deck.themeId.slice(0, 80) : base.deck.themeId,
       minutes: Number.isFinite(minutes) && minutes >= 5 && minutes <= 180 ? Math.round(minutes) : base.deck.minutes,
       density: oneOf(deck.density, DENSITIES.map((d) => d.id), base.deck.density),
+      ...(typeof deck.language === 'string' && deck.language.trim() ? { language: deck.language.trim().slice(0, 40) } : {}),
+      ...(deck.research === true ? { research: true } : {}),
+      ...(deck.findPictures === true ? { findPictures: true } : {}),
     },
     askQuestions: v.askQuestions === undefined ? true : Boolean(v.askQuestions),
     remembered,

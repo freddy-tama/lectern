@@ -40,6 +40,10 @@ export interface DraftRequest {
   density?: Density;
   /** Pictures the AI may place, by id ("pic1"), as small JPEGs. */
   pictures?: { id: string; name: string; mime: string; data: string }[];
+  /** Today as YYYY-MM-DD. */
+  today?: string;
+  /** The language to write in, by its English name; unset means the material's language. */
+  language?: string;
 }
 
 /**

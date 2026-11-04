@@ -17,6 +17,7 @@ import { addDeck, saveAsset, saveDeck } from '../../data/repo';
 import { type DraftFit, fitDraft } from '../studio/fit-deck';
 import { DraftCallError, STOPS_THE_JOB, draftSlides } from './ai';
 import { placePictures } from './make';
+import { addFoundPhotos } from './photos';
 import { pictureForDeck } from './pictures';
 import { type CallUsage, addUsage } from './usage';
 
@@ -328,7 +329,8 @@ export async function finishJob(job: DraftJob, signal?: AbortSignal): Promise<st
   await saveJob(job);
   for (const deck of job.decks) {
     if (deck.deckId || !deck.outline.length) continue;
-    const draft = await placePictures(jobDraft(job, deck), files, async (f) => saveAsset(await pictureForDeck(f), f.name));
+    let draft = await placePictures(jobDraft(job, deck), files, async (f) => saveAsset(await pictureForDeck(f), f.name));
+    if (job.request.findPictures) draft = (await addFoundPhotos(draft, deck.outline, { signal }).catch(() => ({ draft }))).draft;
     const checked = await checkDraft(draftToDeck(draft, { ...job.settings, density: job.request.density, source: 'ai' }), signal);
     await addDeck(checked.deck);
     deck.deckId = checked.deck.id;

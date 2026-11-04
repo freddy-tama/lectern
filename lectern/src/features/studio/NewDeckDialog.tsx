@@ -6,6 +6,7 @@ import { blankDeck, draftToDeck } from '../../core/deck/draft';
 import { AUTO_LOOK as AUTO, notesToDeck, styleDeck } from '../../core/deck/notes-to-deck';
 import { outlineToDraft } from '../../core/deck/outline';
 import { SAMPLE_LESSON, SAMPLE_TALK } from '../../core/deck/outline-examples';
+import { DECK_LANGUAGES, deckLanguage } from '../../core/deck/languages';
 import { wording } from '../../core/deck/purpose';
 import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, uid } from '../../core/deck/types';
 import { allThemes } from '../../core/engine/themes';
@@ -16,12 +17,13 @@ import { deckSources } from '../../core/plugins/registry';
 import type { Course, Lesson } from '../../data/db';
 import { isDeckFile } from '../../data/deck-file';
 import { getProfile } from '../../data/profile';
-import { addDeck } from '../../data/repo';
+import { addDeck, isoDate } from '../../data/repo';
 import { Dialog } from '../../ui/Dialog';
 import { KindIcon } from '../../ui/KindIcon';
 import { useToast } from '../../ui/Toast';
 import { AiAccessNotice } from '../account/AccountUi';
 import { useAiAccess } from '../account/session';
+import { researchText, researchTopic } from '../autodeck/research';
 import { useOpenDeckFile } from '../backup/actions';
 import { SlideView } from '../slides/SlideView';
 import { type AiStatus, aiStatus, draftWithAI, saveCode, savedCode } from './ai';
@@ -60,6 +62,9 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
   const [topic, setTopic] = useState('');
   const [material, setMaterial] = useState('');
   const [minutes, setMinutes] = useState(() => getProfile().deck.minutes);
+  const [language, setLanguage] = useState(() => deckLanguage(getProfile().deck.language));
+  const [research, setResearch] = useState(() => getProfile().deck.research === true);
+  const [searching, setSearching] = useState(false);
   const [ai, setAi] = useState<AiStatus | null>(null);
   const access = useAiAccess();
   const locked = access === 'sign_in' || access === 'no_credits';
@@ -143,7 +148,22 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
       setBusy(true);
       abort.current = new AbortController();
       try {
-        const draft = await draftWithAI({ topic, audience, purpose, minutes, material, title }, abort.current.signal);
+        const today = isoDate(new Date());
+        let withResearch = material;
+        if (research) {
+          // A web search for recent facts first: its notes join the material, so the draft uses its figures.
+          setSearching(true);
+          try {
+            const found = await researchTopic({ topic, brief: topic, purpose, excerpt: material.slice(0, 6_000), language, today }, abort.current.signal);
+            withResearch = [material.trim(), researchText(found, today)].filter(Boolean).join('\n\n');
+          } catch (e) {
+            if ((e as Error).name === 'AbortError') throw e;
+            toast.show(`Skipped the web search. ${(e as Error).message}`, { tone: 'error' });
+          } finally {
+            setSearching(false);
+          }
+        }
+        const draft = await draftWithAI({ topic, audience, purpose, minutes, material: withResearch, title, today, ...(language ? { language } : {}) }, abort.current.signal);
         await finish(draft, 'ai');
       } catch (e) {
         if ((e as Error).name !== 'AbortError') setError((e as Error).message);
@@ -191,7 +211,7 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
           {error && <span role="alert" style={{ color: 'var(--danger)', fontSize: 13.5, marginRight: 'auto' }}>{error}</span>}
           <button type="button" className="btn btn-ghost" onClick={close}>Cancel</button>
           <button type="button" className="btn btn-primary" onClick={create} disabled={busy || (mode === 'ai' && (ai?.available === false || locked))}>
-            {busy ? <><span className="spinner" /> {checking ? 'Checking the slides fit…' : 'Drafting slides…'}</> : mode === 'notes' && preview ? `Make ${preview.slides.length} slides` : mode === 'ai' ? 'Draft the deck' : 'Create deck'}
+            {busy ? <><span className="spinner" /> {searching ? 'Searching the web…' : checking ? 'Checking the slides fit…' : 'Drafting slides…'}</> : mode === 'notes' && preview ? `Make ${preview.slides.length} slides` : mode === 'ai' ? 'Draft the deck' : 'Create deck'}
           </button>
         </>
       )}
@@ -258,11 +278,23 @@ export function NewDeckDialog({ open, onClose, lesson, course }: { open: boolean
                       <span className="field-help">This server asks for a code before using AI. Ask whoever runs it.</span>
                     </label>
                   )}
-                  <label className="field" style={{ maxWidth: 220 }}>
-                    <span className="field-label">Session length</span>
-                    <select className="select" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
-                      {[10, 15, 20, 30, 40, 45, 50, 60, 75, 90].map((m) => <option key={m} value={m}>{m} minutes</option>)}
-                    </select>
+                  <div className="new-deck-row">
+                    <label className="field" style={{ maxWidth: 220 }}>
+                      <span className="field-label">Session length</span>
+                      <select className="select" value={minutes} onChange={(e) => setMinutes(Number(e.target.value))}>
+                        {[10, 15, 20, 30, 40, 45, 50, 60, 75, 90].map((m) => <option key={m} value={m}>{m} minutes</option>)}
+                      </select>
+                    </label>
+                    <label className="field" style={{ maxWidth: 220 }}>
+                      <span className="field-label">Language</span>
+                      <select className="select" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                        {DECK_LANGUAGES.map((l) => <option key={l.id || 'same'} value={l.id}>{l.id ? l.label : 'Same as the topic'}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                  <label className="switch">
+                    <input type="checkbox" checked={research} onChange={(e) => setResearch(e.target.checked)} />
+                    <span>Search the web for recent facts first</span>
                   </label>
                 </div>
               )}
