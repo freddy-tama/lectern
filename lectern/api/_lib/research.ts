@@ -8,6 +8,10 @@
 // Links in the notes are kept only when they point to a page the search actually found or read.
 //
 // Web search must be allowed for the API key's organisation in the Claude Console.
+//
+// Searching re-reads everything found so far at each step: the request turns caching on, so each
+// step reads the pages already found from the cache (a twentieth of the price) instead of paying
+// for them again, and so does each continued turn.
 
 import Anthropic from '@anthropic-ai/sdk';
 import { type CallUsage, callDollars } from '../../src/core/ai/prices.js';
@@ -155,6 +159,28 @@ export function echoable(content: Block[]): Block[] {
 
 const textOf = (blocks: Block[]) => blocks.map((b) => (b.type === 'text' ? b.text : '')).join('');
 
+/**
+ * One research request. The top-level cache mark follows the conversation: with it, the web search
+ * caches what it has found after each step, and a continued turn reads the whole paused turn back.
+ */
+export function researchParams(system: string, messages: Anthropic.Beta.BetaMessageParam[]) {
+  return {
+    model: MODEL,
+    max_tokens: 16_000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default' as const,
+    thinking: { type: 'adaptive' as const },
+    output_config: { effort: 'medium' as const },
+    cache_control: { type: 'ephemeral' as const },
+    tools: [
+      { type: 'web_search_20260209' as const, name: 'web_search' as const, max_uses: 6 },
+      { type: 'web_fetch_20260209' as const, name: 'web_fetch' as const, max_uses: 5, max_content_tokens: 12_000 },
+    ],
+    system,
+    messages,
+  };
+}
+
 function searchesOf(response: Anthropic.Beta.BetaMessage): number {
   const u = response.usage as unknown as { server_tool_use?: { web_search_requests?: number | null } | null };
   return u.server_tool_use?.web_search_requests ?? 0;
@@ -174,20 +200,7 @@ export async function research(body: Record<string, unknown>, caller: Caller | n
   const charged = () => chargeDollars(caller, 'research', usage.reduce((sum, u) => sum + (callDollars(u) ?? 0), 0) + searches * SEARCH_DOLLARS, usage);
   try {
     for (let turn = 0; ; turn++) {
-      const response = await client.beta.messages.stream({
-        model: MODEL,
-        max_tokens: 16_000,
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'medium' },
-        tools: [
-          { type: 'web_search_20260209', name: 'web_search', max_uses: 6 },
-          { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 5, max_content_tokens: 12_000 },
-        ],
-        system,
-        messages,
-      }).finalMessage();
+      const response = await client.beta.messages.stream(researchParams(system, messages)).finalMessage();
       usage.push(...usageOf(response));
       searches += searchesOf(response);
       blocks.push(...response.content);
