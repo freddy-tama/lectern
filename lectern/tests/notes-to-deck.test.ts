@@ -38,7 +38,7 @@ describe('notes to a deck', () => {
   });
 
   it('picks the look from what the deck is for', () => {
-    expect(talk({ purpose: 'pitch' }).themeId).toBe('midnight');
+    expect(talk({ purpose: 'pitch' }).themeId).toBe('campus');
     expect(talk({ purpose: 'report' }).themeId).toBe('minimal');
     expect(talk({ purpose: 'talk' }).themeId).toBe('paper');
   });

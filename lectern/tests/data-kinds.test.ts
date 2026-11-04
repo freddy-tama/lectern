@@ -9,7 +9,7 @@ import { CANVAS_H, CANVAS_W, type ChartBox, type TableBox } from '../src/core/en
 import { layoutSlide } from '../src/core/engine/layout';
 import { THEMES, getTheme } from '../src/core/engine/themes';
 import { exportDeckToPptx } from '../src/core/export/pptx';
-import { formatChartValue, niceAxis, parseTable, toNumber } from '../src/core/kinds/data-kinds';
+import { formatChartValue, namedLabel, niceAxis, parseTable, toNumber } from '../src/core/kinds/data-kinds';
 import { getKind, registerKind } from '../src/core/kinds/registry';
 import { ChartView } from '../src/features/slides/ChartView';
 import { TableView } from '../src/features/slides/TableView';
@@ -82,6 +82,32 @@ describe('data kinds', () => {
     const big = Array.from({ length: 30 }, (_, i) => `Row ${i} | some longer text in this cell | ${i * 10}`).join('\n');
     const over = layoutSlide(slide('s2', 'table', { title: 'Too much', cells: big, header: true, stripes: true, caption: '' }), { theme: getTheme('campus'), audience: 'adult' });
     expect(over.warnings.join(' ')).toContain('too big for one slide');
+  });
+
+  it('keeps what the takeaway names in colour and turns the rest grey', () => {
+    const theme = getTheme('paper');
+    const chartOf = (content: Record<string, unknown>, variant: string) => layoutSlide(slide('s1', 'chart', content, variant), { theme, audience: 'adult' }).boxes.find((b) => b.type === 'chart') as ChartBox;
+    const rows = [{ label: 'North', value: '12' }, { label: 'South', value: '30' }, { label: 'East', value: '9' }];
+    const one = { title: 'Sales by region', rows, takeaway: 'The South sold most.' };
+    const cols = chartOf(one, 'column');
+    expect(cols.pointColors?.[1]).toBe(theme.colors.accent);
+    expect(cols.pointColors?.[0]).toBe(cols.pointColors?.[2]);
+    expect(cols.pointColors?.[0]).not.toBe(theme.colors.accent);
+    const pie = chartOf(one, 'pie');
+    expect(pie.colors[1]).toBe(theme.colors.accent);
+    expect(pie.colors[0]).toBe(theme.colors.muted);
+    // Two series: the first in colour, the comparison grey.
+    const two = chartOf(getKind('chart')!.create(), 'column');
+    expect(two.colors[0]).toBe(theme.colors.accent);
+    expect(two.colors[1]).not.toBe(theme.colors.accent);
+    expect(two.pointColors).toBeUndefined();
+    // Nothing named once, no takeaway, the toggle off, or a line: every bar in colour.
+    expect(chartOf({ ...one, takeaway: 'North and South lead.' }, 'column').pointColors).toBeUndefined();
+    expect(chartOf({ ...one, takeaway: 'Southern regions lead.' }, 'column').pointColors).toBeUndefined();
+    expect(chartOf({ ...one, takeaway: '' }, 'column').pointColors).toBeUndefined();
+    expect(chartOf({ ...one, highlight: false }, 'column').pointColors).toBeUndefined();
+    expect(chartOf(one, 'line').pointColors).toBeUndefined();
+    expect(namedLabel('华南地区最高', ['华北', '华南'])).toBe(1);
   });
 
   it('puts a source line under charts and big numbers, above the footer', () => {
@@ -214,6 +240,20 @@ describe('PowerPoint charts and tables', () => {
     expect(tableSlide).toContain('Business');
     const ids = [...tableSlide.matchAll(/<p:cNvPr id="(\d+)"/g)].map((m) => m[1]);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('colours one highlighted column or bar by itself in PowerPoint', async () => {
+    const content = { title: 'Sales', rows: [{ label: 'North', value: '12' }, { label: 'South', value: '30' }, { label: 'East', value: '9' }], takeaway: 'The South sold most.' };
+    const result = await exportDeckToPptx({ ...deck, themeId: 'paper', slides: [slide('a', 'chart', content), slide('b', 'chart', content, 'bar')] }, { output: 'nodebuffer' });
+    const zip = await JSZip.loadAsync(result.data as Uint8Array);
+    const charts = await Promise.all(Object.keys(zip.files).filter((p) => /^ppt\/charts\/chart\d+\.xml$/.test(p)).sort().map((p) => zip.file(p)!.async('string')));
+    const accent = getTheme('paper').colors.accent.slice(1).toUpperCase();
+    const dpt = (xml: string) => [...xml.matchAll(/<c:dPt>[\s\S]*?<a:srgbClr val="([0-9A-F]{6})"/g)].map((m) => m[1]);
+    expect(dpt(charts[0]!)).toHaveLength(3);
+    expect(dpt(charts[0]!)[1]).toBe(accent);
+    // Bars run bottom-up in PowerPoint, so South is still the middle one.
+    expect(dpt(charts[1]!)[1]).toBe(accent);
+    expect(dpt(charts[1]!)[0]).not.toBe(accent);
   });
 
   it('animates charts and tables that appear on a click', async () => {

@@ -360,11 +360,14 @@ function addChart(slide: PptxGenJS.Slide, pptx: PptxGenJS, box: ChartBox, ctx: C
   }
   const data = series.map((s) => ({ name: s.name, labels, values: s.values.map((v) => (Number.isFinite(v) ? v : 0)) }));
   const format = numberFormat(box);
+  // One highlighted column or bar: PowerPoint takes a colour per point when there is one series.
+  const points = box.pointColors && series.length === 1 && (box.chart === 'column' || box.chart === 'bar')
+    ? (box.chart === 'bar' ? [...box.pointColors].reverse() : box.pointColors) : null;
   const opts: PptxGenJS.IChartOpts = {
     x: round4(inches(box.x)), y: round4(inches(box.y)), w: round4(inches(box.w)), h: round4(inches(box.h)),
     objectName: name,
     altText: `${box.chart} chart: ${box.labels.join(', ')}`,
-    chartColors: box.colors.map((c) => hex(c)),
+    chartColors: (points ?? box.colors).map((c) => hex(c)),
     showLegend: !!box.showLegend,
     legendPos: round ? 'r' : 't',
     legendFontFace: face, legendFontSize: pt, legendColor: text,
