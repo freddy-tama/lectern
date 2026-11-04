@@ -25,6 +25,8 @@ export interface LayoutContext {
   /** What the deck is for and how much text it was drafted to carry, for the word budget. */
   purpose?: DeckPurpose;
   density?: DeckDensity;
+  /** Where a section slide falls among the deck's parts, when auto style numbers them (see partPlaces). */
+  part?: { index: number; count: number };
 }
 
 /** Safe area on the 1920 × 1080 canvas. */

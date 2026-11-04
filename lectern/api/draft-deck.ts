@@ -346,7 +346,7 @@ function systemPrompt(kinds: CatalogueKind[], hints: string, purpose: Purpose, p
   const catalogue = kinds.map((k) => {
     const room = staged && canShow ? pictureRoom(k) : 0;
     const holds = room ? ` Holds ${room === 1 ? '1 picture' : `up to ${room} pictures`}.` : '';
-    const fields = [...k.fields.flatMap((f) => fieldLine(f, canShow)), ...(k.kind === 'question' ? ['correct [number]'] : [])];
+    const fields = [...k.fields.flatMap((f) => fieldLine(f, canShow)), ...(k.kind === 'question' ? ['correct [number]'] : k.kind === 'agenda' ? ['current [number]'] : [])];
     return `- ${k.kind} (${k.label}): ${k.description} Fields: ${fields.join(', ')}${holds}`;
   }).join('\n');
   return `You plan ${PURPOSE_NOUN[purpose]}. Every slide has audience-facing content and key notes for the presenter and for people who read the deck on their own.
@@ -355,6 +355,7 @@ How to write a deck:
 - Slides are what the room sees: short, concrete, scannable. Never put the explanation on the slide. The explanation goes in notes.script.
 - notes.script is the presenter's spoken words for that slide, ready to read from a teleprompter: natural sentences, addressed to the audience where it fits, 40-140 words on content slides, 1-3 sentences on title and section slides. Separate beats with a blank line.
 - Open with a title slide and usually an agenda. Use section slides to divide longer sessions. Close with takeaways (summary) and, when it fits, a closing slide.
+- When a deck has three or more parts, repeat the agenda before each part as a "you are here" slide: the same items, with "current" set to that part's place in the list, from 0.
 - Mix slide types so the deck has rhythm. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
 - Use "reveal": true on points or steps that the presenter should build up one at a time.
 - Plan the minutes so the slides add up to the session length.

@@ -3,6 +3,7 @@
 // assistant sees its own changes. When the request ends, ops() turns the difference from the deck as it was
 // into proposals the presenter reviews. Nothing here touches the real deck.
 
+import { partPlaces } from '../../../core/deck/auto-style';
 import { lessonIssues } from '../../../core/deck/check';
 import { hasSession, sessionMinutes, slideTimeLabel, slideTimes } from '../../../core/deck/timing';
 import { type Deck, type Slide, deckPurpose } from '../../../core/deck/types';
@@ -88,7 +89,7 @@ export class Workspace {
     if (hit?.key === key) return hit.layout;
     const layout = layoutSlide(slide, {
       theme: this.theme, audience: this.deck.audience, mode: 'edit', slideNumber: number, slideCount: shown.length, deckTitle: this.deck.title,
-      purpose: deckPurpose(this.deck), density: this.deck.density,
+      purpose: deckPurpose(this.deck), density: this.deck.density, part: partPlaces(this.deck).get(slide.id),
     });
     this.layouts.set(slide.id, { key, layout });
     return layout;

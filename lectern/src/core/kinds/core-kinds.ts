@@ -81,7 +81,7 @@ const title: SlideKindDefinition<C> = {
 const section: SlideKindDefinition<C> = {
   kind: 'section', label: 'Section', description: 'A divider that starts a new part of the deck.', icon: 'bookmark', group: 'Open',
   fields: [
-    { key: 'number', label: 'Number', type: 'text', placeholder: '02' },
+    { key: 'number', label: 'Number', type: 'text', placeholder: '02', help: 'With auto style, an empty number follows the section’s place in the deck.' },
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
     { key: 'subtitle', label: 'Subtitle', type: 'text' },
   ],
@@ -91,18 +91,31 @@ const section: SlideKindDefinition<C> = {
   layout(c, ctx) {
     const ink = ctx.theme.colors.sectionInk;
     const boxes: Box[] = [];
-    const num = read.str(c, 'number');
+    // With auto style, a section numbers itself by its place among the deck's parts and shows how far the deck has come.
+    const part = ctx.part && ctx.part.count >= 2 ? ctx.part : null;
+    const num = read.str(c, 'number') || (part ? String(part.index).padStart(2, '0') : '');
     const t = text(ctx, { id: 'title', text: read.str(c, 'title') || ' ', x: M.x, y: 0, w: M.w - 200, h: 420, role: 'display', max: 124, min: 72, maxLines: 3, hug: true, color: ink, bind: 'title' });
     const n = num ? text(ctx, { id: 'number', text: num, x: M.x, y: 0, w: 600, h: 230, role: 'display', max: 200, min: 140, maxLines: 1, hug: true, color: ink, bind: 'number' }) : null;
     if (n) n.opacity = 0.38;
     const sub = read.str(c, 'subtitle');
     const s = sub ? text(ctx, { id: 'subtitle', text: sub, x: M.x, y: 0, w: 1300, h: 160, max: 44, min: 30, color: ink, hug: true, maxLines: 2, bind: 'subtitle' }) : null;
     if (s) s.opacity = 0.78;
-    const blockH = (n ? n.h + 8 : 0) + t.h + (s ? 36 + s.h : 0);
+    const dot = sz(ctx, 30);
+    const dotsH = part ? dot + sz(ctx, 56) : 0;
+    const blockH = (n ? n.h + 8 : 0) + t.h + (s ? 36 + s.h : 0) + dotsH;
     let y = (CANVAS_H - blockH) / 2;
     if (n) { n.y = y; boxes.push(n); y += n.h + 8; }
     t.y = y; boxes.push(t); y += t.h;
-    if (s) { s.y = y + 36; boxes.push(s); }
+    if (s) { s.y = y + 36; boxes.push(s); y = s.y + s.h; }
+    if (part) {
+      // One dot a part: the parts done and this one filled, the rest an outline.
+      const top = y + sz(ctx, 56);
+      for (let i = 1; i <= part.count; i++) {
+        const box = shape({ id: `part-${i}`, shape: 'ellipse', x: M.x + (i - 1) * dot * 1.9, y: top, w: dot, h: dot, ...(i <= part.index ? { fill: ink } : { stroke: ink, strokeWidth: 4 }) });
+        if (i < part.index) box.opacity = 0.5;
+        boxes.push(box);
+      }
+    }
     return { boxes, frame: 'section', background: ctx.theme.colors.sectionBg };
   },
 };

@@ -4,6 +4,7 @@
 import type { Deck } from '../../core/deck/types';
 import { makeQuiz } from '../../core/deck/quiz-maker';
 import type { TextBox } from '../../core/engine/boxes';
+import { partPlaces } from '../../core/deck/auto-style';
 import { layoutSlide } from '../../core/engine/layout';
 import { getTheme } from '../../core/engine/themes';
 import { type LiteSlide, type QuizPack, type SlidesPack, encodePack, fitsQr, packUrl, quizPackFrom } from '../../core/share/pack';
@@ -30,8 +31,9 @@ export function slidesPackFrom(deck: Deck): SlidesPack {
   const theme = getTheme(deck.themeId);
   const visible = deck.slides.filter((s) => !s.hidden);
   const slides: LiteSlide[] = [];
+  const parts = partPlaces(deck);
   visible.forEach((slide, n) => {
-    const layout = layoutSlide(slide, { theme, audience: deck.audience, mode: 'show', slideNumber: n + 1, slideCount: visible.length, deckTitle: deck.title });
+    const layout = layoutSlide(slide, { theme, audience: deck.audience, mode: 'show', slideNumber: n + 1, slideCount: visible.length, deckTitle: deck.title, part: parts.get(slide.id) });
     const texts = layout.boxes.filter((b): b is TextBox => b.type === 'text' && !!b.bind && b.reveal !== 'answer' && !!b.text.trim());
     if (!texts.length) return;
     const top = texts.reduce((a, b) => (b.style.size > a.style.size ? b : a));

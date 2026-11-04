@@ -195,6 +195,8 @@ describe('catalogue and schemas', () => {
     expect(system).toContain('Put a task and its answer on separate slides');
     expect(line('order')).toContain('items [list]');
     expect(line('match')).toContain('items [objects: item, match]');
+    expect(line('agenda')).toContain('items [list], current [number]');
+    expect(system).toContain('repeat the agenda before each part as a "you are here" slide');
   });
 
   it('plans a pitch in the order investors expect, with a team, a business model, the competition and a priced ask', () => {
