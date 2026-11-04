@@ -77,6 +77,7 @@ const LESSON: PurposeWording = {
 - Before a passage, a video or a demo, show 1-2 questions to look for, and answer them after it.
 - Ask about facts first, then meaning: what it says or what happened, then why and what it means. Ask more than one question in each section.
 - Before a key moment, show a picture and ask the room to look and predict what happens next.
+- With pictures to show, young learners and language lessons answer with pictures: picture choices on a question (one picture per choice, few words), or a question with a picture to look at, hidden behind tiles, to open with a picture to guess.
 - Put a check after each main idea. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
 - Order practice from easy to hard: true or false, or putting events, steps or sentences in order (an order slide) or matching pairs and sorting into groups (a match slide), then fill in the blanks, then retelling or explaining in their own words.
 - Ask why, not only what: give some true-or-false statements a reason to pick, and put a named person's claim on a question slide (speaker and claim) for the room to agree or disagree with and say why.

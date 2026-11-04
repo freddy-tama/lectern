@@ -616,14 +616,138 @@ function questionOf(c: C): string {
   return q.trim() || !read.str(c, 'claim').trim() ? q : 'Do you agree? Why?';
 }
 
+/** A choice to show: its words, its picture or both, with its place in the stored list of choices. */
+interface Choice { value: string; picture: string; i: number }
+
+/** Each choice's picture, by its place in the stored list of choices. */
+function choicePictures(c: C): string[] {
+  return read.objects<C>(c, 'pictures').map((o) => read.str(o, 'image').trim());
+}
+
+/** The choices to show: those with words or a picture, at most six. */
+function choicesOf(c: C): Choice[] {
+  const words = read.items(c, 'options');
+  const pictures = choicePictures(c);
+  return Array.from({ length: Math.max(words.length, pictures.length) }, (_, i) => ({ value: (words[i] ?? '').trim(), picture: pictures[i] ?? '', i }))
+    .filter((o) => o.value || o.picture).slice(0, 6);
+}
+
+/** Lettered choice cards, in one column or two, with the right one ringed and ticked on click. */
+function textChoices(ctx: LayoutContext, list: Choice[], correct: number, x0: number, y: number, w: number, bottom: number): Box[] {
+  const boxes: Box[] = [];
+  const good = ctx.theme.colors.good;
+  const twoCols = list.length >= 4 && list.every((o) => o.value.length <= 48) && w >= M.w * 0.9;
+  const cols = twoCols ? 2 : 1;
+  const rows = Math.ceil(list.length / cols);
+  const gapX = 40;
+  const gapY = 28;
+  const cardH = Math.min(sz(ctx, 132), (bottom - y - gapY * (rows - 1)) / rows);
+  const cardW = (w - gapX * (cols - 1)) / cols;
+  list.forEach((opt, i) => {
+    const x = x0 + (i % cols) * (cardW + gapX);
+    const cy = y + Math.floor(i / cols) * (cardH + gapY);
+    boxes.push(card(ctx, `opt-${i}`, x, cy, cardW, cardH));
+    const d = Math.min(cardH - 36, sz(ctx, 64));
+    boxes.push(shape({ id: `opt-${i}-badge`, shape: 'ellipse', x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, fill: ctx.theme.colors.accent2 }));
+    boxes.push({ type: 'text', id: `opt-${i}-letter`, x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, text: LETTERS[i] ?? '?',
+      style: { font: 'body', size: Math.round(d * 0.48), weight: 750, color: ctx.theme.colors.ink, align: 'center', valign: 'middle', lineHeight: 1 } });
+    boxes.push(text(ctx, { id: `opt-${i}-text`, text: opt.value, x: x + 28 + d + 28, y: cy + 10, w: cardW - d - 96, h: cardH - 20, max: 42, min: 26, valign: 'middle', bind: `options.${opt.i}` }));
+    if (correct < 0) return;
+    if (opt.i === correct) {
+      boxes.push(shape({ id: `opt-${i}-ring`, shape: 'rect', x: x - 4, y: cy - 4, w: cardW + 8, h: cardH + 8, stroke: good, strokeWidth: 8, radius: ctx.theme.radius + 4, step: 1, reveal: 'answer' }));
+      boxes.push(shape({ id: `opt-${i}-ok`, shape: 'ellipse', x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, fill: good, step: 1, reveal: 'answer' }));
+      boxes.push({ type: 'text', id: `opt-${i}-tick`, x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, text: '✓', step: 1, reveal: 'answer',
+        style: { font: 'body', size: Math.round(d * 0.55), weight: 800, color: '#FFFFFF', align: 'center', valign: 'middle', lineHeight: 1 } });
+    } else {
+      boxes.push(shape({ id: `opt-${i}-dim`, shape: 'rect', x, y: cy, w: cardW, h: cardH, fill: ctx.theme.colors.bg, opacity: 0.6, radius: ctx.theme.radius, step: 1, reveal: 'answer' }));
+    }
+  });
+  return boxes;
+}
+
+/** Picture choices in a grid: each picture with its letter in the corner and its words, if any, under it. */
+function pictureChoices(ctx: LayoutContext, list: Choice[], correct: number, y: number, bottom: number): Box[] {
+  const boxes: Box[] = [];
+  const colors = ctx.theme.colors;
+  const n = list.length;
+  const cols = n <= 4 ? n : 3;
+  const rows = Math.ceil(n / cols);
+  const gap = sz(ctx, 32);
+  const cardW = (M.w - gap * (cols - 1)) / cols;
+  const cardH = Math.max(sz(ctx, 120), Math.min((bottom - y - gap * (rows - 1)) / rows, cardW * 0.95));
+  const pad = sz(ctx, 14);
+  const words = list.some((o) => o.value);
+  const textH = words ? sz(ctx, 38) * 1.3 + pad : 0;
+  const d = sz(ctx, 56);
+  // The grid sits in the middle of the room it has.
+  const top = y + Math.max(0, (bottom - y - (rows * cardH + (rows - 1) * gap)) / 2);
+  list.forEach((opt, i) => {
+    const x = M.x + (i % cols) * (cardW + gap);
+    const cy = top + Math.floor(i / cols) * (cardH + gap);
+    boxes.push(card(ctx, `opt-${i}`, x, cy, cardW, cardH));
+    const src = imageSrc(ctx, opt.picture);
+    if (src) {
+      boxes.push({ type: 'image', id: `opt-${i}-picture`, src, x: x + pad, y: cy + pad, w: cardW - pad * 2, h: cardH - pad * 2 - textH, fit: 'cover', radius: Math.max(0, ctx.theme.radius - pad / 2), alt: opt.value, bind: `pictures.${opt.i}.image` });
+      if (opt.value) boxes.push(text(ctx, { id: `opt-${i}-text`, text: opt.value, x: x + pad, y: cy + cardH - pad - textH + pad / 2, w: cardW - pad * 2, h: textH - pad / 2, max: 38, min: 22, maxLines: 1, align: 'center', valign: 'middle', bind: `options.${opt.i}` }));
+    } else {
+      boxes.push(text(ctx, { id: `opt-${i}-text`, text: opt.value, x: x + pad * 2, y: cy + pad, w: cardW - pad * 4, h: cardH - pad * 2, max: 52, min: 26, align: 'center', valign: 'middle', bind: `options.${opt.i}` }));
+    }
+    const right = correct >= 0 && opt.i === correct;
+    const badge = { x: x + pad * 1.6, y: cy + pad * 1.6, w: d, h: d };
+    boxes.push(shape({ id: `opt-${i}-badge`, shape: 'ellipse', ...badge, fill: colors.accent2, stroke: colors.surface, strokeWidth: 4 }));
+    boxes.push({ type: 'text', id: `opt-${i}-letter`, ...badge, text: LETTERS[i] ?? '?',
+      style: { font: 'body', size: Math.round(d * 0.5), weight: 750, color: colors.ink, align: 'center', valign: 'middle', lineHeight: 1 } });
+    if (correct < 0) return;
+    if (right) {
+      boxes.push(shape({ id: `opt-${i}-ring`, shape: 'rect', x: x - 4, y: cy - 4, w: cardW + 8, h: cardH + 8, stroke: colors.good, strokeWidth: 10, radius: ctx.theme.radius + 4, step: 1, reveal: 'answer' }));
+      boxes.push(shape({ id: `opt-${i}-ok`, shape: 'ellipse', ...badge, fill: colors.good, step: 1, reveal: 'answer' }));
+      boxes.push({ type: 'text', id: `opt-${i}-tick`, ...badge, text: '✓', step: 1, reveal: 'answer',
+        style: { font: 'body', size: Math.round(d * 0.58), weight: 800, color: '#FFFFFF', align: 'center', valign: 'middle', lineHeight: 1 } });
+    } else {
+      boxes.push(shape({ id: `opt-${i}-dim`, shape: 'rect', x, y: cy, w: cardW, h: cardH, fill: colors.bg, opacity: 0.65, radius: ctx.theme.radius, step: 1, reveal: 'answer' }));
+    }
+  });
+  return boxes;
+}
+
+/** Tiles left open when the question's picture is a guessing game: the middle and one below it. */
+const OPEN_TILES = new Set([4, 7]);
+
+/**
+ * The question's picture, filling its frame. As a guessing game it sits behind tiles with two left
+ * open, and the whole picture shows on the click that shows the answer.
+ */
+function questionPicture(ctx: LayoutContext, src: string, x: number, y: number, w: number, h: number, guess: boolean): Box[] {
+  const colors = ctx.theme.colors;
+  const radius = guess ? 0 : ctx.theme.radius;
+  const picture = (id: string, step?: number): Box => ({ type: 'image', id, src, x, y, w, h, fit: 'cover', radius, bind: 'image', step });
+  if (!guess) return [picture('image')];
+  const boxes: Box[] = [picture('image-peek')];
+  const tw = w / 3;
+  const th = h / 3;
+  for (let i = 0; i < 9; i++) {
+    if (OPEN_TILES.has(i)) continue;
+    const tx = x + (i % 3) * tw;
+    const ty = y + Math.floor(i / 3) * th;
+    boxes.push(shape({ id: `tile-${i}`, shape: 'rect', x: tx, y: ty, w: tw, h: th, fill: colors.accent2, stroke: colors.bg, strokeWidth: 6 }));
+    boxes.push({ type: 'text', id: `tile-${i}-q`, x: tx, y: ty, w: tw, h: th, text: '?',
+      style: { font: 'display', size: Math.round(Math.min(tw, th) * 0.42), weight: 800, color: colors.muted, align: 'center', valign: 'middle', lineHeight: 1 } });
+  }
+  boxes.push(picture('image', 1));
+  return boxes;
+}
+
 const question: SlideKindDefinition<C> = {
-  kind: 'question', label: 'Question or poll', description: 'Ask the audience a question or run a quick poll. Choices are optional; the answer appears on click. To have the room judge a claim, put who says it in "speaker" and what they say in "claim", and ask if they are right and why.', icon: 'circle-help', group: 'Engage',
+  kind: 'question', label: 'Question or poll', description: 'A question or quick poll. Choices are optional, as words or pictures; the answer appears on click. Add a picture to guess from. To judge a claim, put who says it in "speaker" and the claim in "claim".', icon: 'circle-help', group: 'Engage',
   fields: [
     { key: 'question', label: 'Question', type: 'textarea', rows: 3 },
     { key: 'speaker', label: 'Who says it', type: 'text', more: true, help: 'To judge a claim: a name, such as Sam or a customer.' },
     { key: 'claim', label: 'What they say', type: 'textarea', rows: 2, more: true, help: 'The claim to agree or disagree with. Leave the question empty to ask “Do you agree? Why?”' },
     { key: 'options', label: 'Choices', type: 'list', itemLabel: 'Choice', max: 6, correctKey: 'correct', help: 'Leave empty for an open question. Mark the correct choice.' },
+    { key: 'pictures', label: 'Picture choices', type: 'objects', itemLabel: 'Picture', max: 6, fields: [{ key: 'image', label: 'Picture', type: 'image' }], help: 'One picture per choice, in the same order (A, B, C…). The words under each may be short or left empty; keep a choice per picture to mark the right one.' },
     { key: 'answer', label: 'Answer or explanation', type: 'textarea', rows: 2, help: 'Shown when you click.' },
+    { key: 'image', label: 'Picture to look at', type: 'image', help: 'Shown beside the question: what is it, or what happens next?' },
+    { key: 'guess', label: 'Hide the picture behind tiles', type: 'toggle', more: true, help: 'A guessing game: two tiles stay open, and the whole picture shows with the answer on click.' },
   ],
   create: () => ({ question: 'Which of these is a renewable source of energy?', options: ['Coal', 'Wind', 'Natural gas', 'Oil'], correct: 1, answer: 'Wind is renewed by the weather; the others take millions of years to form.' }),
   heading: (c) => (read.str(c, 'question') || read.str(c, 'claim')).slice(0, 70) || 'Question',
@@ -638,11 +762,16 @@ const question: SlideKindDefinition<C> = {
   layout(c, ctx) {
     const boxes: Box[] = [];
     // Blank choices are skipped; each card binds to its choice's place in the stored list.
-    const choices = read.items(c, 'options').map((value, i) => ({ value: value.trim(), i })).filter((o) => o.value).slice(0, 6);
-    const options = choices.map((o) => o.value);
+    const list = choicesOf(c);
+    const pictured = list.some((o) => o.picture);
     const correct = read.num(c, 'correct');
     const answer = read.str(c, 'answer');
-    const eb = eyebrow(ctx, 'eyebrow', 'Question', M.x, M.top, 600);
+    const image = pictured ? '' : imageSrc(ctx, c.image);
+    if (pictured && read.str(c, 'image').trim() && ctx.mode === 'edit') ctx.warnings.push('With picture choices, the picture to look at isn’t shown. Clear one of them.');
+    // A picture to look at takes the right of the slide; the question and its choices keep the left.
+    const picW = image ? Math.round(M.w * 0.46) : 0;
+    const colW = image ? M.w - picW - sz(ctx, 56) : M.w;
+    const eb = eyebrow(ctx, 'eyebrow', 'Question', M.x, M.top, Math.min(600, colW));
     boxes.push(eb);
     let top = eb.y + eb.h + 20;
     // A claim to judge: who says it and what they say, in a card above the question.
@@ -650,56 +779,27 @@ const question: SlideKindDefinition<C> = {
     if (claim) {
       const speaker = read.str(c, 'speaker').trim();
       const pad = sz(ctx, 32);
-      const w = M.w - 120;
+      const w = image ? colW : M.w - 120;
       const name = speaker ? text(ctx, { id: 'speaker', text: speaker, x: M.x + pad, y: top + pad, w: w - pad * 2, h: sz(ctx, 46), max: 34, min: 24, weight: 750, color: ctx.theme.colors.accent, maxLines: 1, hug: true, bind: 'speaker' }) : null;
       const saidY = name ? name.y + name.h + sz(ctx, 8) : top + pad;
-      const said = text(ctx, { id: 'claim', text: `“${claim}”`, x: M.x + pad, y: saidY, w: w - pad * 2, h: options.length ? 190 : 280, role: 'display', max: 56, min: 32, hug: true, bind: 'claim' });
+      const said = text(ctx, { id: 'claim', text: `“${claim}”`, x: M.x + pad, y: saidY, w: w - pad * 2, h: list.length ? 190 : 280, role: 'display', max: 56, min: 32, hug: true, bind: 'claim' });
       boxes.push(card(ctx, 'claim-card', M.x, top, w, said.y + said.h + pad - top, { stroke: ctx.theme.colors.accent, strokeWidth: 3 }), ...(name ? [name] : []), said);
       top = said.y + said.h + pad + sz(ctx, 28);
     }
-    const q = text(ctx, { id: 'question', text: questionOf(c) || ' ', x: M.x, y: top, w: M.w - 120, h: options.length ? (claim ? 150 : 260) : 420, role: 'display', max: claim ? 52 : 72, min: claim ? 32 : 44, hug: true, bind: 'question' });
+    const qH = list.length ? (claim ? 150 : pictured ? 180 : 260) : image ? 360 : 420;
+    const q = text(ctx, { id: 'question', text: questionOf(c) || ' ', x: M.x, y: top, w: image ? colW : M.w - 120, h: qH, role: 'display', max: claim ? 52 : pictured ? 60 : 72, min: claim ? 32 : 40, hug: true, bind: 'question' });
     boxes.push(q);
-    let y = q.y + q.h + sz(ctx, 52);
-    const answerH = answer ? Math.min(220, heightAt(ctx, answer, sz(ctx, 34), M.w - 140) + 72) : 0;
-    const good = ctx.theme.colors.good;
-    if (options.length) {
-      const twoCols = options.length >= 4 && options.every((o) => o.length <= 48);
-      const cols = twoCols ? 2 : 1;
-      const rows = Math.ceil(options.length / cols);
-      const gapX = 40;
-      const gapY = 28;
-      const areaH = M.bottom - y - (answerH ? answerH + 32 : 0);
-      const cardH = Math.min(sz(ctx, 132), (areaH - gapY * (rows - 1)) / rows);
-      const cardW = (M.w - gapX * (cols - 1)) / cols;
-      options.forEach((opt, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const x = M.x + col * (cardW + gapX);
-        const cy = y + row * (cardH + gapY);
-        const isCorrect = choices[i]!.i === correct;
-        boxes.push(card(ctx, `opt-${i}`, x, cy, cardW, cardH));
-        const d = Math.min(cardH - 36, sz(ctx, 64));
-        boxes.push(shape({ id: `opt-${i}-badge`, shape: 'ellipse', x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, fill: ctx.theme.colors.accent2 }));
-        boxes.push({ type: 'text', id: `opt-${i}-letter`, x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, text: LETTERS[i] ?? '?',
-          style: { font: 'body', size: Math.round(d * 0.48), weight: 750, color: ctx.theme.colors.ink, align: 'center', valign: 'middle', lineHeight: 1 } });
-        boxes.push(text(ctx, { id: `opt-${i}-text`, text: opt, x: x + 28 + d + 28, y: cy + 10, w: cardW - d - 96, h: cardH - 20, max: 42, min: 26, valign: 'middle', bind: `options.${choices[i]!.i}` }));
-        if (correct >= 0) {
-          if (isCorrect) {
-            boxes.push(shape({ id: `opt-${i}-ring`, shape: 'rect', x: x - 4, y: cy - 4, w: cardW + 8, h: cardH + 8, stroke: good, strokeWidth: 8, radius: ctx.theme.radius + 4, step: 1, reveal: 'answer' }));
-            boxes.push(shape({ id: `opt-${i}-ok`, shape: 'ellipse', x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, fill: good, step: 1, reveal: 'answer' }));
-            boxes.push({ type: 'text', id: `opt-${i}-tick`, x: x + 28, y: cy + (cardH - d) / 2, w: d, h: d, text: '✓', step: 1, reveal: 'answer',
-              style: { font: 'body', size: Math.round(d * 0.55), weight: 800, color: '#FFFFFF', align: 'center', valign: 'middle', lineHeight: 1 } });
-          } else {
-            boxes.push(shape({ id: `opt-${i}-dim`, shape: 'rect', x, y: cy, w: cardW, h: cardH, fill: ctx.theme.colors.bg, opacity: 0.6, radius: ctx.theme.radius, step: 1, reveal: 'answer' }));
-          }
-        }
-      });
-      y += rows * cardH + (rows - 1) * gapY + 32;
-    }
+    const y = q.y + q.h + sz(ctx, pictured ? 36 : 52);
+    const answerH = answer ? Math.min(220, heightAt(ctx, answer, sz(ctx, 34), colW - 140) + 72) : 0;
+    const bottom = M.bottom - (answerH ? answerH + 32 : 0);
+    if (pictured) boxes.push(...pictureChoices(ctx, list, correct, y, bottom));
+    else if (list.length) boxes.push(...textChoices(ctx, list, correct, M.x, y, colW, bottom));
+    if (image) boxes.push(...questionPicture(ctx, image, M.right - picW, M.top, picW, M.bottom - M.top, read.bool(c, 'guess')));
     if (answer) {
-      const ay = options.length ? M.bottom - answerH : Math.max(y, M.bottom - answerH - 40);
-      boxes.push(shape({ id: 'answer-card', shape: 'rect', x: M.x, y: ay, w: M.w, h: answerH, fill: ctx.theme.colors.surface, stroke: good, strokeWidth: 3, radius: ctx.theme.radius, step: 1, reveal: 'answer' }));
-      boxes.push(text(ctx, { id: 'answer', text: answer, x: M.x + 48, y: ay + 24, w: M.w - 96, h: answerH - 48, max: 38, min: 24, valign: 'middle', step: 1, reveal: 'answer', bind: 'answer' }));
+      const good = ctx.theme.colors.good;
+      const ay = list.length ? M.bottom - answerH : Math.max(y, M.bottom - answerH - 40);
+      boxes.push(shape({ id: 'answer-card', shape: 'rect', x: M.x, y: ay, w: colW, h: answerH, fill: ctx.theme.colors.surface, stroke: good, strokeWidth: 3, radius: ctx.theme.radius, step: 1, reveal: 'answer' }));
+      boxes.push(text(ctx, { id: 'answer', text: answer, x: M.x + 48, y: ay + 24, w: colW - 96, h: answerH - 48, max: 38, min: 24, valign: 'middle', step: 1, reveal: 'answer', bind: 'answer' }));
     }
     return { boxes };
   },

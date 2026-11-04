@@ -136,7 +136,7 @@ describe('cleaning what the AI returns', () => {
   it('keeps only defined fields at sensible sizes', () => {
     const k = specOf('question');
     const out = cleanContent(k, { question: '  Why?  ', options: ['a', '', 'b', 'c', 'd', 'e', 'f', 'g'], correct: 9, answer: 'Because', extra: 'drop me' });
-    expect(out).toEqual({ question: 'Why?', speaker: '', claim: '', options: ['a', 'b', 'c', 'd', 'e', 'f'], correct: -1, answer: 'Because' });
+    expect(out).toEqual({ question: 'Why?', speaker: '', claim: '', options: ['a', 'b', 'c', 'd', 'e', 'f'], correct: -1, pictures: [], answer: 'Because', guess: false });
     expect(cleanContent(k, { question: 'Q', options: ['a', 'b'], correct: 1 }).correct).toBe(1);
   });
 

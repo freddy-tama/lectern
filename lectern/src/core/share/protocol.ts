@@ -280,12 +280,25 @@ export function isPackage(value: unknown): value is SharePackage {
 /** Slide types that can ask the room a question with choices: question slides, and designed slides given one. */
 const POLL_KINDS = new Set(['question', 'designed']);
 
-/** The choices of a question slide, or null when the slide isn't a poll. */
+/**
+ * The choices of a question slide, or null when the slide isn't a poll. A choice that is only a
+ * picture is called by its letter ("Picture B"), since phones show words.
+ */
 export function pollChoices(slide: Pick<Slide, 'kind' | 'content'> | undefined): string[] | null {
   if (!slide || !POLL_KINDS.has(slide.kind)) return null;
-  const options = (slide.content as { options?: unknown }).options;
-  if (!Array.isArray(options)) return null;
-  const list = options.filter((o): o is string => typeof o === 'string' && o.trim().length > 0).slice(0, 6);
+  const content = slide.content as { options?: unknown; pictures?: unknown };
+  const options = Array.isArray(content.options) ? content.options : [];
+  const pictures = Array.isArray(content.pictures) ? content.pictures : [];
+  const pictured = (i: number) => {
+    const p = pictures[i] as { image?: unknown } | undefined;
+    return typeof p?.image === 'string' && p.image.trim().length > 0;
+  };
+  const list: string[] = [];
+  for (let i = 0; i < Math.max(options.length, pictures.length) && list.length < 6; i++) {
+    const words = typeof options[i] === 'string' ? (options[i] as string).trim() : '';
+    if (words) list.push(words);
+    else if (pictured(i)) list.push(`Picture ${'ABCDEF'[list.length]}`);
+  }
   return list.length >= 2 ? list : null;
 }
 
