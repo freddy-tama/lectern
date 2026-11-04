@@ -29,7 +29,8 @@ vi.mock('@anthropic-ai/sdk', () => {
   return { default: Anthropic };
 });
 
-const { POST, echoable, keepKnownLinks, notesOf, pageDate, pagesOf, readResearch, researchPrompt } = await import('../api/research');
+const { echoable, keepKnownLinks, notesOf, pageDate, pagesOf, readResearch, researchPrompt } = await import('../api/_lib/research');
+const { POST } = await import('../api/draft-deck');
 
 const usage = (searches = 0) => ({ input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, server_tool_use: { web_search_requests: searches } });
 
@@ -60,7 +61,7 @@ afterEach(() => {
   delete process.env.ANTHROPIC_API_KEY;
 });
 
-const post = (body: Record<string, unknown>) => POST(new Request('http://x/api/research', { method: 'POST', body: JSON.stringify(body) }));
+const post = (body: Record<string, unknown>) => POST(new Request('http://x/api/draft-deck', { method: 'POST', body: JSON.stringify({ mode: 'research', ...body }) }));
 
 describe('the research request', () => {
   it('needs a topic, and keeps the date and language clean', () => {

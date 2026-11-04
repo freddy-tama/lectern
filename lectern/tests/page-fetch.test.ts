@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { GET, pageKind, pageName } from '../api/page-fetch';
+import { pageKind, pageName } from '../api/_lib/page-fetch';
+import { GET } from '../api/picture-fetch';
 
 const bytes = (s: string) => new TextEncoder().encode(s);
 const url = (s: string) => new URL(s);
@@ -36,9 +37,9 @@ describe('what a downloaded link is', () => {
 
 describe('GET', () => {
   it('refuses private addresses and a missing link, with a reason', async () => {
-    const res = await GET(new Request(`http://x/api/page-fetch?url=${encodeURIComponent('http://127.0.0.1/admin')}`));
+    const res = await GET(new Request(`http://x/api/picture-fetch?kind=page&url=${encodeURIComponent('http://127.0.0.1/admin')}`));
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/private network/);
-    expect((await GET(new Request('http://x/api/page-fetch'))).status).toBe(400);
+    expect((await GET(new Request('http://x/api/picture-fetch?kind=page'))).status).toBe(400);
   });
 });

@@ -1,19 +1,18 @@
-// Vercel function: searches the web for recent facts on a deck's topic, before the deck is drafted.
-// GET  /api/research → { available, needsCode }
-// POST /api/research → { notes, sources, searches, usage } or { error, code, usage? }
+// Searches the web for recent facts on a deck's topic, before the deck is drafted. Served by
+// api/draft-deck.ts: POST /api/draft-deck { mode: "research", topic, … }
+//   → { notes, sources, searches, usage } or { error, code, usage? }
 //
 // Claude uses the server-side web search and web fetch tools, then writes research notes: facts
 // with their year and a link to their source. The deck maker adds the notes to the material as a
 // source the person can see and remove, so drafting still uses only figures from the material.
 // Links in the notes are kept only when they point to a page the search actually found or read.
 //
-// Environment: the same as api/draft-deck.ts (ANTHROPIC_API_KEY, LECTERN_MODEL, LECTERN_ACCESS_CODE,
-// SUPABASE_*). Web search must be allowed for the API key's organisation in the Claude Console.
+// Web search must be allowed for the API key's organisation in the Claude Console.
 
 import Anthropic from '@anthropic-ai/sdk';
-import { type CallUsage, callDollars } from '../src/core/ai/prices.js';
-import { admit, chargeDollars, usageOf } from './_lib/account.js';
-import { cleanLanguage, cleanToday } from './draft-deck.js';
+import { type CallUsage, callDollars } from '../../src/core/ai/prices.js';
+import { type Caller, chargeDollars, usageOf } from './account.js';
+import { cleanLanguage, cleanToday, longDate } from './input.js';
 
 const MODEL = process.env.LECTERN_MODEL || 'claude-opus-5-5';
 /** List price of one web search, in US dollars ($10 per 1,000). */
@@ -50,7 +49,6 @@ export function readResearch(body: Record<string, unknown>): ResearchInput | str
   };
 }
 
-const longDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
 
 export function researchPrompt(input: ResearchInput): { system: string; user: string } {
   const system = `You research a topic on the web for a slide deck. Today is ${longDate(input.today)}.
@@ -162,22 +160,8 @@ function searchesOf(response: Anthropic.Beta.BetaMessage): number {
   return u.server_tool_use?.web_search_requests ?? 0;
 }
 
-export async function GET() {
-  return json({ available: Boolean(process.env.ANTHROPIC_API_KEY), needsCode: Boolean(process.env.LECTERN_ACCESS_CODE) });
-}
-
-export async function POST(request: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) return json({ error: 'AI isn’t set up on this server, so it can’t search the web.', code: 'off' }, 503);
-  const code = process.env.LECTERN_ACCESS_CODE;
-  if (code && request.headers.get('x-lectern-code') !== code) return json({ error: 'Enter the access code for this server to search the web.', code: 'needs_code' }, 401);
-  const caller = await admit(request);
-  if (caller instanceof Response) return caller;
-  let body: Record<string, unknown>;
-  try {
-    body = (await request.json()) as Record<string, unknown>;
-  } catch {
-    return json({ error: 'The request could not be read.', code: 'bad_request' }, 400);
-  }
+/** Runs a research request, after api/draft-deck.ts has checked the key, the access code and the caller. */
+export async function research(body: Record<string, unknown>, caller: Caller | null): Promise<Response> {
   const input = readResearch(body);
   if (typeof input === 'string') return json({ error: input, code: 'bad_request' }, 400);
   const { system, user } = researchPrompt(input);

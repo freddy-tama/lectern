@@ -1,4 +1,4 @@
-// Client for the web search before drafting (api/research.ts). The notes it returns become a
+// Client for the web search before drafting (api/_lib/research.ts, served as a mode of api/draft-deck.ts). The notes it returns become a
 // source in the deck maker's list, like a file: the person sees what was found, can remove it,
 // and the draft uses its figures as material.
 
@@ -27,7 +27,7 @@ export interface ResearchResult {
 export async function researchTopic(req: ResearchRequest, signal?: AbortSignal): Promise<ResearchResult> {
   let res: Response;
   try {
-    res = await aiPost('/api/research', JSON.stringify(req), signal);
+    res = await aiPost('/api/draft-deck', JSON.stringify({ mode: 'research', ...req }), signal);
   } catch (e) {
     if ((e as Error).name === 'AbortError') throw e;
     throw new Error('Lectern couldn’t reach the server to search the web. Check your connection.');

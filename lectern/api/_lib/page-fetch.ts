@@ -1,9 +1,9 @@
-// Vercel function: downloads a web page, a document or a picture from a link someone pasted, so
-// the deck maker can read it like a dropped file.
-// GET /api/page-fetch?url=https://… → the file's bytes, or { error }
+// Downloads a web page, a document or a picture from a link someone pasted, so the deck maker can
+// read it like a dropped file. Served by api/picture-fetch.ts:
+// GET /api/picture-fetch?kind=page&url=https://… → the file's bytes, or { error }
 //
 // Safety:
-//   - The same checks as api/picture-fetch.ts against server-side request forgery: public http
+//   - The same checks as picture downloads against server-side request forgery (fetch-guard.ts): public http
 //     and https addresses only, checked again as each socket connects and on every redirect.
 //   - The reply is always application/octet-stream, sent as an attachment with nosniff, so a
 //     fetched page can never run as a page of this site. Its real type travels in x-source-type.
@@ -13,17 +13,15 @@
 // Reply headers: x-source-type (with the charset of text), x-source-url (after redirects),
 // x-source-name (a file name to give it) and x-source-modified (the server's Last-Modified).
 
-import { lookup as dnsLookup } from 'node:dns';
 import http from 'node:http';
 import https from 'node:https';
-import { PictureFetchError, type Resolve, guardedLookup, parsePictureUrl, sniffImage, streamOf } from './picture-fetch.js';
+import { PictureFetchError, type Resolve, guardedLookup, parsePictureUrl, sniffImage, streamOf, systemResolve } from './fetch-guard.js';
 
 export const MAX_PAGE_BYTES = 20 * 1024 * 1024;
 const TIMEOUT_MS = 20_000;
 const MAX_REDIRECTS = 5;
 const USER_AGENT = 'Mozilla/5.0 (compatible; Lectern/0.1; reads a page someone pasted into a slide maker)';
 
-const systemResolve: Resolve = (hostname, done) => dnsLookup(hostname, { all: true, verbatim: true }, (error, addresses) => done(error, addresses ?? []));
 
 /** Zipped documents by the extension a link or its type gives them. */
 const ZIP_TYPES: Record<string, string> = {
@@ -199,8 +197,8 @@ function json(data: unknown, status = 200) {
 /** Header values must be Latin-1: names and addresses travel percent-encoded. */
 const header = (s: string) => encodeURIComponent(s);
 
-export async function GET(request: Request) {
-  const target = new URL(request.url).searchParams.get('url') ?? '';
+/** The reply to a page download: its bytes as an attachment, or { error }. */
+export async function pageResponse(target: string): Promise<Response> {
   if (!target) return json({ error: 'Add the page’s link as ?url=' }, 400);
   try {
     const page = await downloadPage(target);

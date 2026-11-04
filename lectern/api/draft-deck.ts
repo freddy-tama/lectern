@@ -4,6 +4,7 @@
 //   "deck" (default) → { draft, usage }             the whole deck in one call
 //   "outline"        → { title, outline, usage }    a plan of every slide, for the presenter to edit
 //   "slides"         → { slides, missing, usage }   the slides with the given numbers, from an approved outline
+//   "research"       → { notes, sources, searches, usage }  a web search for recent facts (api/_lib/research.ts)
 //   Errors           → { error, code, usage? }
 //
 // Outline and slides calls send the same prefix (system prompt, output schema, brief, material
@@ -23,6 +24,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { CallUsage } from '../src/core/ai/prices.js';
 import { admit, charge, usageOf } from './_lib/account.js';
+import { cleanLanguage, cleanToday, longDate } from './_lib/input.js';
+import { research } from './_lib/research.js';
+
+export { cleanLanguage, cleanToday };
 
 export type { CallUsage };
 export { usageOf };
@@ -418,24 +423,6 @@ export interface DraftInput {
   findPictures: boolean;
 }
 
-/** A YYYY-MM-DD date that is a real day, or today on this server. */
-export function cleanToday(raw: unknown, now = new Date()): string {
-  const s = typeof raw === 'string' ? raw.trim() : '';
-  const t = Date.parse(`${s}T00:00:00Z`);
-  // "2026-02-30" parses as 2 March, so the day must read back the same.
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s) && Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === s) return s;
-  return now.toISOString().slice(0, 10);
-}
-
-/** A language name the presenter picked: letters, spaces and brackets only, so it can't carry instructions. */
-export function cleanLanguage(raw: unknown): string {
-  const s = typeof raw === 'string' ? raw.trim().slice(0, 40) : '';
-  return /^[\p{L}\p{M} ()\-]+$/u.test(s) ? s : '';
-}
-
-/** "4 November 2026", so the model reads the date one way only. */
-const longDate = (iso: string) => new Date(`${iso}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
-
 /** Reads and cleans the request body. Returns a message for the person when something essential is missing. */
 export function readInput(body: DraftBody): DraftInput | string {
   const topic = text(body.topic, 2_000);
@@ -727,6 +714,8 @@ export async function POST(request: Request) {
   } catch {
     return json({ error: 'The request could not be read.', code: 'bad_request' }, 400);
   }
+  // Research lives here, not in a function of its own: the Hobby plan allows 12 functions a deployment.
+  if (body.mode === 'research') return research(body as Record<string, unknown>, caller);
   const mode: Mode = MODES.includes(body.mode as Mode) ? (body.mode as Mode) : 'deck';
   const input = readInput(body);
   if (typeof input === 'string') return json({ error: input, code: 'bad_request' }, 400);

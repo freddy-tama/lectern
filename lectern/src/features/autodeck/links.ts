@@ -1,4 +1,4 @@
-// A link someone pastes into the deck maker: the server downloads it (api/page-fetch.ts), and
+// A link someone pastes into the deck maker: the server downloads it (api/_lib/page-fetch.ts), and
 // it comes back as a file, so a web page, a PDF or a picture is read like one that was dropped.
 
 import { type DocDetails, decodeHtml, isoDay } from '../../core/import/files';
@@ -34,7 +34,7 @@ const readHeader = (res: Response, name: string) => {
 export async function fetchLink(link: string, signal?: AbortSignal): Promise<LinkedFile> {
   let res: Response;
   try {
-    res = await fetch(`/api/page-fetch?url=${encodeURIComponent(link)}`, { signal });
+    res = await fetch(`/api/picture-fetch?kind=page&url=${encodeURIComponent(link)}`, { signal });
   } catch (error) {
     if ((error as Error).name === 'AbortError') throw error;
     throw new Error('Lectern couldn’t reach its server to read the link. Check your connection.');
