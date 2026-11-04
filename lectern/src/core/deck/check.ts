@@ -5,7 +5,8 @@
 // as a list in the studio. Each rule reads the laid-out deck and returns issues; more rules
 // (repeated layouts, repeated text, long stretches without a question, contrast) join the list.
 // Lessons add two rules that read only text: an answer given away before the slide that asks
-// for it, and one thing tested twice.
+// for it, and one thing tested twice. Data slides add two tips: figures with no source (reports
+// and pitches) and a source whose newest year is three or more years old.
 
 import type { SlideLayout } from '../engine/boxes';
 import { layoutDeck, layoutSlide } from '../engine/layout';
@@ -55,6 +56,8 @@ export interface CheckInput {
   deck: Deck;
   slides: SlideCheck[];
   minutes: DeckCheck['minutes'];
+  /** The date "recent" is measured from; the rules that need it default to now. */
+  today?: Date;
 }
 
 /** A rule reads the laid-out deck and reports what it finds. It never changes the deck. */
@@ -107,7 +110,56 @@ export const MINUTES_RULE: CheckRule = {
   },
 };
 
-export const CORE_RULES: CheckRule[] = [OVERFLOW_RULE, WORDS_RULE, NOTES_RULE, MINUTES_RULE];
+// ─── Data rules ───────────────────────────────────────────────────────
+// Charts and big numbers carry a source line; a table carries a caption that may say it. Text only.
+
+/** Figures this many years old, or older, are worth a second look. */
+export const STALE_YEARS = 3;
+
+const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
+const filled = (items: unknown, key: string) => Array.isArray(items) && items.some((o) => o && typeof o === 'object' && str((o as Record<string, unknown>)[key]).trim());
+
+/** Whether a slide has figures in it, and the text that says where they come from (null for slides that carry neither). */
+function dataOf(slide: Slide): { figures: boolean; source: string } | null {
+  const c = slide.content;
+  if (slide.kind === 'chart') return { figures: filled(c.rows, 'value') || filled(c.rows, 'value2'), source: str(c.source) };
+  if (slide.kind === 'stats') return { figures: filled(c.stats, 'value'), source: str(c.source) };
+  if (slide.kind === 'table') return { figures: false, source: str(c.caption) };
+  return null;
+}
+
+/** The newest year written in a text, from 1900 up to this year. Numbers like 1,200,000 or a year to come are not read as years. */
+export function newestYear(text: string, today: Date = new Date()): number | null {
+  const now = today.getFullYear();
+  const years = [...text.normalize('NFKC').matchAll(/(?<!\d)(?<!\d[.,])(?:19|20)\d{2}(?!\d)(?![.,]\d)/g)].map((m) => Number(m[0])).filter((y) => y >= 1900 && y <= now);
+  return years.length ? Math.max(...years) : null;
+}
+
+/** A tip on chart and big-number slides with figures and no source (reports and pitches only), and on any data slide whose source is old. */
+export function dataIssues(deck: Pick<Deck, 'slides' | 'purpose' | 'lessonId'>, today: Date = new Date()): CheckIssue[] {
+  const purpose = deckPurpose(deck);
+  const wantsSource = purpose === 'report' || purpose === 'pitch';
+  const out: CheckIssue[] = [];
+  for (const slide of deck.slides) {
+    if (slide.hidden) continue;
+    const data = dataOf(slide);
+    if (!data) continue;
+    if (wantsSource && data.figures && !data.source.trim()) {
+      out.push({ rule: 'source', severity: 'info', slideId: slide.id, message: 'Say where these figures come from. Add a source at the bottom of the slide.' });
+      continue;
+    }
+    const year = newestYear(data.source, today);
+    if (year !== null && today.getFullYear() - year >= STALE_YEARS) out.push({ rule: 'old-figures', severity: 'info', slideId: slide.id, message: `These figures are from ${year}. Look for newer ones if you can.` });
+  }
+  return out;
+}
+
+export const DATA_RULE: CheckRule = {
+  id: 'data',
+  run: ({ deck, today }) => dataIssues(deck, today),
+};
+
+export const CORE_RULES: CheckRule[] = [OVERFLOW_RULE, WORDS_RULE, NOTES_RULE, MINUTES_RULE, DATA_RULE];
 
 // ─── Talk rules ───────────────────────────────────────────────────────
 
@@ -278,10 +330,10 @@ export function lessonIssues(deck: Pick<Deck, 'slides' | 'title' | 'purpose' | '
   return [...givenAway(shown, deck.title), ...sameChecks(shown)];
 }
 
-/** The text-only rules of the deck's purpose, on the visible slides: the lesson rules, or the talk's rhythm. */
-export function purposeIssues(deck: Pick<Deck, 'slides' | 'title' | 'purpose' | 'lessonId'>): CheckIssue[] {
-  if (deckPurpose(deck) === 'talk') return sameTypeRuns(deck.slides.filter((s) => !s.hidden));
-  return lessonIssues(deck);
+/** The text-only rules of the deck's purpose, on the visible slides: the lesson rules, or the talk's rhythm, with the data tips for every purpose. */
+export function purposeIssues(deck: Pick<Deck, 'slides' | 'title' | 'purpose' | 'lessonId'>, today: Date = new Date()): CheckIssue[] {
+  const own = deckPurpose(deck) === 'talk' ? sameTypeRuns(deck.slides.filter((s) => !s.hidden)) : lessonIssues(deck);
+  return [...own, ...dataIssues(deck, today)];
 }
 
 /** One slide laid out as the studio stage draws it: every warning, the overflow ones, and the words against the budget. */
@@ -291,7 +343,7 @@ export function slideProblems(slide: Slide, deck: Pick<Deck, 'themeId' | 'audien
 }
 
 /** Lays out the visible slides as the studio does and runs every rule over them. */
-export function checkDeck(deck: Deck, options: { rules?: CheckRule[] } = {}): DeckCheck {
+export function checkDeck(deck: Deck, options: { rules?: CheckRule[]; today?: Date } = {}): DeckCheck {
   const slides: SlideCheck[] = layoutDeck(deck, { mode: 'edit' }).map(({ slide, layout }, index) => ({
     slide,
     index,
@@ -302,7 +354,7 @@ export function checkDeck(deck: Deck, options: { rules?: CheckRule[] } = {}): De
   }));
   const target = Number(deck.minutes);
   const minutes = { planned: deckMinutes(deck), target: Number.isFinite(target) && target > 0 ? target : null };
-  const found = (options.rules ?? rulesFor(deck)).flatMap((rule) => rule.run({ deck, slides, minutes }));
+  const found = (options.rules ?? rulesFor(deck)).flatMap((rule) => rule.run({ deck, slides, minutes, today: options.today }));
   const byId = new Map(slides.map((s) => [s.slide.id, s]));
   for (const issue of found) if (issue.slideId) byId.get(issue.slideId)?.issues.push(issue);
   const order = new Map(slides.map((s, i) => [s.slide.id, i]));
