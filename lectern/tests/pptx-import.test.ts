@@ -3,7 +3,7 @@
 // tables, hidden slides and slides moved around. Every file here is built in the test.
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
-import { finishedDeck, readPptx } from '../src/core/import/finished';
+import { findQuestion, finishedDeck, readPptx } from '../src/core/import/finished';
 
 const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -66,5 +66,22 @@ describe('F1 · slide names on blank layouts', () => {
     ]));
     expect(slides[0]!.title).toBe('Agenda');
     expect(slides[1]!.text).toContain('Small note');
+  });
+});
+
+describe('F2 · a dialogue is not a question', () => {
+  it('asks nothing of a statement followed by lines spoken by A and B', async () => {
+    const { slides } = await readPptx(await pptx([
+      slide(box('Ask before you act.', { x: 1, y: 1, size: 32 }) + box("A: Let's cross the river!\nB: Stop, it is too deep!", { x: 1, y: 3, size: 24 })),
+    ]));
+    expect(findQuestion(slides[0]!.text)).toBeNull();
+    expect((deckOf(slides).slides[0]!.content as { question: string }).question).toBe('');
+  });
+
+  it('still finds choices after a question, with any separator', () => {
+    expect(findQuestion('Who is speaking?\nA: the horse\nB: the squirrel')).toMatchObject({ question: 'Who is speaking?', options: ['the horse', 'the squirrel'] });
+    expect(findQuestion('“河”是什么意思？\nA：river\nB：mountain')).toMatchObject({ options: ['river', 'mountain'] });
+    expect(findQuestion('Pick one\nA. Run!\nB. Hide!')).toBeNull();
+    expect(findQuestion('Pick one\na) red\nb) blue')).toMatchObject({ options: ['red', 'blue'] });
   });
 });

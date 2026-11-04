@@ -276,32 +276,41 @@ export async function readPptx(buffer: ArrayBuffer): Promise<PptxDeck> {
 
 // ─── Questions on slides ──────────────────────────────────────────────
 
-const OPTION = /^[(（]?([A-Fa-f])\s*[).:．、）]\s*(.+)$/;
+const OPTION = /^[(（]?([A-Fa-f])\s*([).:：．、）])\s*(.+)$/;
+const ASKS = /[?？]\s*$/;
+/** Lines that sound like speech, not choices: "A: Let's go!" */
+const SAID = /[!！]["”’」]?\s*$/;
 const MARK = /\s*(?:[✓✔☑✅]|\((?:correct|right|answer)\)|\*)\s*$|^\s*(?:[✓✔☑✅]|\*)\s*/i;
 const ANSWER_IN_NOTES = /(?:answer|correct(?:\s+answer)?|solution|答案|正确答案)\s*(?:is|:|：|-|–|=)?\s*[(（]?([A-F])(?![A-Za-z])/i;
 
 /**
  * A multiple-choice question written on a slide: a question line, then choices lettered
  * A, B, C… in order. The right choice is the one marked with a tick or "(correct)", or the
- * letter the speaker notes give ("Answer: B"). Null when the slide asks nothing like that.
+ * letter the speaker notes give ("Answer: B"). Null when the slide asks nothing like that,
+ * as with a dialogue between A and B ("A: Let's cross!") and no question asked.
  */
 export function findQuestion(text: string, notes = ''): FoundQuestion | null {
   const lines = text.split('\n').map(tidy).filter(Boolean);
   const start = lines.findIndex((l) => OPTION.exec(l)?.[1]?.toUpperCase() === 'A');
   if (start < 1) return null;
   const options: string[] = [];
+  const marks: string[] = [];
   let marked = -1;
   for (const line of lines.slice(start)) {
     const m = OPTION.exec(line);
     if (!m || m[1]!.toUpperCase() !== 'ABCDEF'[options.length]) break;
-    let value = m[2]!;
+    let value = m[3]!;
     if (MARK.test(value)) { marked = options.length; value = value.replace(MARK, '').trim(); }
     options.push(value);
+    marks.push(m[2]!);
     if (options.length === 6) break;
   }
   if (options.length < 2) return null;
   const before = lines.slice(0, start);
-  const question = [...before].reverse().find((l) => /[?？]\s*$/.test(l)) ?? before[before.length - 1]!;
+  const asked = [...before].reverse().find((l) => ASKS.test(l));
+  // Speakers A and B, or lines exclaimed: a dialogue, unless a question comes first.
+  if (!asked && (marks.every((s) => s === ':' || s === '：') || options.some((o) => SAID.test(o)))) return null;
+  const question = asked ?? before[before.length - 1]!;
   const fromNotes = ANSWER_IN_NOTES.exec(notes)?.[1]?.toUpperCase();
   const noted = fromNotes ? 'ABCDEF'.indexOf(fromNotes) : -1;
   const correct = marked >= 0 ? marked : noted < options.length ? noted : -1;
