@@ -1335,6 +1335,19 @@
   color: var(--danger);
 }
 
+/* A photo the presenter adds later: a longer note, so it wraps. */
+.ol-photo {
+  align-items: flex-start;
+  border-style: dashed;
+  border-radius: 12px;
+  line-height: 1.4;
+}
+
+.ol-photo > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
 /* The pages a web search read, under its row in the file list. */
 .ad-found {
   margin-top: 4px;

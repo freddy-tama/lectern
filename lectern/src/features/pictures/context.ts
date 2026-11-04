@@ -17,6 +17,8 @@ export interface PictureSlideContext {
   theme?: Theme;
   audience: Audience;
   purpose: DeckPurpose;
+  /** The photo the presenter means to add to the slide's picture field, and how to change that note. */
+  photoNote?: { field: string; text: string; set(text: string): void };
 }
 
 export const PictureContext = createContext<PictureSlideContext | null>(null);

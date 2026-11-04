@@ -2,10 +2,11 @@
 // names a search for the slides that would show a photo; once the slides are written, each
 // search runs on the libraries this server has (Openverse, Wikimedia Commons, Pexels), and the
 // best free picture is downloaded, kept with its credit, and put in the slide's picture field.
+// A slide whose search finds nothing keeps a photo note of what was wanted, to add by hand.
 
+import { pictureField } from '../../core/deck/photo-notes';
 import type { DeckDraft } from '../../core/plugins/api';
 import { type PictureShape, type RankedPicture, rankPictures } from '../../core/pictures/rank';
-import { getKind } from '../../core/kinds/registry';
 import type { PlannedSlide } from '../../data/draft-jobs';
 import { downloadPicture, pictureProviders, searchLibrary } from '../pictures/api';
 import { savePicture } from '../pictures/store';
@@ -15,9 +16,7 @@ export const MAX_FOUND = 12;
 const SEARCH_MS = 20_000;
 
 /** The slide type's first single-picture field, or undefined when it has none. */
-export function photoField(kind: string): string | undefined {
-  return getKind(kind)?.fields.find((f) => f.type === 'image')?.key;
-}
+export const photoField = pictureField;
 
 export interface PhotoDeps {
   providers(): Promise<string[]>;
@@ -43,7 +42,8 @@ const usable = (p: RankedPicture) => p.rights === 'free' || p.rights === 'credit
 
 /**
  * Fills the picture field of each slide whose outline names a search and whose field is still
- * empty. Fails softly: a slide whose search finds nothing keeps its empty field.
+ * empty. Fails softly: a slide whose search finds nothing keeps its empty field, with the search as
+ * its photo note.
  */
 export async function addFoundPhotos(
   draft: DeckDraft,
@@ -58,8 +58,13 @@ export async function addFoundPhotos(
   }).slice(0, MAX_FOUND);
   if (!todo.length) return { draft, added: 0, wanted: 0 };
   const providers = await deps.providers().catch(() => []);
-  if (!providers.length) return { draft, added: 0, wanted: todo.length };
   const slides = draft.slides.map((s) => ({ ...s, content: { ...(s.content ?? {}) } }));
+  // What was wanted stays on the slide as a note until a photo is in.
+  const noteMisses = () => {
+    for (const { i, query, field } of todo) if (!slides[i]!.content[field] && !slides[i]!.photoNote) slides[i]!.photoNote = query;
+    return { ...draft, slides };
+  };
+  if (!providers.length) return { draft: noteMisses(), added: 0, wanted: todo.length };
   const taken = new Set<string>();
   let added = 0;
   // Three at a time: libraries are slow, and each answers on its own.
@@ -87,5 +92,5 @@ export async function addFoundPhotos(
       }
     }));
   }
-  return { draft: { ...draft, slides }, added, wanted: todo.length };
+  return { draft: noteMisses(), added, wanted: todo.length };
 }

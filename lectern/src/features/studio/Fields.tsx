@@ -1,5 +1,6 @@
-import { Check, ChevronRight, ExternalLink, ImagePlus, PenTool, Plus, Search, Star, Trash2, X } from 'lucide-react';
+import { Camera, Check, ChevronRight, ExternalLink, ImagePlus, PenTool, Plus, Search, Star, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { MAX_PHOTO_NOTE, photoNoteSearch } from '../../core/deck/photo-notes';
 import type { FieldSpec } from '../../core/kinds/types';
 import { RIGHTS_LABEL, captionCredit, creditLine, needsCredit, shortCredit } from '../../core/pictures/credits';
 import { searchWords } from '../../core/pictures/rank';
@@ -236,10 +237,13 @@ function ImageField({ spec, value, onChange, bind, siblings, onSibling, nested }
   const isAsset = value.startsWith('asset:');
   const starred = isAsset && isStarred(memory, value);
   const str = (key: string) => (typeof siblings[key] === 'string' ? (siblings[key] as string) : '');
-  // A picture's caption says best what it shows; then the item's name, the slide's heading and the deck's subject.
+  // The note of what photo goes here, when this is the field it belongs to.
+  const note = !nested && context?.photoNote?.field === spec.key ? context.photoNote : undefined;
+  const [noting, setNoting] = useState(false);
+  // A picture's caption says best what it shows; then the photo note, the item's name, the slide's heading and the deck's subject.
   const searches = nested
     ? searchesFrom(str('caption'), str('name'), str('label'), context?.heading, context?.deckTitle)
-    : searchesFrom(str('caption'), str('term'), context?.heading, context?.deckTitle);
+    : searchesFrom(str('caption'), str('term'), note ? photoNoteSearch(note.text) : '', context?.heading, context?.deckTitle);
   const query = searches[0] ?? '';
   const shape = frameShape(context?.kind ?? '', context?.variant, spec.key);
 
@@ -337,6 +341,29 @@ function ImageField({ spec, value, onChange, bind, siblings, onSibling, nested }
           <button type="button" className="btn btn-ghost btn-xs" onClick={() => takeLink(value)} disabled={busy}>Keep a copy</button>
         </div>
       ) : null)}
+      {note && !value && (note.text || noting ? (
+        <div className="photo-note">
+          <label className="field-label" htmlFor={`${bind}-photo-note`}><Camera size={14} aria-hidden /> Photo to add</label>
+          <div className="photo-note-row">
+            <AutoTextarea
+              id={`${bind}-photo-note`}
+              className="textarea"
+              minRows={2}
+              maxLength={MAX_PHOTO_NOTE}
+              value={note.text}
+              autoFocus={noting && !note.text}
+              placeholder="What photo goes here, such as a wide shot of the class at work"
+              onChange={(e) => note.set(e.target.value)}
+            />
+            <button type="button" className="icon-btn" onClick={() => { note.set(''); setNoting(false); }} aria-label="Remove the photo note" title="Remove the note"><X size={15} /></button>
+          </div>
+          <span className="field-help">Shown in the empty frame until a picture is in. PowerPoint gets a box with this note in the photo’s place.</span>
+        </div>
+      ) : (
+        <button type="button" className="btn btn-ghost btn-xs photo-note-add" onClick={() => setNoting(true)}>
+          <Camera size={13} aria-hidden /> Note a photo to add later
+        </button>
+      ))}
       {caption && (
         <button type="button" className="btn btn-ghost btn-xs image-caption-btn" onClick={() => onSibling('caption', caption)} title={caption}>
           <Plus size={13} /> Show the credit as the caption

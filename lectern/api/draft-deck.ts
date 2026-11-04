@@ -92,6 +92,8 @@ interface DraftBody {
   language?: unknown;
   /** true: the outline names photos to find in free libraries ("search"). */
   findPictures?: unknown;
+  /** true: the outline describes the photo the presenter adds later ("photo"). Ignored with findPictures. */
+  photoNotes?: unknown;
 }
 
 /**
@@ -226,12 +228,12 @@ export function slideSchema(kinds: CatalogueKind[]) {
  * The output schema of outline and slides calls. Both use this one schema, because a different
  * output format would break the shared prompt cache. Each task fills one array and leaves the other empty.
  */
-export function stagedSchema(kinds: CatalogueKind[], pictures: Picture[], search = false) {
+export function stagedSchema(kinds: CatalogueKind[], pictures: Picture[], search = false, notes = false) {
   const shown = placeable(pictures);
   const item = {
     type: 'object',
     additionalProperties: false,
-    required: ['title', 'kind', 'minutes', 'point', ...(shown.length ? ['pictures'] : []), ...(search ? ['search'] : [])],
+    required: ['title', 'kind', 'minutes', 'point', ...(shown.length ? ['pictures'] : []), ...(search ? ['search'] : []), ...(notes ? ['photo'] : [])],
     properties: {
       title: { type: 'string', description: 'The slide\'s heading.' },
       kind: { type: 'string', enum: kinds.map((k) => k.kind) },
@@ -239,6 +241,7 @@ export function stagedSchema(kinds: CatalogueKind[], pictures: Picture[], search
       point: { type: 'string', description: 'One line: what this slide must get across.' },
       ...(shown.length ? { pictures: { type: 'array', items: { type: 'string', enum: shown.map((p) => p.id) }, description: 'Ids of the pictures this slide shows. Often empty.' } } : {}),
       ...(search ? { search: { type: 'string', description: 'A few plain English words to find a photo for this slide in free libraries, or "". Usually "".' } } : {}),
+      ...(notes ? { photo: { type: 'string', description: 'One short sentence on the photo the presenter adds to this slide later: what it shows and the kind of shot, or "". Usually "".' } } : {}),
     },
   };
   return {
@@ -346,6 +349,9 @@ const STAGED_PICTURES = `- In an outline, give each slide the ids of the picture
 /** When the presenter asks Lectern to find photos: the outline names what to search free libraries for. */
 const STAGED_SEARCH = `- Photos from free libraries: in an outline, give "search" a few plain English words for a photo that would help a slide ("students writing Chinese characters", "Surabaya city skyline"), on slide types that hold a picture and only where no provided picture fits. Leave it empty on most slides: about one slide in three at most, never on chart, table, question or agenda slides. Lectern finds the photo and puts it in the slide's picture field after the slides are written, so leave picture fields empty for it.`;
 
+/** When the presenter adds photos later: the outline describes each photo, and the slide keeps it as a note. */
+const STAGED_NOTES = `- Photos the presenter adds later: in an outline, give "photo" one short, concrete sentence describing a real photo that would help a slide: what it shows, where, and the kind of shot, such as "Wide shot of a language class at a secondary school, students at their desks and the teacher at the board" or "Close-up of the cover of the report the slide quotes". Name the real places, people, events and documents of the material where they fit, never a scene that can't be photographed. Use it on slide types that hold 1 picture and only where no provided picture fits: about one slide in three at most, never on chart, table, question or agenda slides. Leave it "" elsewhere. Write it in the language of the presenter's brief. The presenter adds the photo, so leave picture fields empty for it.`;
+
 /** How to treat the person's pictures, by role. Said once in the system prompt. */
 const PICTURE_RULES = `- Pictures from the material are attached, each with an id such as "pic1" and a role:
   - "for the slides": the presenter wants it shown. Put it on the slide where it fits best.
@@ -366,11 +372,11 @@ function fieldLine(f: CatalogueField, pictures: boolean): string[] {
   return [`${f.key} [objects: ${sub.map((s) => (pictures && images.has(s) ? `${s} (picture)` : toggles.has(s) ? `${s} (true/false)` : s)).join(', ')}]`];
 }
 
-function systemPrompt(kinds: CatalogueKind[], hints: string, purpose: Purpose, pictures: Picture[], staged = false, search = false) {
+function systemPrompt(kinds: CatalogueKind[], hints: string, purpose: Purpose, pictures: Picture[], staged = false, search = false, notes = false) {
   // Only the pictures that may be shown make picture fields worth listing.
   const canShow = placeable(pictures).length > 0;
   const catalogue = kinds.map((k) => {
-    const room = staged && (canShow || search) ? pictureRoom(k) : 0;
+    const room = staged && (canShow || search || notes) ? pictureRoom(k) : 0;
     const holds = room ? ` Holds ${room === 1 ? '1 picture' : `up to ${room} pictures`}.` : '';
     const fields = [...k.fields.flatMap((f) => fieldLine(f, canShow)), ...(k.kind === 'question' ? ['correct [number]'] : k.kind === 'agenda' ? ['current [number]'] : [])];
     return `- ${k.kind} (${k.label}): ${k.description} Fields: ${fields.join(', ')}${holds}`;
@@ -397,7 +403,7 @@ What this deck is for:
 ${PURPOSE_RULES[purpose]}
 
 Slide types (use only these):
-${catalogue}${hints ? `\n\nExtra guidance from installed mods:\n${hints}` : ''}${staged ? `\n\n${STAGED_RULES}${canShow ? `\n${STAGED_PICTURES}` : ''}${search ? `\n${STAGED_SEARCH}` : ''}` : ''}`;
+${catalogue}${hints ? `\n\nExtra guidance from installed mods:\n${hints}` : ''}${staged ? `\n\n${STAGED_RULES}${canShow ? `\n${STAGED_PICTURES}` : ''}${search ? `\n${STAGED_SEARCH}` : ''}${notes ? `\n${STAGED_NOTES}` : ''}` : ''}`;
 }
 
 /** Everything a draft is made from, after cleaning. Outline and slides calls must send the same input. */
@@ -421,6 +427,8 @@ export interface DraftInput {
   language: string;
   /** Whether the outline names photos for Lectern to find in free libraries. */
   findPictures: boolean;
+  /** Whether the outline describes the photos the presenter adds later. Never with findPictures. */
+  photoNotes: boolean;
 }
 
 /** Reads and cleans the request body. Returns a message for the person when something essential is missing. */
@@ -447,6 +455,7 @@ export function readInput(body: DraftBody): DraftInput | string {
     today: cleanToday(body.today),
     language: cleanLanguage(body.language),
     findPictures: body.findPictures === true,
+    photoNotes: body.photoNotes === true && body.findPictures !== true,
   };
 }
 
@@ -481,9 +490,9 @@ export function stagedRequest(input: DraftInput, task: string) {
   const last = shared[shared.length - 1]!;
   shared[shared.length - 1] = { ...last, cache_control: { type: 'ephemeral' } } as Anthropic.Beta.BetaContentBlockParam;
   return {
-    system: systemPrompt(input.kinds, input.hints, input.purpose, input.pictures, true, input.findPictures),
+    system: systemPrompt(input.kinds, input.hints, input.purpose, input.pictures, true, input.findPictures, input.photoNotes),
     content: [...shared, { type: 'text', text: task }] as Anthropic.Beta.BetaContentBlockParam[],
-    schema: stagedSchema(input.kinds, input.pictures, input.findPictures),
+    schema: stagedSchema(input.kinds, input.pictures, input.findPictures, input.photoNotes),
   };
 }
 
@@ -499,6 +508,8 @@ export interface OutlineSlide {
   pictures: string[];
   /** What photo to find for it in free libraries, when the presenter asked Lectern to find photos. */
   search?: string;
+  /** What photo the presenter adds to it later, when they asked for photo notes. */
+  photo?: string;
 }
 
 /** Quarter minutes from 15 seconds: fast lessons and talks plan slides under a minute. Times are shares of the session. */
@@ -527,7 +538,9 @@ export function cleanOutline(raw: unknown, kinds: CatalogueKind[], pictureIds: s
     }
     // A photo search only where the slide type can show it, and none where the person's own picture already goes.
     const search = pictureRoom(kind) && !pictures.length ? text(o.search, 80) : '';
-    return [{ title: text(o.title, 200), kind: kind.kind, minutes: minutesOf(o.minutes), point: text(o.point, 300), pictures, ...(search ? { search } : {}) }];
+    // A photo note goes in the slide type's own picture field, so only types with one get it.
+    const photo = kind.fields.some((f) => f.type === 'image') && !pictures.length && !search ? text(o.photo, 240) : '';
+    return [{ title: text(o.title, 200), kind: kind.kind, minutes: minutesOf(o.minutes), point: text(o.point, 300), pictures, ...(search ? { search } : {}), ...(photo ? { photo } : {}) }];
   });
 }
 
@@ -550,7 +563,7 @@ function listNumbers(numbers: number[]): string {
 export function slidesTask(title: string, outline: OutlineSlide[], numbers: number[]): string {
   const want = new Set(numbers);
   const lines = outline.map((s, i) => {
-    const pics = s.pictures.length ? ` · pictures: ${s.pictures.join(', ')}` : s.search ? ` · photo Lectern adds: ${s.search}` : '';
+    const pics = s.pictures.length ? ` · pictures: ${s.pictures.join(', ')}` : s.search ? ` · photo Lectern adds: ${s.search}` : s.photo ? ` · photo the presenter adds later: ${s.photo}` : '';
     return `${want.has(i + 1) ? '→' : ' '} ${i + 1}. [${s.kind}] ${s.title || '(no heading yet: write one)'} · ${s.minutes} min · ${s.point || '(no point given)'}${pics}`;
   });
   const list = listNumbers(numbers);

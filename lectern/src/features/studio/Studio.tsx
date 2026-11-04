@@ -3,7 +3,7 @@ import {
   AlertTriangle, ArrowLeft, BookOpen, ChevronDown, ClipboardList, Copy, Copyright, Download, EyeOff, FileJson, FileText, MonitorPlay,
   Plus, PresentationIcon, Redo2, Scissors, ScrollText, Shapes, Sparkles, Trash2, Undo2,
   Globe, NotebookText, PanelRightClose, PanelRightOpen, QrCode as QrIcon, Trophy, WandSparkles,
-  CircleCheck, Image as ImageIcon, MapPin, Pencil, RotateCcw, Palette, BringToFront, SendToBack, MousePointerClick,
+  CircleCheck, Image as ImageIcon, MapPin, Pencil, RotateCcw, Palette, BringToFront, SendToBack, MousePointerClick, Camera,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -13,6 +13,7 @@ import { wording } from '../../core/deck/purpose';
 import { purposeIssues } from '../../core/deck/check';
 import { canSplit, fitsOnSlide, isOverflowWarning, splitInDeck, splitSlide } from '../../core/deck/split';
 import { autoVariants } from '../../core/deck/auto-style';
+import { photosToAdd, pictureField, settlePhotoNotes } from '../../core/deck/photo-notes';
 import { fieldAt, getAt, insertItem, isListItem, isTextBind, removeItem, setAt, splitBind } from '../../core/deck/paths';
 import { hasSession, sessionMinutes, setSlideMinutes, slideTimes } from '../../core/deck/timing';
 import { type BoxOverride, type Deck, type KeyNotes, type Slide, type SlideElement, deckPurpose } from '../../core/deck/types';
@@ -62,11 +63,13 @@ export default function Studio() {
   const navigate = useNavigate();
   const toast = useToast();
   const { deck, change: applyChange, undo, redo, canUndo, canRedo, save } = useDeckEditor(deckId);
-  // With auto style on, every change also lays out the slides it touched.
+  // With auto style on, every change also lays out the slides it touched. A photo note goes once its photo is in.
   const change = useCallback((fn: (d: Deck) => Deck, key?: string) => {
     applyChange((d) => {
-      const next = fn(d);
-      return next !== d && next.autoStyle ? autoVariants(next) : next;
+      const changed = fn(d);
+      if (changed === d) return d;
+      const next = settlePhotoNotes(changed);
+      return next.autoStyle ? autoVariants(next) : next;
     }, key);
   }, [applyChange]);
   useDraftFitNotice(deck, change);
@@ -619,7 +622,9 @@ export default function Studio() {
     try {
       if (kind === 'pptx' || kind === 'pptx-build') {
         const warnings = await exportPptx(deck, kind === 'pptx' ? 'animate' : 'build');
-        toast.show(warnings.length ? `PowerPoint saved. ${warnings.length} item${warnings.length === 1 ? '' : 's'} could not be included.` : 'PowerPoint saved, with key notes as speaker notes');
+        const toAdd = photosToAdd(deck).length;
+        const marked = toAdd ? ` ${toAdd === 1 ? 'A box marks the photo' : `Boxes mark the ${toAdd} photos`} still to add.` : '';
+        toast.show(warnings.length ? `PowerPoint saved. ${warnings.length} item${warnings.length === 1 ? '' : 's'} could not be included.${marked}` : `PowerPoint saved, with key notes as speaker notes.${marked}`);
       } else if (kind === 'json') {
         const { pictures, missing } = await exportJson(deck);
         const withPictures = pictures ? `, with ${pictures} picture${pictures === 1 ? '' : 's'}` : '';
@@ -661,6 +666,7 @@ export default function Studio() {
     if (!deck || !slide) return null;
     const kind = getKind(slide.kind);
     const heading = kind?.heading(slide.content) ?? '';
+    const field = pictureField(slide.kind);
     return {
       kind: slide.kind,
       variant: slide.variant,
@@ -671,8 +677,15 @@ export default function Studio() {
       theme: getTheme(deck.themeId),
       audience: deck.audience,
       purpose: deckPurpose(deck),
+      ...(field ? {
+        photoNote: {
+          field,
+          text: slide.photoNote ?? '',
+          set: (text: string) => updateSlide(slide.id, (s) => ({ ...s, photoNote: text }), `${slide.id}:photoNote`),
+        },
+      } : {}),
     };
-  }, [deck, slide]);
+  }, [deck, slide, updateSlide]);
 
   /** Adds a credits slide at the end, or refreshes the deck's credits slide. */
   const creditsSlide = (lines: string[]) => {
@@ -710,6 +723,7 @@ export default function Studio() {
         </div>
         <span className={`save-state ${save}`} aria-live="polite">{save === 'saving' ? 'Saving…' : save === 'error' ? 'Couldn’t save' : 'Saved'}</span>
         <div className="studio-tools">
+          <PhotosToAdd deck={deck} onPick={(id, field) => { setSelectedId(id); setPanelOpen(true); window.setTimeout(() => focusBind(field), 80); }} />
           <button type="button" className="icon-btn" onClick={undo} disabled={!canUndo} aria-label="Undo" title="Undo (Ctrl Z)"><Undo2 size={17} /></button>
           <button type="button" className="icon-btn" onClick={redo} disabled={!canRedo} aria-label="Redo" title="Redo (Ctrl Shift Z)"><Redo2 size={17} /></button>
           <SessionMenu deck={deck} change={change} planned={planned} />
@@ -959,6 +973,29 @@ export default function Studio() {
         <DeckDetailsDialog open={details} deck={deck} onClose={() => setDetails(false)} onSave={(extra) => change((d) => ({ ...d, extra }), 'details')} />
       )}
     </div>
+  );
+}
+
+/** The photos the presenter noted to add later, one per slide: pick one to go to its picture field. */
+function PhotosToAdd({ deck, onPick }: { deck: Deck; onPick(slideId: string, field: string): void }) {
+  const todo = photosToAdd(deck);
+  if (!todo.length) return null;
+  const label = `${todo.length} photo${todo.length === 1 ? '' : 's'} to add`;
+  return (
+    <Menu width={360} align="end" trigger={(p) => <button type="button" className="btn btn-ghost btn-sm" title="Slides that say what photo to add" {...p}><Camera size={15} /> {label}</button>}>
+      {(close) => (
+        <div className="photos-to-add">
+          <p className="menu-label">{label}</p>
+          {todo.map((t) => (
+            <button key={t.slideId} type="button" className="menu-item photos-to-add-item" onClick={() => { close(); onPick(t.slideId, t.field); }}>
+              <span className="photos-to-add-num tabular">{t.number}</span>
+              <span>{t.note}</span>
+            </button>
+          ))}
+          <p className="menu-detail photos-to-add-foot">Drop a picture on the dashed frame or pick one in the panel. The note goes once a picture is in.</p>
+        </div>
+      )}
+    </Menu>
   );
 }
 
