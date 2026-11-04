@@ -239,7 +239,7 @@ function json(data: unknown, status = 200) {
 }
 
 /** Sends the bytes as a stream, so large pictures aren't held to the platform's limit for buffered replies. */
-function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
+export function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
   let offset = 0;
   return new ReadableStream({
     pull(controller) {

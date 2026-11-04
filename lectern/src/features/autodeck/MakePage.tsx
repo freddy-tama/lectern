@@ -1,5 +1,5 @@
 import {
-  AlertCircle, AudioLines, Check, Download, Eye, FileText, Image as ImageIcon, Loader2, MonitorPlay, NotebookPen, Pencil, Presentation,
+  AlertCircle, AudioLines, Check, Download, Eye, FileText, Image as ImageIcon, Link2, Loader2, MonitorPlay, NotebookPen, Pencil, Presentation,
   RotateCcw, Sparkles, Upload, Wand2, X,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -11,7 +11,7 @@ import { sessionMinutes } from '../../core/deck/timing';
 import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, uid } from '../../core/deck/types';
 import { allThemes, fontFamily } from '../../core/engine/themes';
 import { DENSITY, wordBudget } from '../../core/kinds/kit';
-import { documentPictures, fileToOutline } from '../../core/import/files';
+import { documentDetails, documentPictures, fileToOutline } from '../../core/import/files';
 import { draftingHints } from '../../core/plugins/registry';
 import { transcriptText } from '../../core/transcribe/segments';
 import { db } from '../../data/db';
@@ -33,7 +33,8 @@ import { type AiQuestion, draftOutline, fetchQuestions } from './ai';
 import { approveOutline, createJob, finishJob, recover, runJob, runsSnapshot, saveOutline, stopJob, subscribeRuns, toggleDraftFit } from './drafting';
 import { DraftingView, ResumeCard, useJobPictures } from './DraftingView';
 import { dragHasFiles, onHandOff, takeHandedOff } from './handoff';
-import { ACCEPT_ALL, PICTURE_ROLES, type PictureRole, type Source, buildMaterial, countWords, fallbackTopic, hasMaterial, kindOf, offlineDraft, picturesOf, placePictures, purposeLabel, stem } from './make';
+import { asLink, fetchLink, mergeDetails } from './links';
+import { ACCEPT_ALL, PICTURE_ROLES, type PictureRole, type Source, buildMaterial, countWords, fallbackTopic, hasMaterial, kindOf, offlineDraft, originLine, picturesOf, placePictures, purposeLabel, stem } from './make';
 import { pictureForAi, pictureForDeck } from './pictures';
 import { OutlineEditor } from './OutlineEditor';
 import { type Answer, QuestionDialog } from './QuestionDialog';
@@ -83,6 +84,20 @@ function useSources(): Source[] {
   );
 }
 
+/**
+ * Reads a document into its source: its text, the pictures inside it, and where it comes from.
+ * A web page read from a link is named by its own title.
+ */
+function readDocument(s: Pick<Source, 'id' | 'file' | 'details'>) {
+  Promise.all([fileToOutline(s.file), documentPictures(s.file).catch(() => []), documentDetails(s.file)])
+    .then(([text, pictures, found]) => {
+      const title = s.details?.url && /\.html?$/i.test(s.file.name) ? /^# (.+)$/m.exec(text)?.[1]?.trim().slice(0, 90) : undefined;
+      const file = title ? new File([s.file], `${title.replace(/[\\/:*?"<>|]+/g, ' ')}.html`, { type: s.file.type }) : s.file;
+      patch(s.id, { status: 'ready', file, text, words: countWords(text), pictures, details: mergeDetails(s.details ?? {}, found) });
+    })
+    .catch((e: Error) => patch(s.id, { status: 'error', error: e.message }));
+}
+
 let listening = false;
 
 /** A finished transcript becomes that file's text, whether or not the page is open. */
@@ -125,6 +140,7 @@ export default function MakePage() {
   const [deck, setDeck] = useState<Deck | null>(null);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [link, setLink] = useState('');
   const [exporting, setExporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [jobId, setJobIdState] = useState(kept.jobId);
@@ -182,9 +198,7 @@ export default function MakePage() {
     if (fresh.some((s) => s.kind === 'audio')) listenForTranscripts();
     for (const s of fresh) {
       if (s.kind === 'doc') {
-        Promise.all([fileToOutline(s.file), documentPictures(s.file).catch(() => [])])
-          .then(([text, pictures]) => patch(s.id, { status: 'ready', text, words: countWords(text), pictures }))
-          .catch((e: Error) => patch(s.id, { status: 'error', error: e.message }));
+        readDocument(s);
       } else if (s.kind === 'audio') {
         addRecordingFile(s.file, { title: stem(s.file.name), date: isoDate(new Date()) })
           .then((rec) => { patch(s.id, { recordingId: rec.id }); return transcribe(rec.id, loadPrefs()); })
@@ -192,6 +206,26 @@ export default function MakePage() {
       }
     }
   }, [toast, openJobId]);
+
+  /** A pasted link: the server downloads it, then it reads like a dropped file, or joins the pictures. */
+  const addLink = () => {
+    const url = asLink(link);
+    if (!url) { setError('Paste a whole link, starting with https://'); return; }
+    if (kept.sources.length >= MAX_FILES) { toast.show(`Up to ${MAX_FILES} files at a time.`, { tone: 'error' }); return; }
+    setError('');
+    setLink('');
+    setStage((s) => (s === 'done' ? 'gather' : s));
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    const s: Source = { id: uid('src'), file: new File([], host), kind: 'doc', status: 'reading', text: '', words: 0, pictures: [], details: { url } };
+    setSources((existing) => [...existing, s]);
+    fetchLink(url)
+      .then((got) => {
+        if (got.picture) { patch(s.id, { file: got.file, kind: 'picture', status: 'ready', pictures: [got.file], details: got.details }); return; }
+        patch(s.id, { file: got.file, details: got.details });
+        readDocument({ id: s.id, file: got.file, details: got.details });
+      })
+      .catch((e: Error) => patch(s.id, { status: 'error', error: e.message }));
+  };
 
   // Files dropped elsewhere in the app arrive here.
   useEffect(() => {
@@ -503,6 +537,20 @@ export default function MakePage() {
                   <input ref={fileInput} type="file" multiple accept={ACCEPT_ALL} hidden onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
                 </div>
 
+                <form className="ad-link-row" onSubmit={(e) => { e.preventDefault(); addLink(); }}>
+                  <Link2 size={16} aria-hidden />
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="url"
+                    value={link}
+                    onChange={(e) => setLink(e.target.value)}
+                    placeholder="Or paste a link to a web page, PDF or picture"
+                    aria-label="Link to a web page, PDF or picture"
+                  />
+                  <button type="submit" className="btn btn-secondary btn-sm" disabled={!link.trim()}>Add link</button>
+                </form>
+
                 {sources.length > 0 && (
                   <ul className="ad-files" aria-label="Your files">
                     {sources.map((s) => {
@@ -520,6 +568,7 @@ export default function MakePage() {
                                 <>
                                   <Check size={13} />
                                   {s.kind === 'picture' ? `Picture · ${formatBytes(s.file.size)}` : `${s.words.toLocaleString()} words${s.pictures.length ? ` · ${s.pictures.length} picture${s.pictures.length === 1 ? '' : 's'}` : ''}`}
+                                  {originLine(s.details) && <> · {originLine(s.details)}</>}
                                   {s.kind === 'audio' && s.recordingId && <> · <Link to={`/recordings/${s.recordingId}`}>Transcript in Recordings</Link></>}
                                 </>
                               )}

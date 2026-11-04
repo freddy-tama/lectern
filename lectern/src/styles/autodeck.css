@@ -1271,6 +1271,23 @@
   color: var(--brand);
 }
 
+.ad-link-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0 0;
+  color: var(--ink-3);
+}
+
+.ad-link-row > svg {
+  flex: none;
+}
+
+.ad-link-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
 .ad-finished {
   display: flex;
   gap: 10px;

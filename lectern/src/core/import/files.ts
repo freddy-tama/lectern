@@ -299,6 +299,146 @@ export function htmlToOutline(html: string, fallbackTitle = ''): string {
   return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
+/**
+ * A web page's text from its bytes. Pages saved from Chinese, Japanese or Korean sites are
+ * often GBK, Big5 or Shift_JIS, so the charset comes from the server's header when there is one,
+ * then the page's own <meta> tag, then UTF-8.
+ */
+export function decodeHtml(bytes: Uint8Array, declared = ''): string {
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return new TextDecoder('utf-8').decode(bytes);
+  const head = new TextDecoder('latin1').decode(bytes.subarray(0, 4096));
+  const named = /charset\s*=\s*["']?([\w-]+)/i.exec(declared)?.[1]
+    ?? /<meta[^>]+charset\s*=\s*["']?([\w-]+)/i.exec(head)?.[1];
+  for (const label of [named, 'utf-8']) {
+    if (!label) continue;
+    try { return new TextDecoder(label.toLowerCase() === 'gb2312' ? 'gbk' : label).decode(bytes); } catch { /* an unknown label: try the next */ }
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+// ─── Where a document comes from ──────────────────────────────────────
+
+/** What a file says about itself: where it was published, when, and by whom. Each part is optional. */
+export interface DocDetails {
+  /** The page's own address: from a pasted link, or a saved page's canonical link. */
+  url?: string;
+  site?: string;
+  author?: string;
+  /** Dates as YYYY-MM-DD. */
+  published?: string;
+  modified?: string;
+}
+
+/** A date as YYYY-MM-DD, from ISO text, PDF dates (D:20250302…) or anything Date can read. Empty when it isn't a date. */
+export function isoDay(raw: string | null | undefined): string {
+  const s = String(raw ?? '').trim();
+  const pdf = /^D:(\d{4})(\d{2})?(\d{2})?/.exec(s);
+  if (pdf) return [pdf[1], pdf[2] ?? '01', pdf[3] ?? '01'].join('-');
+  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const t = Date.parse(s);
+  return Number.isFinite(t) && /\d{4}/.test(s) ? new Date(t).toISOString().slice(0, 10) : '';
+}
+
+const firstOf = (...values: (string | null | undefined)[]) => values.map((v) => clean(v ?? '')).find(Boolean) ?? '';
+
+/** The address, site, author and dates a web page gives about itself. */
+export function htmlDetails(html: string): DocDetails {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const meta = (...names: string[]) => firstOf(...names.map((n) => doc.querySelector(`meta[property="${n}" i], meta[name="${n}" i], meta[itemprop="${n}" i]`)?.getAttribute('content')));
+  // JSON-LD: the dates and author news and university sites publish for search engines.
+  let ld: Record<string, unknown> = {};
+  for (const s of Array.from(doc.querySelectorAll('script[type="application/ld+json"]'))) {
+    try {
+      const v: unknown = JSON.parse(s.textContent ?? '');
+      const list = (Array.isArray(v) ? v : [v]).flatMap((x) => (x && typeof x === 'object' && Array.isArray((x as Record<string, unknown>)['@graph']) ? (x as Record<string, unknown[]>)['@graph']! : [x]));
+      const found = list.find((x) => x && typeof x === 'object' && ('datePublished' in x || 'dateModified' in x)) as Record<string, unknown> | undefined;
+      if (found) { ld = found; break; }
+    } catch { /* a broken block: skip it */ }
+  }
+  const ldAuthor = (() => {
+    const a = ld.author;
+    const one = Array.isArray(a) ? a[0] : a;
+    return typeof one === 'string' ? one : one && typeof one === 'object' ? String((one as Record<string, unknown>).name ?? '') : '';
+  })();
+  const saved = /<!--\s*saved from url=\(\d+\)(\S+?)\s*-->/i.exec(html.slice(0, 2000))?.[1];
+  const url = firstOf(doc.querySelector('link[rel="canonical"]')?.getAttribute('href'), meta('og:url'), saved);
+  const details: DocDetails = {
+    url: /^https?:\/\//i.test(url) ? url : undefined,
+    site: meta('og:site_name', 'application-name') || undefined,
+    author: firstOf(meta('author', 'article:author', 'citation_author', 'dc.creator'), ldAuthor) || undefined,
+    published: isoDay(firstOf(meta('article:published_time', 'datePublished', 'citation_publication_date', 'dc.date.issued', 'dcterms.date', 'dc.date', 'date', 'pubdate', 'publishdate'), String(ld.datePublished ?? ''), doc.querySelector('time[datetime]')?.getAttribute('datetime'))) || undefined,
+    modified: isoDay(firstOf(meta('article:modified_time', 'og:updated_time', 'dateModified', 'last-modified'), String(ld.dateModified ?? ''))) || undefined,
+  };
+  return tidyDetails(details);
+}
+
+function tidyDetails(d: DocDetails): DocDetails {
+  return Object.fromEntries(Object.entries(d).filter(([, v]) => typeof v === 'string' && v.trim()).map(([k, v]) => [k, (v as string).trim().slice(0, 300)])) as DocDetails;
+}
+
+/** Title, author and dates from an Office file's docProps/core.xml, or an OpenDocument or EPUB file's metadata. */
+async function zipDetails(buffer: ArrayBuffer, ext: string): Promise<DocDetails> {
+  const zip = await loadZip(buffer);
+  const tag = (xml: Document, ...names: string[]) => firstOf(...names.map((n) => xml.getElementsByTagName(n)[0]?.textContent));
+  if (ext === 'epub') {
+    const container = parse((await zip.file('META-INF/container.xml')?.async('string')) ?? '<container/>');
+    const opfPath = container.getElementsByTagName('rootfile')[0]?.getAttribute('full-path') ?? '';
+    const opf = parse((await zip.file(opfPath)?.async('string')) ?? '<package/>');
+    return tidyDetails({ author: tag(opf, 'dc:creator'), published: isoDay(tag(opf, 'dc:date')), site: tag(opf, 'dc:publisher') });
+  }
+  const odf = ext.startsWith('od');
+  const xml = await zip.file(odf ? 'meta.xml' : 'docProps/core.xml')?.async('string');
+  if (!xml) return {};
+  const doc = parse(xml);
+  return tidyDetails(odf
+    ? { author: tag(doc, 'meta:initial-creator', 'dc:creator'), published: isoDay(tag(doc, 'meta:creation-date')), modified: isoDay(tag(doc, 'dc:date')) }
+    : { author: tag(doc, 'dc:creator'), published: isoDay(tag(doc, 'dcterms:created')), modified: isoDay(tag(doc, 'dcterms:modified')) });
+}
+
+async function pdfDetails(buffer: ArrayBuffer): Promise<DocDetails> {
+  const pdfjs = await import('pdfjs-dist');
+  const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+  pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
+  const pdf = await pdfjs.getDocument({ data: new Uint8Array(buffer) }).promise;
+  try {
+    const { info } = (await pdf.getMetadata()) as unknown as { info?: Record<string, unknown> };
+    const get = (k: string) => (typeof info?.[k] === 'string' ? (info[k] as string) : '');
+    return tidyDetails({ author: get('Author'), published: isoDay(get('CreationDate')), modified: isoDay(get('ModDate')) });
+  } finally {
+    await pdf.destroy();
+  }
+}
+
+/**
+ * Where a document comes from, for the AI to cite: a web page's address, site, author and dates,
+ * or the author and dates a PDF or Office file records. Never throws: a file that says nothing gives {}.
+ */
+export async function documentDetails(file: File): Promise<DocDetails> {
+  const ext = /\.([a-z0-9]+)$/i.exec(file.name)?.[1]?.toLowerCase() ?? '';
+  try {
+    if (file.size > sizeLimit(ext)) return {};
+    if (ext === 'html' || ext === 'htm') return htmlDetails(decodeHtml(new Uint8Array(await file.arrayBuffer()), file.type));
+    if (ext === 'pdf') return await pdfDetails(await file.arrayBuffer());
+    if (ZIPPED.has(ext)) return await zipDetails(await file.arrayBuffer(), ext);
+  } catch {
+    // Details are a bonus: the text still reads without them.
+  }
+  return {};
+}
+
+/** The details as one short line for the AI: "from https://…; site X; by Y; published 2025-03-02; updated 2025-06-01". */
+export function detailsLine(d: DocDetails | undefined): string {
+  if (!d) return '';
+  return [
+    d.url ? `from ${d.url}` : '',
+    d.site ? `site ${d.site}` : '',
+    d.author ? `by ${d.author}` : '',
+    d.published ? `published ${d.published}` : '',
+    d.modified && d.modified !== d.published ? `updated ${d.modified}` : '',
+  ].filter(Boolean).join('; ');
+}
+
 async function epubToOutline(buffer: ArrayBuffer, fallbackTitle: string): Promise<string> {
   const zip = await loadZip(buffer);
   const container = parse((await zip.file('META-INF/container.xml')?.async('string')) ?? '<container/>');
@@ -463,7 +603,7 @@ export async function fileToOutline(file: File, o: { maxBytes?: number } = {}): 
     case 'pdf': return pdfToOutline(await file.arrayBuffer(), title);
     case 'odt': case 'odp': case 'ods': return odfToOutline(await file.arrayBuffer(), ext, title);
     case 'epub': return epubToOutline(await file.arrayBuffer(), title);
-    case 'html': case 'htm': return htmlToOutline(await file.text(), title);
+    case 'html': case 'htm': return htmlToOutline(decodeHtml(new Uint8Array(await file.arrayBuffer()), file.type), title);
     case 'rtf': return rtfToText(await file.text());
     case 'srt': case 'vtt': return subtitlesToText(await file.text());
     case 'csv': case 'tsv': return `# ${title}\n\n${markdownTable(parseDelimited(await file.text(), ext === 'tsv' ? '\t' : undefined))}`;
