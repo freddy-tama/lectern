@@ -1,6 +1,6 @@
-// Practice slide types: true or false, fill in the blanks, put in order, and match or sort.
-// Registered with the core kinds, next to the question and quick recall slides. Answers appear
-// one click at a time.
+// Practice slide types: true or false, fill in the blanks, put in order, match or sort, and a task
+// with its model answer. Registered with the core kinds, next to the question and quick recall
+// slides. Answers appear one click at a time.
 
 import type { Box } from '../engine/boxes';
 import { type LayoutContext, M, card, heightAt, imageSrc, read, shape, slideTitle, sz, text } from './kit';
@@ -21,22 +21,37 @@ interface Statement {
   statement: string;
   isTrue: boolean;
   correction: string;
+  /** Why it is true or false. */
+  reason: string;
+  /** A tempting reason that is wrong: with one, the room picks between the two. */
+  otherReason: string;
 }
 
 function statements(c: C): Statement[] {
   return read.objects<C>(c, 'items')
-    .map((o, i) => ({ i, statement: read.str(o, 'statement').trim(), isTrue: isOn(o.isTrue), correction: read.str(o, 'correction').trim() }))
+    .map((o, i) => ({
+      i, statement: read.str(o, 'statement').trim(), isTrue: isOn(o.isTrue), correction: read.str(o, 'correction').trim(),
+      reason: read.str(o, 'reason').trim(), otherReason: read.str(o, 'otherReason').trim(),
+    }))
     .filter((s) => s.statement || s.correction);
 }
 
+/** What appears with the verdict: the correction of a false statement, and why. */
+function verdictLine(s: Statement): string {
+  const why = s.reason && !s.otherReason ? `Because ${s.reason.replace(/^because\s+/i, '')}` : '';
+  return [s.isTrue ? '' : s.correction, why].filter(Boolean).join(' ');
+}
+
 const trueFalse: SlideKindDefinition<C> = {
-  kind: 'true-false', label: 'True or false', description: 'Statements to judge true or false. Each verdict appears on its own click, with the correction of a false one.', icon: 'check-check', group: 'Engage',
+  kind: 'true-false', label: 'True or false', description: 'Statements to judge true or false. Each verdict appears on its own click, with the correction of a false one. A "reason" asks why too; add an "otherReason" that sounds right but isn’t, and the room picks between them.', icon: 'check-check', group: 'Engage',
   fields: [
     { key: 'title', label: 'Title', type: 'text' },
     { key: 'items', label: 'Statements', type: 'objects', itemLabel: 'Statement', max: 6, min: 1, fields: [
       { key: 'statement', label: 'Statement', type: 'textarea', rows: 2 },
       { key: 'isTrue', label: 'It’s true', type: 'toggle' },
       { key: 'correction', label: 'Correction', type: 'text', help: 'For a false statement: what is true. It appears with the verdict.' },
+      { key: 'reason', label: 'Because…', type: 'text', help: 'Why it is true or false. It appears with the verdict.' },
+      { key: 'otherReason', label: 'A wrong because…', type: 'text', help: 'A reason that sounds right but isn’t. The room then picks one of the two.' },
     ] },
   ],
   create: () => ({
@@ -48,7 +63,7 @@ const trueFalse: SlideKindDefinition<C> = {
     ],
   }),
   heading: (c) => read.str(c, 'title') || 'True or false',
-  text: (c) => [read.str(c, 'title'), ...statements(c).flatMap((s) => [s.statement, s.isTrue ? '' : s.correction])].filter(Boolean),
+  text: (c) => [read.str(c, 'title'), ...statements(c).flatMap((s) => [s.statement, s.isTrue ? '' : s.correction, s.reason, s.otherReason])].filter(Boolean),
   checks: (c) => statements(c).filter((s) => s.statement).map((s) => ({ prompt: s.statement, answer: s.isTrue ? s.statement : s.correction })),
   layout(c, ctx) {
     const items = statements(c).slice(0, 6);
@@ -58,7 +73,9 @@ const trueFalse: SlideKindDefinition<C> = {
     if (!n) return { boxes };
     const colors = ctx.theme.colors;
     const gap = sz(ctx, 24);
-    const rowH = Math.min(sz(ctx, 190), (M.bottom - bottom - gap * (n - 1)) / n);
+    // Statements with two reasons to pick from need room for them.
+    const picks = items.some((s) => s.reason && s.otherReason);
+    const rowH = Math.min(sz(ctx, picks ? 320 : 190), (M.bottom - bottom - gap * (n - 1)) / n);
     const padX = sz(ctx, 32);
     const padY = Math.min(sz(ctx, 18), rowH * 0.12);
     const numW = sz(ctx, 60);
@@ -69,13 +86,34 @@ const trueFalse: SlideKindDefinition<C> = {
       const y = bottom + k * (rowH + gap);
       const at = `items.${s.i}`;
       const step = k + 1;
-      const fix = !s.isTrue && s.correction;
-      const statementH = fix ? (rowH - padY * 2) * 0.56 : rowH - padY * 2;
+      const pick = s.reason && s.otherReason;
+      const line = verdictLine(s);
+      const inner = rowH - padY * 2;
+      // With two reasons to pick from, a false statement's correction still appears with the verdict, between them.
+      const fixH = pick && !s.isTrue && s.correction ? inner * 0.22 : 0;
+      const statementH = pick ? inner * (fixH ? 0.34 : 0.48) : line ? inner * 0.56 : inner;
       boxes.push(card(ctx, `item-${k}`, M.x, y, M.w, rowH));
       boxes.push(text(ctx, { id: `num-${k}`, text: String(k + 1), x: M.x + padX, y, w: numW, h: rowH, max: 36, min: 24, weight: 750, color: colors.accent, valign: 'middle', maxLines: 1 }));
-      boxes.push(text(ctx, { id: `statement-${k}`, text: s.statement || ' ', x: textX, y: y + padY, w: textW, h: statementH, max: 42, min: 24, weight: 600, valign: fix ? 'bottom' : 'middle', bind: `${at}.statement` }));
-      if (fix) {
-        boxes.push(text(ctx, { id: `correction-${k}`, text: s.correction, x: textX, y: y + padY + statementH, w: textW, h: rowH - padY * 2 - statementH, max: 34, min: 22, weight: 650, color: colors.good, valign: 'top', step, reveal: 'answer', bind: `${at}.correction` }));
+      boxes.push(text(ctx, { id: `statement-${k}`, text: s.statement || ' ', x: textX, y: y + padY, w: textW, h: statementH, max: 42, min: 24, weight: 600, valign: line || pick ? 'bottom' : 'middle', bind: `${at}.statement` }));
+      if (pick) {
+        // Two reasons side by side, in a steady mixed-up order; the click rings the right one and dims the other.
+        const chipGap = sz(ctx, 16);
+        if (fixH) boxes.push(text(ctx, { id: `correction-${k}`, text: s.correction, x: textX, y: y + padY + statementH, w: textW, h: fixH, max: 32, min: 18, weight: 650, color: colors.good, valign: 'middle', maxLines: 1, step, reveal: 'answer', bind: `${at}.correction` }));
+        const chipY = y + padY + statementH + fixH + sz(ctx, 10);
+        const chipH = inner - statementH - fixH - sz(ctx, 10);
+        const chipW = (textW - chipGap) / 2;
+        const both = [{ value: s.reason, right: true, key: 'reason' }, { value: s.otherReason, right: false, key: 'otherReason' }];
+        const order = shownOrder([s.reason, s.otherReason]).map((i) => both[i]!);
+        order.forEach((r, j) => {
+          const x = textX + j * (chipW + chipGap);
+          boxes.push(card(ctx, `reason-${k}-${j}`, x, chipY, chipW, chipH, { fill: colors.bg }));
+          boxes.push(text(ctx, { id: `reason-${k}-${j}-text`, text: `because ${r.value.replace(/^because\s+/i, '')}`, x: x + sz(ctx, 16), y: chipY, w: chipW - sz(ctx, 32), h: chipH, max: 30, min: 18, weight: 550, valign: 'middle', bind: `${at}.${r.key}` }));
+          boxes.push(r.right
+            ? shape({ id: `reason-${k}-${j}-ring`, shape: 'rect', x: x - 3, y: chipY - 3, w: chipW + 6, h: chipH + 6, stroke: colors.good, strokeWidth: 6, radius: ctx.theme.radius + 3, step, reveal: 'answer' })
+            : shape({ id: `reason-${k}-${j}-dim`, shape: 'rect', x, y: chipY, w: chipW, h: chipH, fill: colors.surface, opacity: 0.65, radius: ctx.theme.radius, step, reveal: 'answer' }));
+        });
+      } else if (line) {
+        boxes.push(text(ctx, { id: `correction-${k}`, text: line, x: textX, y: y + padY + statementH, w: textW, h: inner - statementH, max: 34, min: 20, weight: 650, color: colors.good, valign: 'top', step, reveal: 'answer', bind: `${at}.${!s.isTrue && s.correction ? 'correction' : 'reason'}` }));
       }
       // An empty ring until the click; then a tick or a cross, in the verdict's colour.
       const bx = M.right - padX - d;
@@ -469,4 +507,106 @@ const match: SlideKindDefinition<C> = {
   },
 };
 
-export const PRACTICE_KINDS: AnyKind[] = [trueFalse, fillIn, order, match];
+// ─── Task and model answer ────────────────────────────────────────────
+
+interface Part {
+  /** Place in the stored list, for binds. */
+  i: number;
+  prompt: string;
+  answer: string;
+}
+
+function partsOf(c: C): Part[] {
+  return read.objects<C>(c, 'parts')
+    .map((o, i) => ({ i, prompt: read.str(o, 'prompt').trim(), answer: read.str(o, 'answer').trim() }))
+    .filter((p) => p.prompt || p.answer);
+}
+
+const PART_LETTERS = 'abcd';
+
+const task: SlideKindDefinition<C> = {
+  kind: 'task', label: 'Task', description: 'A task to do: what to do, up to four lettered parts, and what a good answer includes. Each part’s model answer appears on its own click. Turn on "showAnswers" for the slide after a task, which shows the model answers to check against.', icon: 'clipboard-list', group: 'Engage',
+  fields: [
+    { key: 'title', label: 'Title', type: 'text' },
+    { key: 'task', label: 'What to do', type: 'textarea', rows: 3 },
+    { key: 'parts', label: 'Parts', type: 'objects', itemLabel: 'Part', max: 4, fields: [
+      { key: 'prompt', label: 'Part', type: 'textarea', rows: 2 },
+      { key: 'answer', label: 'Model answer', type: 'textarea', rows: 2 },
+    ] },
+    { key: 'answer', label: 'Model answer', type: 'textarea', rows: 3, help: 'For a task without parts.' },
+    { key: 'checklist', label: 'A good answer…', type: 'list', itemLabel: 'Point', max: 4, help: 'What a good answer includes, shown beside the task.' },
+    { key: 'showAnswers', label: 'Show the model answers', type: 'toggle', help: 'For the slide after the task: the answers show from the start, to check against.' },
+  ],
+  create: () => ({
+    title: 'Your turn',
+    task: 'Read the paragraph again. Then answer in full sentences.',
+    parts: [
+      { prompt: 'Why does the water rise as vapour?', answer: 'The sun heats it, and warm vapour is lighter than the air around it.' },
+      { prompt: 'What makes the vapour turn back into water?', answer: 'It cools as it rises, so it condenses into droplets.' },
+    ],
+    answer: '',
+    checklist: ['Uses the words evaporate and condense', 'Says what causes each change'],
+    showAnswers: false,
+  }),
+  heading: (c) => read.str(c, 'title') || (isOn(c.showAnswers) ? 'Model answer' : 'Task'),
+  text: (c) => [read.str(c, 'title'), read.str(c, 'task'), ...partsOf(c).flatMap((p) => [p.prompt, p.answer]), read.str(c, 'answer'), ...read.list(c, 'checklist')].filter(Boolean),
+  // The answer slide tells rather than asks, so only the task slide counts as asking.
+  checks: (c) => {
+    if (isOn(c.showAnswers)) return [];
+    const parts = partsOf(c).filter((p) => p.answer).map((p) => ({ prompt: p.prompt, answer: p.answer }));
+    const whole = read.str(c, 'answer').trim();
+    return whole && !partsOf(c).length ? [{ prompt: read.str(c, 'task').trim(), answer: whole }] : parts;
+  },
+  layout(c, ctx) {
+    const shown = isOn(c.showAnswers);
+    const colors = ctx.theme.colors;
+    const { box, bottom } = slideTitle(ctx, read.str(c, 'title') || (shown ? 'Model answer' : 'Task'));
+    const boxes: Box[] = [box];
+    const parts = partsOf(c).slice(0, 4);
+    const whole = parts.length ? '' : read.str(c, 'answer').trim();
+    const checklist = read.list(c, 'checklist').slice(0, 4);
+    const gap = sz(ctx, 28);
+    const pad = sz(ctx, 28);
+    // What a good answer includes sits in a column on the right; on the answer slide each point is ticked.
+    const sideW = checklist.length ? Math.round(M.w * 0.32) : 0;
+    const mainW = M.w - (sideW ? sideW + gap : 0);
+    if (sideW) {
+      const x = M.right - sideW;
+      const head = text(ctx, { id: 'checklist-head', text: 'A good answer…', x: x + pad, y: bottom + pad, w: sideW - pad * 2, h: sz(ctx, 50), max: 34, min: 22, weight: 750, color: shown ? colors.good : colors.accent, maxLines: 1 });
+      const lines = checklist.map((p) => `${shown ? '✓' : '•'}  ${p}`).join('\n');
+      const list = text(ctx, { id: 'checklist', text: lines, x: x + pad, y: bottom + pad + sz(ctx, 64), w: sideW - pad * 2, h: M.bottom - bottom - pad * 2 - sz(ctx, 64), max: 34, min: 20, lh: 1.45, hug: true, bind: 'checklist' });
+      // The card fits its points.
+      boxes.push(card(ctx, 'checklist-card', x, bottom, sideW, list.y + list.h + pad - bottom, { stroke: shown ? colors.good : colors.line }), head, list);
+    }
+    let y = bottom;
+    const instructions = read.str(c, 'task').trim();
+    if (instructions) {
+      const t = text(ctx, { id: 'task', text: instructions, x: M.x, y, w: mainW, h: sz(ctx, 46) * 1.3 * 3, max: 44, min: 26, weight: 600, hug: true, bind: 'task' });
+      boxes.push(t);
+      y = t.y + t.h + gap;
+    }
+    const answerStep = (k: number) => (shown ? undefined : k + 1);
+    if (parts.length) {
+      const rowH = (M.bottom - y - gap * (parts.length - 1)) / parts.length;
+      const letterW = sz(ctx, 52);
+      parts.forEach((p, k) => {
+        const ry = y + k * (rowH + gap);
+        const hasAnswer = Boolean(p.answer);
+        const promptH = hasAnswer ? rowH * 0.45 : rowH;
+        boxes.push(text(ctx, { id: `letter-${k}`, text: `${PART_LETTERS[k]})`, x: M.x, y: ry, w: letterW, h: Math.min(promptH, sz(ctx, 60)), max: 38, min: 24, weight: 750, color: colors.accent, maxLines: 1 }));
+        boxes.push(text(ctx, { id: `part-${k}`, text: p.prompt || ' ', x: M.x + letterW, y: ry, w: mainW - letterW, h: promptH, max: 38, min: 22, weight: 600, bind: `parts.${p.i}.prompt` }));
+        if (hasAnswer) {
+          const ay = ry + promptH;
+          boxes.push(shape({ id: `rule-${k}`, shape: 'line', x: M.x + letterW, y: ay + sz(ctx, 4), w: mainW - letterW, h: 0, stroke: colors.line, strokeWidth: 3, dash: true }));
+          boxes.push(text(ctx, { id: `answer-${k}`, text: p.answer, x: M.x + letterW, y: ay + sz(ctx, 14), w: mainW - letterW, h: rowH - promptH - sz(ctx, 14), max: 34, min: 20, weight: 650, color: colors.good, step: answerStep(k), reveal: shown ? undefined : 'answer', bind: `parts.${p.i}.answer` }));
+        }
+      });
+    } else if (whole) {
+      const answer = text(ctx, { id: 'answer', text: whole, x: M.x + pad, y: y + pad, w: mainW - pad * 2, h: M.bottom - y - pad * 2, max: 40, min: 20, weight: 600, color: colors.good, hug: true, step: answerStep(0), reveal: shown ? undefined : 'answer', bind: 'answer' });
+      boxes.push(card(ctx, 'answer-card', M.x, y, mainW, answer.h + pad * 2, { stroke: colors.good, strokeWidth: 3, step: answerStep(0), reveal: shown ? undefined : 'answer' }), answer);
+    }
+    return { boxes };
+  },
+};
+
+export const PRACTICE_KINDS: AnyKind[] = [trueFalse, fillIn, order, match, task];

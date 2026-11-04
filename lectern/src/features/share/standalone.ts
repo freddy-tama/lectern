@@ -5,6 +5,7 @@
 import type { Deck } from '../../core/deck/types';
 import type { Box } from '../../core/engine/boxes';
 import { CANVAS_H, CANVAS_W } from '../../core/engine/boxes';
+import { partPlaces } from '../../core/deck/auto-style';
 import { layoutSlide } from '../../core/engine/layout';
 import { getTheme } from '../../core/engine/themes';
 import { deckPictures, pictureLine, slidesLabel } from '../../core/pictures/credits';
@@ -303,9 +304,10 @@ export async function deckHtml(deck: Deck): Promise<string> {
   const theme = getTheme(deck.themeId);
   const visible = deck.slides.filter((s) => !s.hidden);
   const sections: string[] = [];
+  const parts = partPlaces(deck);
   for (let n = 0; n < visible.length; n++) {
     const layout = layoutSlide(visible[n]!, {
-      theme, audience: deck.audience, mode: 'show', slideNumber: n + 1, slideCount: visible.length, deckTitle: deck.title,
+      theme, audience: deck.audience, mode: 'show', slideNumber: n + 1, slideCount: visible.length, deckTitle: deck.title, part: parts.get(visible[n]!.id),
     });
     const boxes: Box[] = await Promise.all(layout.boxes.map(async (b): Promise<Box> => {
       if (b.type === 'image') return { ...b, src: await inlineImage(b.src) };

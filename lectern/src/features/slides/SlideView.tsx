@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { type Box, CANVAS_H, CANVAS_W, type SlideLayout } from '../../core/engine/boxes';
+import { partPlaces } from '../../core/deck/auto-style';
 import { layoutSlide } from '../../core/engine/layout';
 import { type Theme, fontFamily, getTheme, subscribeThemes, themesRevision } from '../../core/engine/themes';
 import { type Deck, type Slide, deckPurpose } from '../../core/deck/types';
@@ -11,7 +12,7 @@ import { TableView } from './TableView';
 
 export interface SlideViewProps {
   slide: Slide;
-  deck: Pick<Deck, 'themeId' | 'audience' | 'title'> & Partial<Pick<Deck, 'purpose' | 'lessonId' | 'density'>>;
+  deck: Pick<Deck, 'themeId' | 'audience' | 'title'> & Partial<Pick<Deck, 'purpose' | 'lessonId' | 'density' | 'slides' | 'autoStyle'>>;
   number?: number;
   count?: number;
   /** Reveal steps shown. Undefined shows everything. */
@@ -42,15 +43,17 @@ export function useSlideLayout(slide: Slide, deck: SlideViewProps['deck'], o: { 
   const fonts = useFontsReady();
   // Redraw when a custom look is edited, not only when the deck switches looks.
   const looks = useSyncExternalStore(subscribeThemes, themesRevision);
+  // A section's place among the deck's parts, when the whole deck is at hand.
+  const part = useMemo(() => (deck.slides ? partPlaces({ slides: deck.slides, autoStyle: deck.autoStyle }).get(slide.id) : undefined), [deck.slides, deck.autoStyle, slide.id]);
   return useMemo(
     () => layoutSlide(slide, {
       theme: getTheme(deck.themeId), audience: deck.audience, mode: o.mode ?? 'show',
       slideNumber: o.number ?? 1, slideCount: o.count ?? 1, deckTitle: deck.title, flags: o.flags,
       // Decks passed in part (a sample, a phone's copy) have no purpose: the audience's budget applies.
-      purpose: deck.purpose || deck.lessonId ? deckPurpose(deck as Pick<Deck, 'purpose' | 'lessonId'>) : undefined, density: deck.density,
+      purpose: deck.purpose || deck.lessonId ? deckPurpose(deck as Pick<Deck, 'purpose' | 'lessonId'>) : undefined, density: deck.density, part,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [slide, deck.themeId, deck.audience, deck.title, deck.purpose, deck.lessonId, deck.density, o.number, o.count, o.mode, o.flags, fonts, looks],
+    [slide, deck.themeId, deck.audience, deck.title, deck.purpose, deck.lessonId, deck.density, part?.index, part?.count, o.number, o.count, o.mode, o.flags, fonts, looks],
   );
 }
 

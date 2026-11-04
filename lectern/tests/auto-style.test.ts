@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { autoVariants, suggestLook } from '../src/core/deck/auto-style';
+import { autoVariants, partPlaces, suggestLook } from '../src/core/deck/auto-style';
+import { layoutDeck } from '../src/core/engine/layout';
 import { type Deck, type Slide, emptyNotes } from '../src/core/deck/types';
 import { autoChart } from '../src/core/kinds/data-kinds';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
@@ -97,5 +98,33 @@ describe('suggested look', () => {
   it('follows the purpose for reports and pitches', () => {
     expect(suggestLook(deckOf([], { purpose: 'report' }))).toBe('minimal');
     expect(suggestLook(deckOf([], { purpose: 'pitch' }))).toBe('midnight');
+  });
+});
+
+describe('signposting', () => {
+  const parts = () => [slide('title', { title: 'Talk' }), slide('section', { number: '', title: 'Why' }), slide('bullets', { title: 'A', bullets: ['x'] }), slide('section', { number: '', title: 'How' }, { hidden: true }), slide('section', { number: '', title: 'What next' })];
+
+  it('numbers shown section slides by their place among the parts, with auto style on', () => {
+    const d = deckOf(parts(), { autoStyle: true });
+    const places = partPlaces(d);
+    expect([...places.values()]).toEqual([{ index: 1, count: 2 }, { index: 2, count: 2 }]);
+    expect(partPlaces({ ...d, autoStyle: false }).size).toBe(0);
+    expect(partPlaces(deckOf(parts().slice(0, 3), { autoStyle: true })).size).toBe(0);
+  });
+
+  it('shows the number and a dot a part on the section slide, keeping a number typed by hand', () => {
+    const d = deckOf(parts(), { autoStyle: true });
+    const laid = layoutDeck(d).filter(({ slide: s }) => s.kind === 'section');
+    const second = laid[1]!.layout.boxes;
+    expect(second.find((b) => b.id === 'number')).toMatchObject({ text: '02' });
+    const dots = second.filter((b) => b.id.startsWith('part-'));
+    expect(dots).toHaveLength(2);
+    expect(dots.every((b) => b.type === 'shape' && b.fill)).toBe(true);
+    const first = laid[0]!.layout.boxes.filter((b) => b.id.startsWith('part-'));
+    expect(first.map((b) => (b.type === 'shape' ? Boolean(b.fill) : null))).toEqual([true, false]);
+    const typed = deckOf(parts().map((s) => (s.kind === 'section' ? { ...s, content: { ...s.content, number: 'IV' } } : s)), { autoStyle: true });
+    expect(layoutDeck(typed).find(({ slide: s }) => s.kind === 'section')!.layout.boxes.find((b) => b.id === 'number')).toMatchObject({ text: 'IV' });
+    // Without auto style, an empty number stays empty and there are no dots.
+    expect(layoutDeck({ ...d, autoStyle: false }).flatMap(({ layout }) => layout.boxes).some((b) => b.id.startsWith('part-') || b.id === 'number')).toBe(false);
   });
 });

@@ -12,6 +12,22 @@ import { getKind } from '../kinds/registry';
 import type { Deck, Slide } from './types';
 import { deckPurpose } from './types';
 
+/** Where a section slide falls among the deck's parts: the second of four is { index: 2, count: 4 }. */
+export interface PartPlace {
+  index: number;
+  count: number;
+}
+
+/**
+ * The place of each shown section slide among the deck's parts, when auto style is on and the deck
+ * has two parts or more. Section slides then show their number and progress dots, so the room
+ * always knows where the talk is.
+ */
+export function partPlaces(deck: Pick<Deck, 'slides' | 'autoStyle'>): Map<string, PartPlace> {
+  const sections = deck.autoStyle ? deck.slides.filter((s) => !s.hidden && s.kind === 'section') : [];
+  return new Map(sections.length >= 2 ? sections.map((s, i) => [s.id, { index: i + 1, count: sections.length }]) : []);
+}
+
 /** Sets every unpinned slide's layout. Returns the same deck when nothing changes. */
 export function autoVariants(deck: Deck): Deck {
   const previous = new Map<string, string>();

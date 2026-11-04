@@ -1,4 +1,5 @@
 import { type Audience, type Deck, type DeckDensity, type DeckPurpose, type Slide, deckPurpose } from '../deck/types';
+import { partPlaces } from '../deck/auto-style';
 import { countWords } from '../deck/words';
 import { registerCoreKinds } from '../kinds/core-kinds';
 import { type LayoutContext, M, budgetFor, decorate, footer, text, wordBudget } from '../kinds/kit';
@@ -26,6 +27,8 @@ export interface LayoutOptions {
   /** What the deck is for and its drafted density, which set the word budget. */
   purpose?: DeckPurpose;
   density?: DeckDensity;
+  /** Where a section slide falls among the deck's parts (see partPlaces). */
+  part?: { index: number; count: number };
 }
 
 function wordCount(parts: string[]) {
@@ -48,6 +51,7 @@ export function layoutSlide(slide: Slide, o: LayoutOptions): SlideLayout {
     flags: { ...toggleDefaults(), ...o.flags },
     purpose: o.purpose,
     density: o.density,
+    part: o.part,
   };
   const def = getKind(slide.kind);
   if (!def) return missingKind(slide, ctx);
@@ -101,8 +105,9 @@ function missingKind(slide: Slide, ctx: LayoutContext, message?: string): SlideL
 export function layoutDeck(deck: Deck, o: Omit<LayoutOptions, 'theme' | 'audience'> & { includeHidden?: boolean } = {}) {
   const theme = getTheme(deck.themeId);
   const slides = o.includeHidden ? deck.slides : deck.slides.filter((s) => !s.hidden);
+  const parts = partPlaces(deck);
   return slides.map((slide, i) => ({
     slide,
-    layout: layoutSlide(slide, { ...o, theme, audience: deck.audience, slideNumber: i + 1, slideCount: slides.length, deckTitle: deck.title, purpose: deckPurpose(deck), density: deck.density }),
+    layout: layoutSlide(slide, { ...o, theme, audience: deck.audience, slideNumber: i + 1, slideCount: slides.length, deckTitle: deck.title, purpose: deckPurpose(deck), density: deck.density, part: parts.get(slide.id) }),
   }));
 }

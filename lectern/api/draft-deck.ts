@@ -271,12 +271,13 @@ export const LESSON_RULES = `This is a lesson. Teach less and go deeper: one ide
 - Before a key moment, show a picture and ask the room to look and predict what happens next.
 - Put a check after each main idea. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
 - Order practice from easy to hard: true or false, or putting events, steps or sentences in order (an order slide) or matching pairs and sorting into groups (a match slide), then fill in the blanks, then retelling or explaining in their own words.
+- Ask why, not only what: give some true-or-false statements a reason to pick, and put a named person's claim on a question slide (speaker and claim) for the room to agree or disagree with and say why.
 - Never show an answer before the slide that asks for it: not in the opening, a heading, a caption or an earlier slide.
 - Never test one fact twice, for example a question on a date and then a true-or-false on the same date.
 - keyPoints are what a learner must remember, phrased so they make sense without the slide. checkQuestion and checkAnswer test understanding of that slide.
 - Close with takeaways, then at most two follow-up tasks: one to practise what was taught, and one open or preview question about what comes next.
 - Keep slides small and the pace quick: about 1-1.5 minutes a slide, and about 1 minute for young learners. A 40-minute lesson has about 25-40 slides.
-- Put a task and its answer on separate slides: the task first, the answer or a model answer on the next slide.
+- Put a task and its answer on separate slides: a task slide with lettered parts and what a good answer includes, then the same task slide with "showAnswers" on and a model answer for each part.
 - Show a passage one chunk at a time: one paragraph or a few sentences on a slide, with its question after it.`;
 
 const PURPOSE_RULES: Record<Purpose, string> = {
@@ -286,10 +287,13 @@ const PURPOSE_RULES: Record<Purpose, string> = {
 - keyPoints are the takeaways the audience should leave with. checkQuestion is an optional question to put to the audience, and checkAnswer is what you hope to hear or your own answer. Use them on a few slides, not all.
 - Use quotes, big numbers and images to give the talk rhythm.
 - Close with the takeaways and a closing line.`,
-  pitch: `This is a pitch. Follow this order: the problem, the solution, proof that it works (traction, numbers, customers, a demo), the market and why now, the plan, and the ask.
+  pitch: `This is a pitch. Follow the order investors expect: what the company does in one line, the problem, the solution, the market and why now, the product, the business model, traction, the competition, the team, and the ask.
+- The business model says who pays, how much and how often (a pricing slide fits). Traction is proof that it works: numbers, customers, a demo.
+- The competition slide names the alternatives and says why you win, for example on a 2 by 2 diagram with you in the best corner. The team slide shows the people and why they are the ones to do this (a people slide).
+- A short pitch may merge the solution and the product, or the market and why now, but keeps the business model, the competition, the team and the ask.
 - Lead with the problem in the audience's terms. One claim per slide, each backed by a number or an example from the material.
 - keyPoints are what the audience should believe after the slide. checkQuestion is a question they will likely ask about the slide and checkAnswer is your answer, short and direct.
-- End with a slide that states the ask: what you want, how much, and what it makes possible.
+- End with a slide that states the ask: the amount, what it buys (where the money goes, or the milestones it reaches), and what it makes possible.
 - Do not invent traction, customers or figures. If the material has none, say what the slide should show in plain words rather than making numbers up.`,
   report: `This is a report. Lead with the summary: the answer or main finding comes first, then the evidence.
 - Use numbers wherever the material has them: big-number, chart and table slides before bullet lists. Say what each number means in notes.script.
@@ -342,7 +346,7 @@ function systemPrompt(kinds: CatalogueKind[], hints: string, purpose: Purpose, p
   const catalogue = kinds.map((k) => {
     const room = staged && canShow ? pictureRoom(k) : 0;
     const holds = room ? ` Holds ${room === 1 ? '1 picture' : `up to ${room} pictures`}.` : '';
-    const fields = [...k.fields.flatMap((f) => fieldLine(f, canShow)), ...(k.kind === 'question' ? ['correct [number]'] : [])];
+    const fields = [...k.fields.flatMap((f) => fieldLine(f, canShow)), ...(k.kind === 'question' ? ['correct [number]'] : k.kind === 'agenda' ? ['current [number]'] : [])];
     return `- ${k.kind} (${k.label}): ${k.description} Fields: ${fields.join(', ')}${holds}`;
   }).join('\n');
   return `You plan ${PURPOSE_NOUN[purpose]}. Every slide has audience-facing content and key notes for the presenter and for people who read the deck on their own.
@@ -351,6 +355,7 @@ How to write a deck:
 - Slides are what the room sees: short, concrete, scannable. Never put the explanation on the slide. The explanation goes in notes.script.
 - notes.script is the presenter's spoken words for that slide, ready to read from a teleprompter: natural sentences, addressed to the audience where it fits, 40-140 words on content slides, 1-3 sentences on title and section slides. Separate beats with a blank line.
 - Open with a title slide and usually an agenda. Use section slides to divide longer sessions. Close with takeaways (summary) and, when it fits, a closing slide.
+- When a deck has three or more parts, repeat the agenda before each part as a "you are here" slide: the same items, with "current" set to that part's place in the list, from 0.
 - Mix slide types so the deck has rhythm. For question slides with choices, set "correct" to the index of the right choice and give a one-sentence reason in "answer".
 - Use "reveal": true on points or steps that the presenter should build up one at a time.
 - Plan the minutes so the slides add up to the session length.

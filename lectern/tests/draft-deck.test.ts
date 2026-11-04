@@ -182,7 +182,8 @@ describe('catalogue and schemas', () => {
     if (typeof lesson === 'string' || typeof talk === 'string') throw new Error('bad input');
     const system = stagedRequest(lesson, OUTLINE_TASK).system;
     const line = (k: string) => system.split('\n').find((l) => l.startsWith(`- ${k} (`))!;
-    expect(line('true-false')).toContain('items [objects: statement, isTrue (true/false), correction]');
+    expect(line('true-false')).toContain('items [objects: statement, isTrue (true/false), correction, reason, otherReason]');
+    expect(line('question')).toContain('question [textarea], speaker [text], claim [textarea]');
     expect(line('fill-in')).toContain('passage [textarea], bank [list], hideBank [toggle]');
     expect(kinds.map((k) => k.kind)).toEqual(expect.arrayContaining(['true-false', 'fill-in', 'credits']));
     expect(cleanCatalogue([...kindCatalogue(), ...Array.from({ length: 12 }, (_, i) => ({ kind: `mod.kind${i}`, label: 'M', description: '', fields: [] }))]).at(-1)?.kind).toBe('mod.kind11');
@@ -190,6 +191,21 @@ describe('catalogue and schemas', () => {
       expect(system).toContain(rule);
       expect(stagedRequest(talk, OUTLINE_TASK).system).not.toContain(rule);
     }
+    expect(system).toContain('about 1-1.5 minutes a slide');
+    expect(system).toContain('Put a task and its answer on separate slides');
+    expect(line('order')).toContain('items [list]');
+    expect(line('match')).toContain('items [objects: item, match]');
+    expect(line('agenda')).toContain('items [list], current [number]');
+    expect(system).toContain('repeat the agenda before each part as a "you are here" slide');
+  });
+
+  it('plans a pitch in the order investors expect, with a team, a business model, the competition and a priced ask', () => {
+    const pitch = readInput(body({ pictures: [], purpose: 'pitch' }));
+    if (typeof pitch === 'string') throw new Error('bad input');
+    const system = stagedRequest(pitch, OUTLINE_TASK).system;
+    expect(system).toContain('the market and why now, the product, the business model, traction, the competition, the team, and the ask');
+    expect(system).toContain('keeps the business model, the competition, the team and the ask');
+    expect(system).toContain('the amount, what it buys');
   });
 
   it('reads content only when it is a JSON object', () => {
