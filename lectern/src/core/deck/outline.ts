@@ -5,6 +5,8 @@
 //   ## Slide title          → a new slide; its kind is guessed from the heading and body
 //   - point / 1. point      → points (an ordered "Label: detail" list becomes steps)
 //   Q: … / A) … / Answer: … → a question with choices
+//   Statement (√) / (×, fix) → statements to judge, true or false
+//   A ( ) or ___ + bank line → a passage to fill from the word bank
 //   > quote  / — Author     → a quote
 //   Term: meaning           → key terms, under a "Vocabulary" or "Key terms" heading
 //   Notes: …                → key notes script for the slide
@@ -12,6 +14,7 @@
 //   | a | b | + |---|---|   → a table
 //   ---                     → slide break
 
+import { findPractice } from '../import/practice';
 import type { DeckDraft } from '../plugins/api';
 import type { KeyNotes } from './types';
 import { countWords } from './words';
@@ -144,6 +147,15 @@ function blockToSlides(block: Block, index: number): DraftSlide[] {
       content: { title: heading || 'Table', cells: tableLines.cells, header: true, stripes: true, caption },
       notes: { ...notes, script: [notes.script, extra].filter(Boolean).join(' ') },
     }];
+  }
+
+  // Worksheet practice: statements marked right or wrong, or blanks beside a word bank.
+  const practice = content.some((l) => OPTION.test(l)) ? null : findPractice(content.map((l) => (BULLET.exec(l)?.[1] ?? l).trim()).join('\n'));
+  if (practice?.kind === 'true-false') {
+    return [{ kind: 'true-false', content: { title: heading || 'True or false?', items: practice.items }, notes: { ...notes, check: null } }];
+  }
+  if (practice?.kind === 'fill-in') {
+    return [{ kind: 'fill-in', content: { title: heading || 'Fill in the blanks', passage: practice.passage, bank: practice.bank, hideBank: false }, notes: { ...notes, check: null } }];
   }
 
   // Question with optional choices.

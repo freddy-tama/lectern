@@ -3,7 +3,9 @@
 // tables, hidden slides and slides moved around. Every file here is built in the test.
 import JSZip from 'jszip';
 import { describe, expect, it } from 'vitest';
+import { outlineToDraft } from '../src/core/deck/outline';
 import { findQuestion, finishedDeck, readPptx } from '../src/core/import/finished';
+import { bankWords, findPractice } from '../src/core/import/practice';
 
 const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
 const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -83,5 +85,46 @@ describe('F2 · a dialogue is not a question', () => {
     expect(findQuestion('“河”是什么意思？\nA：river\nB：mountain')).toMatchObject({ options: ['river', 'mountain'] });
     expect(findQuestion('Pick one\nA. Run!\nB. Hide!')).toBeNull();
     expect(findQuestion('Pick one\na) red\nb) blue')).toMatchObject({ options: ['red', 'blue'] });
+  });
+});
+
+describe('F3 · worksheet practice', () => {
+  const judged = 'The Sun is a star. （√）\nThe Moon makes its own light. （×，it reflects sunlight）\n3. Water boils at 100 °C at sea level. (✓)';
+
+  it('reads statements marked √ or × as statements to judge, with the correction', async () => {
+    const { slides } = await readPptx(await pptx([slide(box('Right or wrong', { x: 1, y: 0.5, size: 36 }) + box(judged, { x: 1, y: 2, size: 24 }))]));
+    expect(findQuestion(slides[0]!.text)).toBeNull();
+    expect(findPractice(slides[0]!.text)).toEqual({ kind: 'true-false', items: [
+      { statement: 'The Sun is a star.', isTrue: true, correction: '' },
+      { statement: 'The Moon makes its own light.', isTrue: false, correction: 'it reflects sunlight' },
+      { statement: 'Water boils at 100 °C at sea level.', isTrue: true, correction: '' },
+    ] });
+    const draft = outlineToDraft(`# Water\n\n## Right or wrong\n${judged.split('\n').map((l) => `- ${l}`).join('\n')}`);
+    expect(draft.slides[1]).toMatchObject({ kind: 'true-false', content: { title: 'Right or wrong', items: [{ isTrue: true }, { isTrue: false, correction: 'it reflects sunlight' }, { isTrue: true }] } });
+  });
+
+  it('reads empty brackets or an underline beside a word bank as a passage to fill', () => {
+    const text = '小鸟在树上（　）。\n小猫在河边（ ）鱼。\n词语：唱歌、钓';
+    expect(findPractice(text)).toEqual({ kind: 'fill-in', passage: '小鸟在树上[ ]。 小猫在河边[ ]鱼。', bank: ['唱歌', '钓'] });
+    const draft = outlineToDraft('# Plants\n\n## Complete it\nPlants need ____ and light to grow.\nWord bank: water, salt, sand');
+    expect(draft.slides[1]).toMatchObject({ kind: 'fill-in', content: { title: 'Complete it', passage: 'Plants need [ ] and light to grow.', bank: ['water', 'salt', 'sand'] } });
+  });
+
+  it('needs a real bank line: a sentence beside a blank is not one', () => {
+    expect(findPractice('Plants need ____ to grow.\nThey also need light.')).toBeNull();
+    expect(bankWords('rain, snow, hail')).toEqual(['rain', 'snow', 'hail']);
+    expect(bankWords('The cat sat on the mat')).toBeNull();
+    expect(bankWords('高兴  难过  害怕')).toEqual(['高兴', '难过', '害怕']);
+  });
+
+  it('leaves numbered notes (①…④) alone', async () => {
+    const passage = '小明走进公园①，看见一只小鸟②。\n小鸟飞到树上③，唱起了歌④。\n① 走进：进入。\n② 看见：看到。\n③ 飞：鸟在空中动。\n④ 唱：发出声音。';
+    const { slides } = await readPptx(await pptx([slide(box(passage, { x: 1, y: 1, size: 24 }))]));
+    expect(findQuestion(slides[0]!.text)).toBeNull();
+    expect(findPractice(slides[0]!.text)).toBeNull();
+    const kinds = outlineToDraft(`# 公园\n\n## 读一读\n${passage}`).slides.map((s) => s.kind);
+    expect(kinds).not.toContain('question');
+    expect(kinds).not.toContain('true-false');
+    expect(kinds).not.toContain('fill-in');
   });
 });
