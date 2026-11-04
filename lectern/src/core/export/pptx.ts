@@ -5,6 +5,7 @@
 
 import JSZip from 'jszip';
 import PptxGenJS from 'pptxgenjs';
+import { photoNoteLine } from '../deck/photo-notes';
 import { slideTimeLabel, withSlideTimes } from '../deck/timing';
 import type { Deck, KeyNotes } from '../deck/types';
 import { type Box, type ChartBox, type EmbedBox, type ImageBox, type ShapeBox, type TableBox, type TextBox, type VideoBox, PT_PER_PX, PX_PER_INCH } from '../engine/boxes';
@@ -673,7 +674,8 @@ export async function exportDeckToPptx(input: Deck, options: PptxOptions = {}): 
           warnings.push(`${label}: a ${box.type} could not be exported (${error instanceof Error ? error.message : String(error)}).`);
         }
       }
-      const notes = [includeNotes && slide.notes ? keyNotesText(slide.notes) : '', pictureCreditsText(layout.boxes, options.credits)].filter(Boolean).join('\n\n');
+      // A photo still to add is marked on the slide; the speaker notes say what it is, so it can be found again.
+      const notes = [photoNoteLine(slide), includeNotes && slide.notes ? keyNotesText(slide.notes) : '', pictureCreditsText(layout.boxes, options.credits)].filter(Boolean).join('\n\n');
       if (notes) page.addNotes(notes);
       pages.push(meta);
       animate.push(mode === 'animate' && steps > 0);

@@ -1,5 +1,5 @@
 import {
-  AlertCircle, AudioLines, Check, Download, Eye, FileText, Globe, Image as ImageIcon, Link2, Loader2, MonitorPlay, NotebookPen, Pencil, Presentation,
+  AlertCircle, AudioLines, Camera, Check, Download, Eye, FileText, Globe, Image as ImageIcon, Link2, Loader2, MonitorPlay, NotebookPen, Pencil, Presentation,
   RotateCcw, Sparkles, Upload, Wand2, X,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { Link, useNavigate } from 'react-router-dom';
 import { draftToDeck } from '../../core/deck/draft';
 import { fitChanged } from '../../core/deck/fit';
+import { photosToAdd } from '../../core/deck/photo-notes';
 import { sessionMinutes } from '../../core/deck/timing';
 import { DECK_LANGUAGES, deckLanguage } from '../../core/deck/languages';
 import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, uid } from '../../core/deck/types';
@@ -17,7 +18,7 @@ import { draftingHints } from '../../core/plugins/registry';
 import { transcriptText } from '../../core/transcribe/segments';
 import { db } from '../../data/db';
 import { type DraftJob, type DraftRequest, type PlannedSlide, type UsageByModel, deleteJob, getJob, openJob } from '../../data/draft-jobs';
-import { DENSITIES, type Density, LENGTHS, rememberDeckPrefs, useProfile } from '../../data/profile';
+import { DENSITIES, type Density, LENGTHS, PHOTO_CHOICES, type PhotoChoice, photoChoice, rememberDeckPrefs, useProfile } from '../../data/profile';
 import { addDeck, isoDate, saveAsset } from '../../data/repo';
 import { useToast } from '../../ui/Toast';
 import { addRecordingFile } from '../recordings/actions';
@@ -135,7 +136,7 @@ export default function MakePage() {
   const [ask, setAsk] = useState(profile.askQuestions);
   const [language, setLanguage] = useState(deckLanguage(profile.deck.language));
   const [research, setResearch] = useState(profile.deck.research === true);
-  const [findPictures, setFindPictures] = useState(profile.deck.findPictures === true);
+  const [photos, setPhotos] = useState<PhotoChoice>(photoChoice(profile.deck));
   /** What the web search cost, added to the job's usage once the outline is made. */
   const researchUsage = useRef<CallUsage[]>([]);
   const [ai, setAi] = useState<AiStatus | null>(null);
@@ -271,7 +272,7 @@ export default function MakePage() {
     const real = answers.filter((a) => a.key !== PURPOSE_KEY);
     const known = profile.remembered.filter((r) => !real.some((a) => a.key === r.key));
     const remember = () => rememberDeckPrefs(
-      { purpose: chosen, audience, minutes, density, themeId, language, research, findPictures },
+      { purpose: chosen, audience, minutes, density, themeId, language, research, photos, findPictures: photos === 'find' },
       real.filter((a) => a.remember).map((a) => ({ key: a.key, question: a.question, answer: a.answer, updatedAt: Date.now() })),
     );
     try {
@@ -310,7 +311,7 @@ export default function MakePage() {
         budget: { bullets: DENSITY[audience].bullets, words: wordBudget(audience, chosen, density) },
         today: isoDate(new Date()),
         ...(language ? { language } : {}),
-        ...(findPictures ? { findPictures: true } : {}),
+        ...(photos === 'find' ? { findPictures: true } : photos === 'notes' ? { photoNotes: true } : {}),
       };
       const startedAt = Date.now();
       const res = await draftOutline(request, controller.signal);
@@ -487,7 +488,7 @@ export default function MakePage() {
   };
 
   const usual = purpose === profile.deck.purpose && audience === profile.deck.audience && minutes === profile.deck.minutes && density === profile.deck.density && themeId === profile.deck.themeId
-    && language === deckLanguage(profile.deck.language) && research === (profile.deck.research === true) && findPictures === (profile.deck.findPictures === true);
+    && language === deckLanguage(profile.deck.language) && research === (profile.deck.research === true) && photos === photoChoice(profile.deck);
   const working = stage === 'researching' || stage === 'reading' || stage === 'asking' || stage === 'outlining' || stage === 'building';
   /** What the page shows; "loading" while the open job is read. */
   const view = stage === 'done' && deck ? 'result'
@@ -754,14 +755,19 @@ export default function MakePage() {
                   </label>
                 )}
                 {aiOn && (
+                  <label className="field">
+                    <span className="field-label">Photos</span>
+                    <select className="select" value={photos} onChange={(e) => setPhotos(e.target.value as PhotoChoice)} aria-describedby="ad-photos-help">
+                      {PHOTO_CHOICES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                    <span className="field-help" id="ad-photos-help">{PHOTO_CHOICES.find((c) => c.id === photos)?.detail}</span>
+                  </label>
+                )}
+                {aiOn && (
                   <>
                     <label className="switch ad-ask-toggle">
                       <input type="checkbox" checked={research} onChange={(e) => setResearch(e.target.checked)} />
                       <span>Search the web for recent facts</span>
-                    </label>
-                    <label className="switch ad-ask-toggle">
-                      <input type="checkbox" checked={findPictures} onChange={(e) => setFindPictures(e.target.checked)} />
-                      <span>Find free photos for the slides</span>
                     </label>
                     <label className="switch ad-ask-toggle">
                       <input type="checkbox" checked={ask} onChange={(e) => setAsk(e.target.checked)} />
@@ -887,6 +893,7 @@ function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, 
 }) {
   const shown = deck.slides.filter((s) => !s.hidden);
   const recordings = sources.filter((s) => s.kind === 'audio' && s.recordingId);
+  const toAdd = photosToAdd(deck).length;
   return (
     <section className="ad-result" aria-labelledby="ad-result-title">
       <div className="ad-result-head">
@@ -899,6 +906,11 @@ function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, 
           <p className="ad-fit" role="status">
             {fit.undone || !fit.canUndo ? <AlertCircle size={15} /> : <Check size={15} />} {fit.text}
             {fit.canUndo && <> <button type="button" className="ad-link" onClick={fit.onToggle}>{fit.undone ? 'Redo' : 'Undo'}</button></>}
+          </p>
+        )}
+        {toAdd > 0 && (
+          <p className="ad-fit ad-photos" role="status">
+            <Camera size={15} /> {toAdd === 1 ? '1 slide says' : `${toAdd} slides say`} what photo to add. The editor lists them under Photos to add; in PowerPoint a box marks each place.
           </p>
         )}
         {usage && <UsageNote usage={usage} />}

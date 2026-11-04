@@ -1,5 +1,6 @@
 import { getKind } from '../kinds/registry';
 import type { DeckDraft } from '../plugins/api';
+import { cleanPhotoNote, settlePhotoNote } from './photo-notes';
 import { type Audience, type Deck, type DeckPurpose, type KeyNotes, type Slide, deckDensity, emptyNotes, normalizeNotes, uid } from './types';
 import { countWords } from './words';
 
@@ -60,8 +61,9 @@ export function draftToDeck(draft: DeckDraft, o: { audience: Audience; themeId: 
         content: { ...(known?.create() ?? {}), ...(s.content ?? {}) },
         notes: normalizeNotes({ ...emptyNotes(), ...(s.notes ?? {}) }),
         ...(s.variant ? { variant: s.variant } : {}),
+        ...(cleanPhotoNote(s.photoNote) ? { photoNote: cleanPhotoNote(s.photoNote) } : {}),
       };
-      return completeNotes(slide);
+      return completeNotes(settlePhotoNote(slide));
     });
   return {
     id: uid('d'),

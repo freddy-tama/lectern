@@ -9,6 +9,7 @@
 
 import { hasOverrides } from '../engine/overrides';
 import { getKind } from '../kinds/registry';
+import { withPhotoNoteFrame } from './photo-notes';
 import type { Deck, Slide } from './types';
 import { deckPurpose } from './types';
 
@@ -44,7 +45,8 @@ export function autoVariants(deck: Deck): Deck {
       previous.set(slide.kind, current);
       return slide;
     }
-    const picked = def.autoVariant(slide.content ?? {}, {
+    // A photo still to add counts as a photo, so the layout keeps a place for it.
+    const picked = def.autoVariant(withPhotoNoteFrame(slide), {
       index: Math.max(0, visible.indexOf(slide)), count: visible.length, nth: n, previous: previous.get(slide.kind),
     });
     const next = picked && def.variants.some((v) => v.id === picked) ? picked : current;

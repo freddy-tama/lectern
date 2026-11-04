@@ -311,9 +311,10 @@ export function jobDraft(job: Pick<DraftJob, 'request'>, deck: JobDeck): DeckDra
     minutes: job.request.minutes,
     slides: deck.outline.map((plan, i) => {
       const s = written.get(i + 1);
-      if (s) return { kind: s.kind, content: s.content, notes: { ...s.notes, minutes: plan.minutes } };
+      const photo = plan.photo ? { photoNote: plan.photo } : {};
+      if (s) return { kind: s.kind, content: s.content, notes: { ...s.notes, minutes: plan.minutes }, ...photo };
       const key = headingKey(plan.kind);
-      return { kind: plan.kind, content: key ? { [key]: plan.title } : {}, notes: { script: plan.point, minutes: plan.minutes } };
+      return { kind: plan.kind, content: key ? { [key]: plan.title } : {}, notes: { script: plan.point, minutes: plan.minutes }, ...photo };
     }),
   };
 }

@@ -4,7 +4,7 @@
 import { DndContext, type DragEndEvent, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { ArrowDown, ArrowUp, GripVertical, ImagePlus, MoreHorizontal, Plus, Search, Trash2, Wand2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Camera, GripVertical, ImagePlus, MoreHorizontal, Plus, Search, Trash2, Wand2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MIN_SLIDE_MINUTES, giveTime, shares, slideTimeLabel } from '../../core/deck/timing';
 import { uid } from '../../core/deck/types';
@@ -231,6 +231,14 @@ function OutlineRow({ slide, number, count, kinds, pictures, used, autoFocus, mi
             <span className="ol-search" title="Lectern finds a free photo for this slide when the slides are written">
               <Search size={13} aria-hidden /> Photo: {slide.search}
               <button type="button" onClick={() => onChange({ search: undefined })} aria-label={`No photo for slide ${number}`}>
+                <X size={12} />
+              </button>
+            </span>
+          )}
+          {slide.photo && !shown.length && (
+            <span className="ol-search ol-photo" title="The slide keeps this note in its picture frame until you add the photo">
+              <Camera size={13} aria-hidden /> <span>Photo to add: {slide.photo}</span>
+              <button type="button" onClick={() => onChange({ photo: undefined })} aria-label={`No photo note for slide ${number}`}>
                 <X size={12} />
               </button>
             </span>

@@ -16,7 +16,7 @@ export interface DeckDraft {
   audience?: Audience;
   themeId?: string;
   minutes?: number;
-  slides: Array<Pick<Slide, 'kind' | 'content'> & { notes?: Partial<KeyNotes>; variant?: string }>;
+  slides: Array<Pick<Slide, 'kind' | 'content'> & { notes?: Partial<KeyNotes>; variant?: string; photoNote?: string }>;
 }
 
 export interface DeckSourceProps {

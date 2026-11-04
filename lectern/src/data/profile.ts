@@ -27,6 +27,15 @@ export const DENSITIES: { id: Density; label: string; detail: string }[] = [
 
 export const LENGTHS = [5, 10, 15, 20, 30, 45, 60, 90];
 
+/** Photos for an AI-drafted deck: found in free libraries, a note of what to add later, or none. */
+export type PhotoChoice = 'find' | 'notes' | 'none';
+
+export const PHOTO_CHOICES: { id: PhotoChoice; label: string; detail: string }[] = [
+  { id: 'none', label: 'No photos', detail: 'Picture frames stay empty' },
+  { id: 'find', label: 'Find free photos', detail: 'From free photo libraries, with their credits' },
+  { id: 'notes', label: 'Leave a note of what photo to add', detail: 'Each photo slide says what to put there, for you to add later' },
+];
+
 export interface DeckPrefs {
   purpose: DeckPurpose;
   audience: Audience;
@@ -37,8 +46,15 @@ export interface DeckPrefs {
   language?: string;
   /** Search the web for recent facts before drafting. */
   research?: boolean;
-  /** Find photos in free libraries for the slides that would show one. */
+  /** Find photos in free libraries for the slides that would show one. Older profiles; see photos. */
   findPictures?: boolean;
+  /** What to do about photos for the slides that would show one. */
+  photos?: PhotoChoice;
+}
+
+/** The photo choice saved in the deck settings, reading older profiles' findPictures too. */
+export function photoChoice(prefs: Pick<DeckPrefs, 'photos' | 'findPictures'>): PhotoChoice {
+  return prefs.photos === 'find' || prefs.photos === 'notes' || prefs.photos === 'none' ? prefs.photos : prefs.findPictures ? 'find' : 'none';
 }
 
 /** An answer to one of the AI's questions that the person asked Lectern to keep. */

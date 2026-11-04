@@ -19,5 +19,6 @@ export function pictureRoom(kind: Pick<AnyKind, 'fields'>): number {
 export function withKind(slide: PlannedSlide, kind: string): Partial<PlannedSlide> {
   const def = getKind(kind);
   const room = def ? pictureRoom(def) : 0;
-  return { kind, pictures: slide.pictures.slice(0, room) };
+  // A type with no picture field has nowhere for a photo: its search and photo note go too.
+  return { kind, pictures: slide.pictures.slice(0, room), ...(room ? {} : { search: undefined, photo: undefined }) };
 }

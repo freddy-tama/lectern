@@ -30,6 +30,8 @@ export interface PlannedSlide {
   pictures: string[];
   /** What photo to find in free libraries for it, when the presenter asked Lectern to find photos. */
   search?: string;
+  /** What photo the presenter means to add to it later, when they asked for photo notes. */
+  photo?: string;
 }
 
 /** A slide as the AI wrote it, numbered by its place in the approved outline (from 1). */
@@ -109,6 +111,8 @@ export interface DraftRequest {
   language?: string;
   /** Find photos in free libraries for the slides whose outline names a search. */
   findPictures?: boolean;
+  /** Leave a note of what photo to add on the slides that would show one, for the presenter to add later. */
+  photoNotes?: boolean;
 }
 
 export interface DraftJob {

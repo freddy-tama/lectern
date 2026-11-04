@@ -544,4 +544,25 @@ Chinese: 详见 https://example.cn/report（2025）`;
     expect(cleaned[1]!.search).toBeUndefined();
     expect(slidesTask('T', cleaned, [1])).toContain('photo Lectern adds: Surabaya skyline');
   });
+
+  it('asks for photo notes when the presenter adds photos later, never with photos found as well', () => {
+    const noted = readInput(body({ pictures: [], photoNotes: true })) as Exclude<ReturnType<typeof readInput>, string>;
+    expect(noted.photoNotes).toBe(true);
+    const req = stagedRequest(noted, OUTLINE_TASK);
+    expect(JSON.stringify(req.schema)).toContain('"photo"');
+    expect(JSON.stringify(req.schema)).not.toContain('"search"');
+    expect(req.system).toContain('Photos the presenter adds later');
+    expect(req.system).toMatch(/- image \(.*Holds 1 picture/);
+    const both = readInput(body({ pictures: [], photoNotes: true, findPictures: true })) as Exclude<ReturnType<typeof readInput>, string>;
+    expect(both.photoNotes).toBe(false);
+    expect(stagedRequest(both, OUTLINE_TASK).system).not.toContain('Photos the presenter adds later');
+    const note = 'Wide shot of a Chinese class at a school in Surabaya';
+    const cleaned = cleanOutline([
+      { title: 'A class', kind: 'image', minutes: 1, point: 'p', photo: note },
+      { title: 'Numbers', kind: 'chart', minutes: 1, point: 'p', photo: 'a chart' },
+      { title: 'Places', kind: 'gallery', minutes: 1, point: 'p', photo: 'several schools' },
+    ], kinds, []);
+    expect(cleaned.map((s) => s.photo)).toEqual([note, undefined, undefined]);
+    expect(slidesTask('T', cleaned, [1])).toContain(`photo the presenter adds later: ${note}`);
+  });
 });
