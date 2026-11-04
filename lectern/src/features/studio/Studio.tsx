@@ -10,7 +10,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { NotFound } from '../../app/App';
 import { cloneSlide, makeSlide } from '../../core/deck/draft';
 import { wording } from '../../core/deck/purpose';
-import { lessonIssues } from '../../core/deck/check';
+import { purposeIssues } from '../../core/deck/check';
 import { canSplit, fitsOnSlide, isOverflowWarning, splitInDeck, splitSlide } from '../../core/deck/split';
 import { autoVariants } from '../../core/deck/auto-style';
 import { fieldAt, getAt, insertItem, isListItem, isTextBind, removeItem, setAt, splitBind } from '../../core/deck/paths';
@@ -121,8 +121,9 @@ export default function Studio() {
   const index = deck ? Math.max(0, deck.slides.findIndex((s) => s.id === selectedId)) : 0;
   const slide = deck?.slides[index];
   const revision = useSlideRevision({ deck, slide, change });
-  // In a lesson, the stage also says what the lesson rules found on this slide: an answer given away, one thing tested twice.
-  const lessonNotes = useMemo(() => (deck ? lessonIssues(deck) : []), [deck]);
+  // The stage also says what the purpose's rules found on this slide: in a lesson, an answer given away or one
+  // thing tested twice; in a talk, a fourth slide of the same type in a row.
+  const lessonNotes = useMemo(() => (deck ? purposeIssues(deck) : []), [deck]);
   const stageNotes = [
     ...(layout?.warnings ?? []),
     ...lessonNotes.filter((i) => i.slideId === slide?.id).sort((a, b) => Number(a.severity !== 'warning') - Number(b.severity !== 'warning')).map((i) => i.message),

@@ -284,8 +284,11 @@ const PURPOSE_RULES: Record<Purpose, string> = {
   lesson: LESSON_RULES,
   talk: `This is a talk. Give it a story arc: a hook, a few ideas that build on each other, and an ending the audience will remember.
 - One idea per slide. Keep slides sparse and visual; the story lives in notes.script.
+- Keep the pace brisk: about 0.5-1 minute a slide. A 20-minute talk has about 20-40 slides.
 - keyPoints are the takeaways the audience should leave with. checkQuestion is an optional question to put to the audience, and checkAnswer is what you hope to hear or your own answer. Use them on a few slides, not all.
-- Use quotes, big numbers and images to give the talk rhythm.
+- Change the slide type every one to three slides: quotes, big numbers, images, diagrams and statements give the talk rhythm. Never put four slides of the same type in a row.
+- In a talk with parts, end each part with a short recap slide (a summary of two or three points) before the next part starts.
+- Open with a picture, a diagram or a striking statement, and bring it back near the end, now seen in the light of the talk.
 - Close with the takeaways and a closing line.`,
   pitch: `This is a pitch. Follow the order investors expect: what the company does in one line, the problem, the solution, the market and why now, the product, the business model, traction, the competition, the team, and the ask.
 - The business model says who pays, how much and how often (a pricing slide fits). Traction is proof that it works: numbers, customers, a demo.
