@@ -76,8 +76,9 @@ export function originLine(d: DocDetails | undefined): string {
   if (!d) return '';
   let host = '';
   try { host = d.url ? new URL(d.url).hostname.replace(/^www\./, '') : ''; } catch { /* not a link */ }
-  const date = d.published ?? d.modified;
-  return [d.site || host, date ? shortDate(date) : ''].filter(Boolean).join(' · ');
+  // A page updated since it was published (a wiki article, a revised report) shows its newer date.
+  const when = d.modified && (!d.published || d.modified > d.published) ? `updated ${shortDate(d.modified)}` : d.published ? shortDate(d.published) : '';
+  return [d.site || host, when].filter(Boolean).join(' · ');
 }
 
 export function countWords(text: string): number {

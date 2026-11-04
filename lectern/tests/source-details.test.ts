@@ -53,7 +53,8 @@ describe('where a document comes from', () => {
   it('gives the AI one line per file, and the list a short one', () => {
     const d = htmlDetails(PAGE);
     expect(detailsLine(d)).toBe('from https://www.example.edu/news/mandarin-in-schools; site Example University; by Siti Rahma; published 2025-03-02; updated 2025-06-10');
-    expect(originLine(d)).toBe('Example University · 2 Mar 2025');
+    expect(originLine(d)).toBe('Example University · updated 10 Jun 2025');
+    expect(originLine({ site: 'News', published: '2025-03-02' })).toBe('News · 2 Mar 2025');
     expect(originLine({ url: 'https://www.bps.go.id/x' })).toBe('bps.go.id');
     const material = buildMaterial([{ file: new File([], 'page.html'), kind: 'doc', text: 'Facts.', details: d }]);
     expect(material.split('\n')[0]).toBe(`=== page.html (document; ${detailsLine(d)}) ===`);
