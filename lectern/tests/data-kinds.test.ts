@@ -83,6 +83,38 @@ describe('data kinds', () => {
     const over = layoutSlide(slide('s2', 'table', { title: 'Too much', cells: big, header: true, stripes: true, caption: '' }), { theme: getTheme('campus'), audience: 'adult' });
     expect(over.warnings.join(' ')).toContain('too big for one slide');
   });
+
+  it('puts a source line under charts and big numbers, above the footer', () => {
+    const source = 'Source: annual survey, 2025';
+    const cases: [string, Record<string, unknown>, string | undefined, string][] = [
+      ...['column', 'bar', 'line', 'pie'].map((v) => ['chart', { ...getKind('chart')!.create(), source }, v, 'chart'] as [string, Record<string, unknown>, string, string]),
+      ['stats', { ...getKind('stats')!.create(), source }, 'row', 'v1'],
+      ['stats', { title: 'Replies got faster', stats: [{ value: '42%', label: 'faster replies', detail: '' }], source }, 'hero', 'v0'],
+    ];
+    for (const [kind, content, variant, above] of cases) {
+      const label = `${kind} ${variant}`;
+      const layout = layoutSlide(slide('s1', kind, content, variant), { theme: getTheme('campus'), audience: 'adult', mode: 'edit', slideCount: 3, slideNumber: 2 });
+      expect(layout.warnings, label).toEqual([]);
+      const src = layout.boxes.find((b) => b.id === 'source')!;
+      expect(src, label).toBeTruthy();
+      expect(src.y + src.h, label).toBeLessThanOrEqual(CANVAS_H - 96);
+      for (const id of [above, 'takeaway']) {
+        const b = layout.boxes.find((x) => x.id === id || (id === 'chart' && x.type === 'chart'));
+        if (b) expect(b.y + b.h, `${label} ${id}`).toBeLessThanOrEqual(src.y);
+      }
+      expect(getKind(kind)!.text(content)).toContain(source);
+    }
+    const none = layoutSlide(slide('s1', 'chart', getKind('chart')!.create()), { theme: getTheme('campus'), audience: 'adult' });
+    expect(none.boxes.some((b) => b.id === 'source')).toBe(false);
+  });
+
+  it('asks report and pitch drafts for titles that state the finding, and sources', async () => {
+    const { wording } = await import('../src/core/deck/purpose');
+    for (const purpose of ['report', 'pitch'] as const) {
+      expect(wording(purpose).aiRules, purpose).toMatch(/title states the (finding|slide's claim)/);
+      expect(wording(purpose).aiRules, purpose).toMatch(/source/);
+    }
+  });
 });
 
 describe('screen renderers', () => {

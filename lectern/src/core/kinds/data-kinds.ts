@@ -5,7 +5,7 @@
 import type { Box, ChartBox, TableBox } from '../engine/boxes';
 import { cssFont, wrapLines } from '../engine/measure';
 import type { Theme } from '../engine/themes';
-import { M, type LayoutContext, fam, read, shape, slideTitle, sz, text } from './kit';
+import { M, SOURCE_FIELD, type LayoutContext, fam, read, shape, slideTitle, sourceLine, sz, text } from './kit';
 import type { AnyKind, SlideKindDefinition } from './types';
 
 type C = Record<string, unknown>;
@@ -210,6 +210,7 @@ const chart: SlideKindDefinition<C> = {
     { key: 'unit', label: 'Unit', type: 'text', placeholder: '%, $, kg…' },
     { key: 'unitBefore', label: 'Put the unit before the number', type: 'toggle', help: 'For currencies, like $40.' },
     { key: 'takeaway', label: 'Takeaway', type: 'textarea', rows: 2, help: 'One line that says what the chart shows.' },
+    SOURCE_FIELD,
     { key: 'values', label: 'Show values', type: 'toggle' },
     { key: 'legend', label: 'Show legend', type: 'toggle', help: 'Shown for two series, and for pie and doughnut charts.' },
     { key: 'reveal', label: 'Show the takeaway on click', type: 'toggle' },
@@ -236,12 +237,15 @@ const chart: SlideKindDefinition<C> = {
       rows.length ? read.str(c, 'series') : '',
       two ? read.str(c, 'series2') : '',
       read.str(c, 'takeaway'),
+      read.str(c, 'source'),
     ].filter((s) => s.trim());
   },
   layout(c, ctx, variant) {
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title'));
     const boxes: Box[] = [box];
-    let chartBottom = M.bottom;
+    const source = sourceLine(ctx, read.str(c, 'source'));
+    if (source.box) boxes.push(source.box);
+    let chartBottom = source.bottom;
     const takeaway = read.str(c, 'takeaway').trim();
     if (takeaway) {
       const step = read.bool(c, 'reveal') ? 1 : undefined;
@@ -250,7 +254,7 @@ const chart: SlideKindDefinition<C> = {
         id: 'takeaway', text: takeaway, x: M.x + bar + 32, y: 0, w: M.w - bar - 32 - 120, h: sz(ctx, 40) * 1.3 * 2 + 4,
         max: 40, min: 28, weight: 600, maxLines: 2, hug: true, bind: 'takeaway', step,
       });
-      t.y = M.bottom - t.h;
+      t.y = source.bottom - t.h;
       boxes.push(shape({ id: 'takeaway-bar', shape: 'rect', x: M.x, y: t.y, w: bar, h: t.h, radius: bar / 2, fill: ctx.theme.colors.accent, step }));
       boxes.push(t);
       chartBottom = t.y - sz(ctx, 40);

@@ -385,6 +385,27 @@ export function logoBox(ctx: LayoutContext, mode: 'content' | 'title'): ImageBox
   return { type: 'image', id: 'logo', src, x, y, w, h, fit: 'contain', alt: `${ctx.theme.name} logo` };
 }
 
+/** The "Source" field of data slides: where the figures come from, or a footnote. */
+export const SOURCE_FIELD = {
+  key: 'source', label: 'Source', type: 'text', placeholder: 'Source: annual survey, 2025',
+  help: 'Where the figures come from, or a footnote. Shown small at the bottom of the slide.',
+} as const;
+
+/**
+ * A data slide's source line, small and quiet at the bottom of the content area, and the
+ * new bottom for the content above it. No box when the source is empty.
+ */
+export function sourceLine(ctx: LayoutContext, value: string): { box: TextBox | null; bottom: number } {
+  const line = value.trim();
+  if (!line) return { box: null, bottom: M.bottom };
+  const box = text(ctx, {
+    id: 'source', text: line, x: M.x, y: 0, w: M.w - 240, h: Math.ceil(24 * 1.3 * 2) + 4, max: 24, min: 18,
+    scaled: false, maxLines: 2, hug: true, color: ctx.theme.colors.muted, bind: 'source',
+  });
+  box.y = M.bottom - box.h;
+  return { box, bottom: box.y - sz(ctx, 24) };
+}
+
 /** The footer line and a quiet slide number, kept clear of a logo at the bottom. */
 export function footer(ctx: LayoutContext): Box[] {
   const boxes: Box[] = [];

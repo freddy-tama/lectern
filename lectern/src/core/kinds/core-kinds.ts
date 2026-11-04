@@ -2,7 +2,7 @@
 
 import { type Box, CANVAS_H, CANVAS_W, type TextBox } from '../engine/boxes';
 import { fontWeight } from '../engine/themes';
-import { M, type LayoutContext, card, heightAt, imageSrc, list, read, shape, slideTitle, sz, text } from './kit';
+import { M, SOURCE_FIELD, type LayoutContext, card, heightAt, imageSrc, list, read, shape, slideTitle, sourceLine, sz, text } from './kit';
 import { DATA_KINDS } from './data-kinds';
 import { DESIGNED_KINDS } from './designed-kind';
 import { LIVE_KINDS } from './live-kinds';
@@ -461,15 +461,18 @@ const stats: SlideKindDefinition<C> = {
       { key: 'label', label: 'Label', type: 'text' },
       { key: 'detail', label: 'Detail', type: 'text' },
     ] },
+    SOURCE_FIELD,
   ],
   create: () => ({ title: 'By the numbers', stats: [{ value: '71%', label: 'of Earth is water', detail: '' }, { value: '3%', label: 'of that is fresh', detail: '' }] }),
   heading: (c) => read.str(c, 'title') || 'Big numbers',
-  text: (c) => [read.str(c, 'title'), ...read.objects(c, 'stats').flatMap((s) => [String(s.value ?? ''), String(s.label ?? ''), String(s.detail ?? '')])].filter(Boolean),
+  text: (c) => [read.str(c, 'title'), ...read.objects(c, 'stats').flatMap((s) => [String(s.value ?? ''), String(s.label ?? ''), String(s.detail ?? '')]), read.str(c, 'source')].filter(Boolean),
   layout(c, ctx, variant) {
     if (variant === 'hero') return heroNumber(c, ctx);
     const items = read.objects<Record<string, unknown>>(c, 'stats').slice(0, 4);
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title'));
     const boxes: Box[] = [box];
+    const source = sourceLine(ctx, read.str(c, 'source'));
+    if (source.box) boxes.push(source.box);
     if (!items.length) return { boxes };
     const n = items.length;
     const gap = 64;
@@ -505,6 +508,8 @@ function heroNumber(c: C, ctx: LayoutContext): KindLayout {
   const first = filled[0] ?? (all.length ? { o: all[0]!, i: 0 } : null);
   const t = text(ctx, { id: 'title', text: read.str(c, 'title') || ' ', x: M.x, y: M.top, w: M.w, h: sz(ctx, 60) * 1.2 * 2, role: 'display', max: 60, min: 40, maxLines: 2, hug: true, align: 'center', bind: 'title' });
   const boxes: Box[] = [t];
+  const source = sourceLine(ctx, read.str(c, 'source'));
+  if (source.box) boxes.push(source.box);
   if (!first) return { boxes };
   if (filled.length > 1) ctx.warnings.push('One big number shows the first figure only. Pick Side by side to show them all.');
   const { o, i } = first;
@@ -515,7 +520,7 @@ function heroNumber(c: C, ctx: LayoutContext): KindLayout {
   const l = labelValue ? text(ctx, { id: `l${i}`, text: labelValue, x: M.x + 120, y: 0, w: M.w - 240, h: sz(ctx, 56) * 1.3 * 2, max: 56, min: 34, weight: 650, maxLines: 2, hug: true, align: 'center', bind: `stats.${i}.label` }) : null;
   const d = detailValue ? text(ctx, { id: `d${i}`, text: detailValue, x: M.x + 240, y: 0, w: M.w - 480, h: sz(ctx, 36) * 1.3 * 3, max: 36, min: 24, color: colors.muted, maxLines: 3, hug: true, align: 'center', bind: `stats.${i}.detail` }) : null;
   const blockH = v.h + (l ? sz(ctx, 20) + l.h : 0) + (d ? sz(ctx, 14) + d.h : 0);
-  let y = top + Math.max(0, (M.bottom - top - blockH) / 2);
+  let y = top + Math.max(0, (source.bottom - top - blockH) / 2);
   v.y = y; boxes.push(v); y += v.h;
   if (l) { l.y = y + sz(ctx, 20); l.moveWith = v.id; boxes.push(l); y = l.y + l.h; }
   if (d) { d.y = y + sz(ctx, 14); d.moveWith = v.id; boxes.push(d); }
