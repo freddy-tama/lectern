@@ -329,7 +329,7 @@ export async function finishJob(job: DraftJob, signal?: AbortSignal): Promise<st
   for (const deck of job.decks) {
     if (deck.deckId || !deck.outline.length) continue;
     const draft = await placePictures(jobDraft(job, deck), files, async (f) => saveAsset(await pictureForDeck(f), f.name));
-    const checked = await checkDraft(draftToDeck(draft, { ...job.settings, source: 'ai' }), signal);
+    const checked = await checkDraft(draftToDeck(draft, { ...job.settings, density: job.request.density, source: 'ai' }), signal);
     await addDeck(checked.deck);
     deck.deckId = checked.deck.id;
     if (fitChanged(checked.report) || checked.report.left) deck.fit = { report: checked.report, other: checked.before, undone: false };

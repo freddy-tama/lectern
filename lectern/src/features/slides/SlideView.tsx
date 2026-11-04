@@ -2,7 +2,7 @@ import { memo, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { type Box, CANVAS_H, CANVAS_W, type SlideLayout } from '../../core/engine/boxes';
 import { layoutSlide } from '../../core/engine/layout';
 import { type Theme, fontFamily, getTheme, subscribeThemes, themesRevision } from '../../core/engine/themes';
-import type { Deck, Slide } from '../../core/deck/types';
+import { type Deck, type Slide, deckPurpose } from '../../core/deck/types';
 import { assetUrl } from '../../data/repo';
 import { useFontsReady, useWidth } from '../../ui/hooks';
 import { ChartView } from './ChartView';
@@ -11,7 +11,7 @@ import { TableView } from './TableView';
 
 export interface SlideViewProps {
   slide: Slide;
-  deck: Pick<Deck, 'themeId' | 'audience' | 'title'>;
+  deck: Pick<Deck, 'themeId' | 'audience' | 'title'> & Partial<Pick<Deck, 'purpose' | 'lessonId' | 'density'>>;
   number?: number;
   count?: number;
   /** Reveal steps shown. Undefined shows everything. */
@@ -46,9 +46,11 @@ export function useSlideLayout(slide: Slide, deck: SlideViewProps['deck'], o: { 
     () => layoutSlide(slide, {
       theme: getTheme(deck.themeId), audience: deck.audience, mode: o.mode ?? 'show',
       slideNumber: o.number ?? 1, slideCount: o.count ?? 1, deckTitle: deck.title, flags: o.flags,
+      // Decks passed in part (a sample, a phone's copy) have no purpose: the audience's budget applies.
+      purpose: deck.purpose || deck.lessonId ? deckPurpose(deck as Pick<Deck, 'purpose' | 'lessonId'>) : undefined, density: deck.density,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [slide, deck.themeId, deck.audience, deck.title, o.number, o.count, o.mode, o.flags, fonts, looks],
+    [slide, deck.themeId, deck.audience, deck.title, deck.purpose, deck.lessonId, deck.density, o.number, o.count, o.mode, o.flags, fonts, looks],
   );
 }
 

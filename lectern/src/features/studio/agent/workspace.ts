@@ -83,11 +83,12 @@ export class Workspace {
   layout(slide: Slide): SlideLayout {
     const shown = this.slides.filter((s) => !s.hidden);
     const number = Math.max(1, shown.indexOf(slide) + 1);
-    const key = JSON.stringify([slide, number, shown.length, this.deck.themeId, this.deck.audience, this.deck.title]);
+    const key = JSON.stringify([slide, number, shown.length, this.deck.themeId, this.deck.audience, this.deck.title, deckPurpose(this.deck), this.deck.density]);
     const hit = this.layouts.get(slide.id);
     if (hit?.key === key) return hit.layout;
     const layout = layoutSlide(slide, {
       theme: this.theme, audience: this.deck.audience, mode: 'edit', slideNumber: number, slideCount: shown.length, deckTitle: this.deck.title,
+      purpose: deckPurpose(this.deck), density: this.deck.density,
     });
     this.layouts.set(slide.id, { key, layout });
     return layout;

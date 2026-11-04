@@ -4,7 +4,7 @@
 import { slideProblems } from '../../core/deck/check';
 import { type Deck, type KeyNotes, type Slide, deckPurpose, emptyNotes, normalizeNotes, uid } from '../../core/deck/types';
 import { getTheme } from '../../core/engine/themes';
-import { DENSITY } from '../../core/kinds/kit';
+import { DENSITY, wordBudget } from '../../core/kinds/kit';
 import { getKind } from '../../core/kinds/registry';
 import type { AnyKind, FieldSpec } from '../../core/kinds/types';
 import { draftingHints } from '../../core/plugins/registry';
@@ -146,7 +146,7 @@ function context(deck: Deck, slide: Slide) {
     slide: { kind: slide.kind, content: contentForAi(def, slide.content), notes: { ...slide.notes, links: undefined, extra: undefined }, variant: slide.variant },
     kind: kindSpec(def),
     hints: draftingHints(),
-    budget: DENSITY[deck.audience],
+    budget: { bullets: DENSITY[deck.audience].bullets, words: wordBudget(deck.audience, deckPurpose(deck), deck.density) },
   };
 }
 

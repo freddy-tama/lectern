@@ -10,7 +10,7 @@ import { fitChanged } from '../../core/deck/fit';
 import { sessionMinutes } from '../../core/deck/timing';
 import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, uid } from '../../core/deck/types';
 import { allThemes, fontFamily } from '../../core/engine/themes';
-import { DENSITY } from '../../core/kinds/kit';
+import { DENSITY, wordBudget } from '../../core/kinds/kit';
 import { documentPictures, fileToOutline } from '../../core/import/files';
 import { draftingHints } from '../../core/plugins/registry';
 import { transcriptText } from '../../core/transcribe/segments';
@@ -264,7 +264,7 @@ export default function MakePage() {
         pictures: forAi,
         kinds: kindCatalogue(),
         hints: draftingHints(),
-        budget: DENSITY[audience],
+        budget: { bullets: DENSITY[audience].bullets, words: wordBudget(audience, chosen, density) },
       };
       const startedAt = Date.now();
       const res = await draftOutline(request, controller.signal);

@@ -3,8 +3,16 @@
 
 export type Audience = 'young' | 'teen' | 'adult';
 
-/** What a deck is for. It sets the wording of key notes, study mode, the handout and AI drafting. */
+/** What a deck is for. It sets the wording of key notes, study mode, the handout, word budgets and AI drafting. */
 export type DeckPurpose = 'lesson' | 'talk' | 'pitch' | 'report';
+
+/** How much text slides carry, as chosen when the deck was drafted: mostly pictures, balanced, or full enough to read alone. */
+export type DeckDensity = 'visual' | 'balanced' | 'detailed';
+
+/** A density as stored or sent, or undefined when it is none of them. */
+export function deckDensity(value: unknown): DeckDensity | undefined {
+  return value === 'visual' || value === 'balanced' || value === 'detailed' ? value : undefined;
+}
 
 export interface CheckQuestion {
   question: string;
@@ -149,6 +157,8 @@ export interface Deck {
   lessonId?: string;
   /** Planned length of the session in minutes. Slide times are shares of it (see timing.ts). */
   minutes?: number;
+  /** How much text the slides were drafted to carry. A detailed report is read alone, so its slides may say more. */
+  density?: DeckDensity;
   /** Lectern picks each slide's layout to suit its content (see autoVariants). */
   autoStyle?: boolean;
   createdAt: number;

@@ -5,7 +5,7 @@ import { retimeDeck, splitToFit } from '../src/core/deck/fit';
 import { CONT, fitsOnSlide } from '../src/core/deck/split';
 import { type Deck, type Slide, deckMinutes, emptyNotes } from '../src/core/deck/types';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
-import { DENSITY } from '../src/core/kinds/kit';
+import { DENSITY, PURPOSE_WORDS, wordBudget } from '../src/core/kinds/kit';
 
 registerCoreKinds();
 
@@ -22,6 +22,23 @@ function deckOf(slides: Slide[], extra: Partial<Deck> = {}): Deck {
 const long = (id: string, n = 14) => slideOf(id, 'bullets', { title: 'Everything we learned', bullets: Array.from({ length: n }, (_, i) => `${i + 1}. ${POINT}`) });
 const short = (id: string) => slideOf(id, 'bullets', { title: 'Plan', bullets: ['Ship the beta', 'Ask ten users'] });
 
+describe('word budgets', () => {
+  it('sets words a slide by what the deck is for and who it is for, never above the audience', () => {
+    expect(wordBudget('adult', 'talk')).toBe(30);
+    expect(wordBudget('adult', 'pitch')).toBe(35);
+    expect(wordBudget('adult', 'report')).toBe(40);
+    expect([wordBudget('young', 'lesson'), wordBudget('teen', 'lesson'), wordBudget('adult', 'lesson')]).toEqual([25, 45, 60]);
+    expect(wordBudget('young', 'pitch')).toBe(DENSITY.young.words);
+    // A detailed report is read alone, so it gets the audience's whole budget; a visual deck gets fewer.
+    expect(wordBudget('adult', 'report', 'detailed')).toBe(DENSITY.adult.words);
+    expect(wordBudget('adult', 'lesson', 'visual')).toBe(20);
+    expect(wordBudget('adult')).toBe(DENSITY.adult.words);
+    for (const purpose of ['lesson', 'talk', 'pitch', 'report'] as const) {
+      for (const audience of ['young', 'teen', 'adult'] as const) expect(PURPOSE_WORDS[purpose][audience]).toBeLessThanOrEqual(DENSITY[audience].words);
+    }
+  });
+});
+
 describe('checkDeck', () => {
   it('reports slides that overflow, with the layout warning word for word', () => {
     const report = checkDeck(deckOf([short('a'), long('b'), short('c')]));
@@ -34,10 +51,16 @@ describe('checkDeck', () => {
 
   it('counts words against the audience budget from the layout rules, on content slides only', () => {
     const wordy = slideOf('w', 'bullets', { title: 'Words', bullets: ['one two three four five six seven eight nine ten', 'one two three four five six seven eight nine ten', 'one two three four five six seven eight nine'] });
-    const young = checkDeck(deckOf([wordy], { audience: 'young' }));
+    const young = checkDeck(deckOf([wordy], { audience: 'young', purpose: 'lesson' }));
     expect(young.slides[0].words).toEqual({ count: 30, budget: DENSITY.young.words });
     expect(young.issues).toContainEqual({ rule: 'words', severity: 'warning', slideId: 'w', message: `30 words. For this audience, aim for ${DENSITY.young.words} or fewer.` });
-    expect(checkDeck(deckOf([wordy], { audience: 'adult' })).issues.some((i) => i.rule === 'words')).toBe(false);
+    expect(checkDeck(deckOf([wordy], { audience: 'adult', purpose: 'lesson' })).issues.some((i) => i.rule === 'words')).toBe(false);
+    // A talk says the rest out loud: its slides carry fewer words than adults could read.
+    const wordier = { ...wordy, content: { ...wordy.content, bullets: [...(wordy.content.bullets as string[]), 'and five more words here'] } };
+    expect(checkDeck(deckOf([wordier], { audience: 'adult', purpose: 'talk' })).issues).toContainEqual({ rule: 'words', severity: 'warning', slideId: 'w', message: '35 words. For a talk, aim for 30 or fewer.' });
+    // A question carries the words of its choices, so it keeps the audience's budget in a talk too.
+    const asking = slideOf('q', 'question', { question: 'one two three four five six seven eight nine ten', options: ['one two three four five six seven eight nine ten', 'one two three four five six seven eight nine ten', 'one two three four five'], correct: 0, answer: '' });
+    expect(checkDeck(deckOf([asking], { audience: 'adult', purpose: 'talk' })).issues.some((i) => i.rule === 'words')).toBe(false);
     const title = slideOf('t', 'title', { title: 'A very long title '.repeat(4), subtitle: '' });
     expect(checkDeck(deckOf([title], { audience: 'young' })).slides[0].words).toBeNull();
   });

@@ -841,7 +841,7 @@ function meetingsSlides(): Slide[] {
     slide('s_mt_06', 'diagram', {
       title: 'Should this be a meeting?',
       items: [
-        { label: 'Quick call', detail: 'A few people, one decision' },
+        { label: 'Quick call', detail: 'Few people, one decision' },
         { label: 'Decision meeting', detail: 'Deciders only' },
         { label: 'Send a message', detail: 'Write it down' },
         { label: 'Cancel it', detail: 'Share the notes' },

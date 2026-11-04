@@ -9,6 +9,7 @@
 import type { SlideLayout } from '../engine/boxes';
 import { layoutDeck, layoutSlide } from '../engine/layout';
 import { getTheme } from '../engine/themes';
+import { budgetFor } from '../kinds/kit';
 import { getKind } from '../kinds/registry';
 import { isOverflowWarning } from './split';
 import { minutesPerSlide, sessionMinutes } from './timing';
@@ -80,8 +81,8 @@ export const OVERFLOW_RULE: CheckRule = {
 
 export const WORDS_RULE: CheckRule = {
   id: 'words',
-  run: ({ slides }) => slides.flatMap((s): CheckIssue[] => (s.words && s.words.count > s.words.budget
-    ? [{ rule: 'words', severity: 'warning', slideId: s.slide.id, message: `${s.words.count} words. For this audience, aim for ${s.words.budget} or fewer.` }]
+  run: ({ deck, slides }) => slides.flatMap((s): CheckIssue[] => (s.words && s.words.count > s.words.budget
+    ? [{ rule: 'words', severity: 'warning', slideId: s.slide.id, message: `${s.words.count} words. ${budgetFor(deckPurpose(deck))}, aim for ${s.words.budget} or fewer.` }]
     : [])),
 };
 
@@ -248,8 +249,8 @@ export function lessonIssues(deck: Pick<Deck, 'slides' | 'title' | 'purpose' | '
 }
 
 /** One slide laid out as the studio stage draws it: every warning, the overflow ones, and the words against the budget. */
-export function slideProblems(slide: Slide, deck: Pick<Deck, 'themeId' | 'audience' | 'title'>): Pick<SlideCheck, 'overflow' | 'words'> & { warnings: string[] } {
-  const layout = layoutSlide(slide, { theme: getTheme(deck.themeId), audience: deck.audience, mode: 'edit', deckTitle: deck.title, slideCount: 2 });
+export function slideProblems(slide: Slide, deck: Pick<Deck, 'themeId' | 'audience' | 'title'> & Partial<Pick<Deck, 'purpose' | 'lessonId' | 'density'>>): Pick<SlideCheck, 'overflow' | 'words'> & { warnings: string[] } {
+  const layout = layoutSlide(slide, { theme: getTheme(deck.themeId), audience: deck.audience, mode: 'edit', deckTitle: deck.title, slideCount: 2, purpose: deckPurpose(deck), density: deck.density });
   return { warnings: layout.warnings, overflow: layout.warnings.filter(isOverflowWarning), words: layout.words ?? null };
 }
 

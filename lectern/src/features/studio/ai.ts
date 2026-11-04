@@ -1,5 +1,5 @@
 import type { Audience, DeckPurpose } from '../../core/deck/types';
-import { DENSITY } from '../../core/kinds/kit';
+import { DENSITY, wordBudget } from '../../core/kinds/kit';
 import { allKinds } from '../../core/kinds/registry';
 import type { FieldSpec } from '../../core/kinds/types';
 import type { DeckDraft } from '../../core/plugins/api';
@@ -73,7 +73,7 @@ export function kindCatalogue() {
 }
 
 export async function draftWithAI(req: DraftRequest, signal?: AbortSignal): Promise<DeckDraft> {
-  const res = await aiPost('/api/draft-deck', JSON.stringify({ ...req, kinds: kindCatalogue(), hints: draftingHints(), budget: DENSITY[req.audience] }), signal);
+  const res = await aiPost('/api/draft-deck', JSON.stringify({ ...req, kinds: kindCatalogue(), hints: draftingHints(), budget: { bullets: DENSITY[req.audience].bullets, words: wordBudget(req.audience, req.purpose, req.density) } }), signal);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(typeof body.error === 'string' ? body.error : 'The AI draft failed. Try again, or start from your notes.');
   return body.draft as DeckDraft;

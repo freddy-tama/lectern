@@ -1,6 +1,6 @@
 import { getKind } from '../kinds/registry';
 import type { DeckDraft } from '../plugins/api';
-import { type Audience, type Deck, type DeckPurpose, type KeyNotes, type Slide, emptyNotes, normalizeNotes, uid } from './types';
+import { type Audience, type Deck, type DeckPurpose, type KeyNotes, type Slide, deckDensity, emptyNotes, normalizeNotes, uid } from './types';
 import { countWords } from './words';
 
 /** Words a presenter says per minute, for timing estimates. */
@@ -47,7 +47,8 @@ export function completeNotes(slide: Slide): Slide {
   return { ...slide, notes };
 }
 
-export function draftToDeck(draft: DeckDraft, o: { audience: Audience; themeId: string; lessonId?: string; source?: string; purpose?: DeckPurpose }): Deck {
+export function draftToDeck(draft: DeckDraft, o: { audience: Audience; themeId: string; lessonId?: string; source?: string; purpose?: DeckPurpose; density?: string }): Deck {
+  const density = deckDensity(o.density);
   const now = Date.now();
   const slides = draft.slides
     .filter((s) => s && typeof s.kind === 'string')
@@ -69,6 +70,7 @@ export function draftToDeck(draft: DeckDraft, o: { audience: Audience; themeId: 
     audience: draft.audience || o.audience,
     slides,
     ...(o.purpose ? { purpose: o.purpose } : {}),
+    ...(density ? { density } : {}),
     lessonId: o.lessonId,
     minutes: draft.minutes,
     createdAt: now,
