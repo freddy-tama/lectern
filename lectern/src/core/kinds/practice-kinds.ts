@@ -1,5 +1,5 @@
-// Practice slide types: true or false, and fill in the blanks. Registered with the core kinds,
-// next to the question and quick recall slides. Answers appear one click at a time.
+// Practice slide types: true or false, fill in the blanks, and put in order. Registered with the
+// core kinds, next to the question and quick recall slides. Answers appear one click at a time.
 
 import type { Box } from '../engine/boxes';
 import { M, card, heightAt, read, shape, slideTitle, sz, text } from './kit';
@@ -178,4 +178,135 @@ const fillIn: SlideKindDefinition<C> = {
   },
 };
 
-export const PRACTICE_KINDS: AnyKind[] = [trueFalse, fillIn];
+// ─── Put in order ─────────────────────────────────────────────────────
+
+/** Chinese, Japanese and Korean script, written without spaces between words. */
+const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+
+/** A small, steady hash of the items, so a slide is mixed up the same way every time it is shown. */
+function seedOf(items: string[]): number {
+  let h = 2166136261;
+  for (const ch of items.join('\u0001')) h = Math.imul(h ^ ch.codePointAt(0)!, 16777619) >>> 0;
+  return h || 1;
+}
+
+/**
+ * The order the room sees the items in, as indexes into the right order: mixed up, the same for the
+ * same items, and never already right.
+ */
+export function shownOrder(items: string[]): number[] {
+  const order = items.map((_, i) => i);
+  if (order.length < 2) return order;
+  let seed = seedOf(items);
+  for (let i = order.length - 1; i > 0; i--) {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    const j = seed % (i + 1);
+    [order[i], order[j]] = [order[j]!, order[i]!];
+  }
+  if (order.every((v, i) => v === i)) order.push(order.shift()!);
+  return order;
+}
+
+/** The items as one line in the right order: joined without spaces in Chinese, with them otherwise. */
+export function inOrder(items: string[]): string {
+  const tight = items.every((s) => CJK.test(s) && !/\s/.test(s.trim()));
+  return items.map((s) => s.trim()).join(tight ? '' : ' ');
+}
+
+/** Short items (a word or a phrase each) sit as tiles in rows; longer ones as a list of cards. */
+const isShort = (s: string) => (CJK.test(s) ? s.replace(/\s/g, '').length <= 8 : s.trim().split(/\s+/).length <= 3);
+const tilesFit = (items: string[]) => items.length >= 3 && items.every(isShort);
+
+const LETTERS = 'ABCDEFGH';
+
+/** The place in the stored list of each kept item, blanks included, for binds. */
+function storedIndexes(c: C): number[] {
+  return read.items(c, 'items').flatMap((s, i) => (s.trim() ? [i] : []));
+}
+
+const order: SlideKindDefinition<C> = {
+  kind: 'order', label: 'Put in order', description: 'Items to put in the right order: events, the steps of a process, or the words or sentences of a passage. List them in the right order; the slide shows them mixed up, and each click shows where the next one goes.', icon: 'arrow-down-up', group: 'Engage',
+  variants: [{ id: 'list', label: 'Cards' }, { id: 'tiles', label: 'Tiles' }],
+  autoVariant: (c) => (tilesFit(read.list(c, 'items')) ? 'tiles' : 'list'),
+  fields: [
+    { key: 'title', label: 'Title', type: 'text' },
+    { key: 'items', label: 'Items, in the right order', type: 'list', itemLabel: 'Item', max: 8, help: 'The slide mixes them up. Each click shows where the next one goes.' },
+  ],
+  create: () => ({
+    title: 'Put these in order',
+    items: ['Water evaporates from the sea', 'Vapour cools and forms clouds', 'Rain falls on the land', 'Rivers carry the water back to the sea'],
+  }),
+  heading: (c) => read.str(c, 'title') || 'Put in order',
+  text: (c) => [read.str(c, 'title'), ...read.list(c, 'items')].filter(Boolean),
+  checks: (c) => {
+    const items = read.list(c, 'items');
+    return items.length >= 2 ? [{ prompt: read.str(c, 'title') || 'Put in order', answer: inOrder(items) }] : [];
+  },
+  layout(c, ctx, variant) {
+    const items = read.list(c, 'items').slice(0, 8);
+    const { box, bottom } = slideTitle(ctx, read.str(c, 'title') || 'Put these in order');
+    const boxes: Box[] = [box];
+    if (items.length < 2) {
+      if (ctx.mode === 'edit') ctx.warnings.push('Add at least two items to put in order.');
+      return { boxes };
+    }
+    // Item i of the right order sits at place `at`; its number appears on click i + 1.
+    const shown = shownOrder(items);
+    const binds = storedIndexes(c);
+    const colors = ctx.theme.colors;
+    const n = items.length;
+    const gap = sz(ctx, 22);
+    const number = (id: string, x: number, y: number, d: number, i: number): Box[] => [
+      shape({ id: `place-${id}`, shape: 'ellipse', x, y, w: d, h: d, fill: colors.accent, step: i + 1, reveal: 'answer' }),
+      { type: 'text', id: `number-${id}`, x, y, w: d, h: d, text: String(i + 1), step: i + 1, reveal: 'answer',
+        style: { font: 'body', size: Math.round(d * 0.5), weight: 800, color: colors.onAccent, align: 'center', valign: 'middle', lineHeight: 1 } },
+    ];
+
+    if ((variant ?? (tilesFit(items) ? 'tiles' : 'list')) === 'tiles') {
+      // Tiles in rows, and the whole line in the right order underneath, with the last number.
+      const cols = n > 6 ? 4 : n > 4 ? 3 : n;
+      const rows = Math.ceil(n / cols);
+      const lineH = sz(ctx, 120);
+      const tileW = (M.w - gap * (cols - 1)) / cols;
+      const tileH = Math.min(sz(ctx, 190), (M.bottom - bottom - lineH - gap * rows) / rows);
+      const d = Math.min(sz(ctx, 64), tileH * 0.42);
+      const top = bottom + d * 0.3 + Math.max(0, (M.bottom - bottom - d * 0.3 - lineH - gap - rows * tileH - (rows - 1) * gap) / 2);
+      shown.forEach((i, at) => {
+        const row = Math.floor(at / cols);
+        const inRow = Math.min(cols, n - row * cols);
+        const x = M.x + (M.w - (inRow * tileW + (inRow - 1) * gap)) / 2 + (at % cols) * (tileW + gap);
+        const y = top + row * (tileH + gap);
+        boxes.push(card(ctx, `tile-${at}`, x, y, tileW, tileH));
+        boxes.push(text(ctx, { id: `item-${at}`, text: items[i]!, x: x + sz(ctx, 20), y: y + d * 0.5, w: tileW - sz(ctx, 40), h: tileH - d * 0.8, max: 48, min: 22, weight: 650, align: 'center', valign: 'middle', bind: `items.${binds[i]}` }));
+        boxes.push(...number(String(at), x + tileW - d * 0.75, y - d * 0.3, d, i));
+      });
+      const lineY = M.bottom - lineH;
+      boxes.push(card(ctx, 'answer-card', M.x, lineY, M.w, lineH, { stroke: colors.good, strokeWidth: 3, step: n, reveal: 'answer' }));
+      boxes.push(text(ctx, { id: 'answer', text: inOrder(items), x: M.x + sz(ctx, 28), y: lineY, w: M.w - sz(ctx, 56), h: lineH, max: 44, min: 22, weight: 700, color: colors.good, align: 'center', valign: 'middle', maxLines: 2, step: n, reveal: 'answer' }));
+      return { boxes };
+    }
+
+    // Cards down the slide (two columns past five), each with a letter and an empty ring for its place.
+    const cols = n > 5 ? 2 : 1;
+    const rows = Math.ceil(n / cols);
+    const colW = (M.w - gap * (cols - 1)) / cols;
+    const rowH = Math.min(sz(ctx, 150), (M.bottom - bottom - gap * (rows - 1)) / rows);
+    const pad = sz(ctx, 28);
+    const letterW = sz(ctx, 56);
+    const d = Math.min(rowH - sz(ctx, 24), sz(ctx, 76));
+    shown.forEach((i, at) => {
+      const x = M.x + Math.floor(at / rows) * (colW + gap);
+      const y = bottom + (at % rows) * (rowH + gap);
+      const bx = x + colW - pad - d;
+      const by = y + (rowH - d) / 2;
+      boxes.push(card(ctx, `card-${at}`, x, y, colW, rowH));
+      boxes.push(text(ctx, { id: `letter-${at}`, text: LETTERS[at]!, x: x + pad, y, w: letterW, h: rowH, max: 36, min: 24, weight: 750, color: colors.accent, valign: 'middle', maxLines: 1 }));
+      boxes.push(text(ctx, { id: `item-${at}`, text: items[i]!, x: x + pad + letterW, y: y + sz(ctx, 10), w: bx - (x + pad + letterW) - pad, h: rowH - sz(ctx, 20), max: 40, min: 22, weight: 600, valign: 'middle', bind: `items.${binds[i]}` }));
+      boxes.push(shape({ id: `slot-${at}`, shape: 'ellipse', x: bx, y: by, w: d, h: d, stroke: colors.line, strokeWidth: 4 }));
+      boxes.push(...number(String(at), bx, by, d, i));
+    });
+    return { boxes };
+  },
+};
+
+export const PRACTICE_KINDS: AnyKind[] = [trueFalse, fillIn, order];

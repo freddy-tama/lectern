@@ -20,7 +20,7 @@ export function makeSlide(kind: string, content?: Record<string, unknown>, notes
 export function estimateMinutes(notes: Pick<KeyNotes, 'script' | 'check'>, kind: string): number {
   const words = countWords(notes.script);
   const talk = words / SPEAKING_WPM;
-  const activity = ['question', 'recall', 'true-false', 'fill-in', 'closing', 'wordcloud'].includes(kind) ? 2 : 0;
+  const activity = ['question', 'recall', 'true-false', 'fill-in', 'order', 'closing', 'wordcloud'].includes(kind) ? 2 : 0;
   const total = Math.max(kind === 'section' || kind === 'title' ? 0.5 : 1, talk + activity + (notes.check ? 0.5 : 0));
   return Math.round(total * 2) / 2;
 }

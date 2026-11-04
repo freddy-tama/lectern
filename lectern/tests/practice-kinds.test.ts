@@ -6,7 +6,7 @@ import { CANVAS_H, CANVAS_W, type Box, type TextBox } from '../src/core/engine/b
 import { layoutSlide } from '../src/core/engine/layout';
 import { getTheme } from '../src/core/engine/themes';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
-import { blanksOf, isOn } from '../src/core/kinds/practice-kinds';
+import { blanksOf, inOrder, isOn, shownOrder } from '../src/core/kinds/practice-kinds';
 import { getKind } from '../src/core/kinds/registry';
 
 registerCoreKinds();
@@ -103,6 +103,61 @@ describe('fill in the blanks', () => {
     const { boxes } = lay('fill-in', { title: '填空', passage: '孙中山出生于[1866]年，小时候在[檀香山]读书。', bank: [] });
     expect(byId(boxes, 'passage')).toMatchObject({ text: '孙中山出生于(1)______年，小时候在(2)______读书。' });
     expect(texts(boxes).filter((b) => b.id.endsWith('-answer')).map((b) => b.text)).toEqual(['1866', '檀香山']);
+  });
+});
+
+describe('put in order', () => {
+  const events = ['Sun Yat-sen is born in Cuiheng', 'He goes to school in Hawaii', 'He studies medicine in Hong Kong', 'He founds the Revive China Society', 'The Qing dynasty falls'];
+
+  it('mixes the items up the same way every time, and never in the right order', () => {
+    for (let n = 2; n <= 8; n++) {
+      const items = events.concat(['Six', 'Seven', 'Eight']).slice(0, n);
+      const shown = shownOrder(items);
+      expect([...shown].sort((a, b) => a - b)).toEqual(items.map((_, i) => i));
+      expect(shown).not.toEqual(items.map((_, i) => i));
+      expect(shownOrder([...items])).toEqual(shown);
+    }
+    expect(shownOrder(['Only'])).toEqual([0]);
+  });
+
+  it('shows lettered cards, and each click puts the next item’s number on its card', () => {
+    for (const audience of ['young', 'teen', 'adult'] as const) {
+      const layout = lay('order', { title: 'Put his life in order', items: events }, { audience });
+      // Everything fits; young learners would want fewer words, which the word check says.
+      expect(layout.warnings.filter((w) => !w.includes('words on this slide'))).toEqual([]);
+      expect(layout.steps).toBe(5);
+      inside(layout.boxes);
+    }
+    const { boxes } = lay('order', { title: 'Put his life in order', items: events });
+    const shown = shownOrder(events);
+    expect(texts(boxes).filter((b) => b.id.startsWith('letter-')).map((b) => b.text)).toEqual(['A', 'B', 'C', 'D', 'E']);
+    shown.forEach((i, at) => {
+      expect(byId(boxes, `item-${at}`)).toMatchObject({ text: events[i], bind: `items.${i}` });
+      expect(byId(boxes, `number-${at}`)).toMatchObject({ text: String(i + 1), step: i + 1, reveal: 'answer' });
+    });
+    // The items and their empty rings are there from the start.
+    expect(boxes.filter((b) => b.id.startsWith('item-') || b.id.startsWith('slot-')).every((b) => !b.step)).toBe(true);
+  });
+
+  it('lays short items out as tiles, with the whole line on the last click', () => {
+    const words = ['小马', '终于', '过了', '河'];
+    const def = getKind('order')!;
+    expect(def.autoVariant!({ items: words }, { index: 0, count: 1, nth: 0 })).toBe('tiles');
+    expect(def.autoVariant!({ items: events }, { index: 0, count: 1, nth: 0 })).toBe('list');
+    const layout = lay('order', { title: '连词成句', items: words });
+    expect(layout.warnings).toEqual([]);
+    inside(layout.boxes);
+    expect(byId(layout.boxes, 'answer')).toMatchObject({ text: '小马终于过了河', step: 4, reveal: 'answer' });
+    expect(inOrder(['The', 'pony', 'crossed'])).toBe('The pony crossed');
+  });
+
+  it('asks for the order in the check, binds past blank items, and wants two items', () => {
+    const def = getKind('order')!;
+    expect(def.checks!({ title: 'Order', items: ['First', 'Second'] })).toEqual([{ prompt: 'Order', answer: 'First Second' }]);
+    expect(def.checks!({ items: ['Alone'] })).toEqual([]);
+    const { boxes } = lay('order', { items: ['First', '', 'Second', 'Third'] });
+    expect(texts(boxes).filter((b) => b.id.startsWith('item-')).map((b) => b.bind).sort()).toEqual(['items.0', 'items.2', 'items.3']);
+    expect(lay('order', { items: ['Alone'] }, { mode: 'edit' }).warnings).toEqual(['Add at least two items to put in order.']);
   });
 });
 
