@@ -86,6 +86,7 @@ function readOutline(raw: unknown): Omit<PlannedSlide, 'id'>[] {
       minutes: Number(o.minutes) || 2,
       point: asText(o.point, 300),
       pictures: Array.isArray(o.pictures) ? o.pictures.filter((p): p is string => typeof p === 'string') : [],
+      ...(typeof o.search === 'string' && o.search.trim() ? { search: asText(o.search.trim(), 80) } : {}),
     };
   }).filter((s) => s.kind);
 }

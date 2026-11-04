@@ -9,6 +9,7 @@ import { slideTimeLabel, withSlideTimes } from '../deck/timing';
 import type { Deck, KeyNotes } from '../deck/types';
 import { type Box, type ChartBox, type EmbedBox, type ImageBox, type ShapeBox, type TableBox, type TextBox, type VideoBox, PT_PER_PX, PX_PER_INCH } from '../engine/boxes';
 import { layoutDeck } from '../engine/layout';
+import { tagCjkChart, tagCjkRuns } from './cjk';
 import { type Theme, fontFamily, fontWeight, getTheme } from '../engine/themes';
 import { displayUrl } from '../media/embed';
 import { qrGifDataUrl } from '../media/qr';
@@ -550,7 +551,7 @@ async function postProcess(buffer: ArrayBuffer, pages: PageMeta[], animate: bool
     const file = zip.file(path);
     if (!file) continue;
     let xml = await file.async('string');
-    xml = uniqueFrameIds(roundPictures(xml, pages[i].rounded));
+    xml = tagCjkRuns(uniqueFrameIds(roundPictures(xml, pages[i].rounded)));
     if (animate[i] && !/<p:timing[ >]/.test(xml)) {
       const clicks = clicksOf(xml);
       if (clicks.length) {
@@ -561,9 +562,15 @@ async function postProcess(buffer: ArrayBuffer, pages: PageMeta[], animate: bool
     zip.file(path, xml);
   }
   for (const path of Object.keys(zip.files)) {
+    if (!/^ppt\/charts\/chart\d+\.xml$/.test(path)) continue;
+    const xml = await zip.file(path)!.async('string');
+    const tagged = tagCjkChart(xml);
+    if (tagged !== xml) zip.file(path, tagged);
+  }
+  for (const path of Object.keys(zip.files)) {
     if (!/^ppt\/notesSlides\/notesSlide\d+\.xml$/.test(path)) continue;
     const xml = await zip.file(path)!.async('string');
-    zip.file(path, splitNotesParagraphs(xml));
+    zip.file(path, tagCjkRuns(splitNotesParagraphs(xml)));
   }
   return zip.generateAsync({ type: 'uint8array', compression: 'DEFLATE' });
 }

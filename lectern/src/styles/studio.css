@@ -28,6 +28,16 @@
   align-content: start;
 }
 
+.new-deck-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.new-deck-row > .field {
+  flex: 1 1 160px;
+}
+
 .dropzone {
   display: grid;
   gap: 10px;
@@ -541,6 +551,18 @@
 .cue-input {
   flex: 1;
   min-width: 120px;
+  font-size: 13.5px;
+}
+
+.note-link {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.note-link .input,
+.note-links > .input {
   font-size: 13.5px;
 }
 

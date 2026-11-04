@@ -73,9 +73,11 @@ export interface Theme {
 }
 
 export const MONO: ThemeFonts = { web: '"JetBrains Mono", "Cascadia Code", Consolas, monospace', pptx: 'Consolas', weight: 500 };
-export const INTER = '"Inter Variable", Inter, "Segoe UI", system-ui, sans-serif';
-export const FRAUNCES = '"Fraunces Variable", Fraunces, Georgia, serif';
-export const NUNITO = '"Nunito Variable", Nunito, "Segoe UI", system-ui, sans-serif';
+/** Fonts for hanzi, kana and hangul, so the browser draws and measures them with the faces PowerPoint will use. */
+const CJK_WEB = '"Microsoft YaHei", "PingFang SC", "Hiragino Sans", "Yu Gothic", "Malgun Gothic", "Noto Sans CJK SC"';
+export const INTER = `"Inter Variable", Inter, "Segoe UI", system-ui, ${CJK_WEB}, sans-serif`;
+export const FRAUNCES = `"Fraunces Variable", Fraunces, Georgia, ${CJK_WEB}, serif`;
+export const NUNITO = `"Nunito Variable", Nunito, "Segoe UI", system-ui, ${CJK_WEB}, sans-serif`;
 
 export const THEMES: Theme[] = [
   {
