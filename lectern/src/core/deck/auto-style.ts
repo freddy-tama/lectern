@@ -71,7 +71,8 @@ export function suggestLook(deck: Pick<Deck, 'audience' | 'purpose' | 'lessonId'
   const body = deck.slides.flatMap((s) => getKind(s.kind)?.text(s.content ?? {}) ?? []).join(' ').slice(0, 4000);
   const code = deck.slides.filter((s) => s.kind === 'code').length;
   if (code >= 2 || about(CODE_WORDS, deck.title, body, 4)) return 'midnight';
-  if (purpose === 'pitch') return 'midnight';
+  // Pitches are light: of eight real pitch decks studied, none was mostly dark.
+  if (purpose === 'pitch') return 'campus';
   if (purpose === 'report') return 'minimal';
   if (purpose === 'lesson') return about(CHALK_WORDS, deck.title, body, 3) ? 'chalk' : deck.audience === 'teen' ? 'campus' : 'paper';
   return 'paper';

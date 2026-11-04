@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { type CheckRule, CORE_RULES, LESSON_RULES, checkDeck, givenAway, lessonIssues, minutesOff, notesEmpty, rulesFor, sameChecks, slideProblems } from '../src/core/deck/check';
+import { type CheckRule, CORE_RULES, LESSON_RULES, TALK_RULES, checkDeck, givenAway, lessonIssues, minutesOff, notesEmpty, purposeIssues, rulesFor, sameChecks, sameTypeRuns, slideProblems } from '../src/core/deck/check';
 import { retimeDeck, splitToFit } from '../src/core/deck/fit';
 import { CONT, fitsOnSlide } from '../src/core/deck/split';
 import { type Deck, type Slide, deckMinutes, emptyNotes } from '../src/core/deck/types';
@@ -172,7 +172,7 @@ describe('lesson rules', () => {
   it('runs for lessons only, from checkDeck and on their own for the studio', () => {
     const slides = [opening, passage, when, judge([{ statement: 'He was born in 1966.', isTrue: false, correction: '1866' }])];
     expect(rulesFor(deckOf([], { purpose: 'lesson' }))).toEqual([...CORE_RULES, ...LESSON_RULES]);
-    expect(rulesFor(deckOf([], { purpose: 'talk' }))).toEqual(CORE_RULES);
+    expect(rulesFor(deckOf([], { purpose: 'pitch' }))).toEqual(CORE_RULES);
     const lesson = checkDeck(deckOf(slides, { purpose: 'lesson' }));
     expect(lesson.issues.filter((i) => i.rule === 'given-away' || i.rule === 'same-check').map((i) => `${i.slideId} ${i.rule}`)).toEqual(['ask given-away', 'tf given-away', 'tf same-check']);
     expect(checkDeck(deckOf(slides, { purpose: 'talk' })).issues.some((i) => i.rule === 'given-away')).toBe(false);
@@ -180,6 +180,29 @@ describe('lesson rules', () => {
     expect(lessonIssues(deckOf(slides, { purpose: 'pitch' }))).toEqual([]);
     // Hidden slides give nothing away and are numbered out.
     expect(lessonIssues(deckOf([{ ...opening, hidden: true }, passage, when], { purpose: 'lesson' }))).toEqual([]);
+  });
+});
+
+describe('talk rules', () => {
+  const run = (kinds: string[]) => kinds.map((k, i) => slideOf(`s${i}`, k, k === 'bullets' ? { title: 'Plan', bullets: ['Ship it'] } : { title: 'T' }));
+
+  it('flags the fourth slide of one type in a row, once per run', () => {
+    const issues = sameTypeRuns(run(['title', 'bullets', 'bullets', 'bullets', 'bullets', 'bullets', 'quote', 'bullets', 'bullets', 'bullets', 'bullets']));
+    expect(issues.map((i) => i.slideId)).toEqual(['s4', 's10']);
+    expect(issues[0]!.message).toMatch(/^4 Points slides in a row\./);
+  });
+
+  it('does not count designed slides or section dividers', () => {
+    expect(sameTypeRuns(run(['designed', 'designed', 'designed', 'designed', 'section', 'section', 'section', 'section']))).toEqual([]);
+  });
+
+  it('runs for talks only, and shows on the stage', () => {
+    const slides = run(['bullets', 'bullets', 'bullets', 'bullets']);
+    expect(rulesFor({ purpose: 'talk' })).toEqual(expect.arrayContaining(TALK_RULES));
+    expect(rulesFor({ purpose: 'report' })).not.toEqual(expect.arrayContaining(TALK_RULES));
+    expect(checkDeck(deckOf(slides, { purpose: 'talk' })).issues.some((i) => i.rule === 'rhythm')).toBe(true);
+    expect(checkDeck(deckOf(slides, { purpose: 'report' })).issues.some((i) => i.rule === 'rhythm')).toBe(false);
+    expect(purposeIssues(deckOf(slides, { purpose: 'talk' }))).toHaveLength(1);
   });
 });
 

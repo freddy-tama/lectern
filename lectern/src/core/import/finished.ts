@@ -17,11 +17,15 @@ export interface PptxSlide {
   /** Its place in the PowerPoint, from 1, hidden slides included. */
   number: number;
   title: string;
-  /** Every paragraph on the slide, one per line, tables included. */
+  /** Every paragraph on the slide, one per line; a table row is one line, cells split by " | ". */
   text: string;
   /** The speaker notes, one paragraph per line. */
   notes: string;
   hidden: boolean;
+  /** The paragraphs that are neither the title nor in a table. */
+  body?: string[];
+  /** Each table's rows of cells. */
+  tables?: string[][][];
 }
 
 export interface PptxDeck {
@@ -73,21 +77,172 @@ function placeholderOf(p: Element): string {
 
 const FURNITURE = new Set(['sldNum', 'dt', 'ftr', 'hdr']);
 
-/** Title and text of a slide, in the order they appear in the file. */
-export function slideWords(xml: string): { title: string; text: string; hidden: boolean } {
+/** A text box (or table) on a slide: where it sits, how big its type is and what it says. */
+export interface SlideShape {
+  /** Placeholder type ("title", "body"…), or "" for a plain text box. */
+  ph: string;
+  /** Top-left corner in EMU; NaN when the slide leaves it to the layout. */
+  x: number;
+  y: number;
+  /** The largest type size in it, in points; 0 when the slide leaves it to the layout. */
+  size: number;
+  lines: string[];
+  /** A table's rows of cells. */
+  rows?: string[][];
+  /** A picture's description or a chart's words, written "(Picture: …)" or "(Chart: …)". */
+  role?: 'picture' | 'chart';
+}
+
+const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+
+/** Descriptions Office writes by itself, or that only name the file. */
+const NO_DESCRIPTION = /automatically generated|^(?:picture|image|graphic|图片|图像)\s*\d*$|\.(?:png|jpe?g|gif|bmp|svg|emf|wmf|tiff?)$/i;
+
+const textIn = (el: Element | undefined, ns: string, name: string, sep: string) =>
+  el ? tidy(Array.from(el.getElementsByTagNameNS(ns, name)).map((t) => t.textContent ?? '').join(sep)) : '';
+
+/** A native chart's words: its title, series names, first categories and axis titles. */
+export function chartWords(xml: string): string {
   const doc = parse(xml);
-  const title: string[] = [];
-  const lines: string[] = [];
-  for (const p of Array.from(doc.getElementsByTagNameNS(A, 'p'))) {
-    const words = paragraphText(p);
-    if (!words) continue;
-    const ph = placeholderOf(p);
-    if (FURNITURE.has(ph)) continue;
-    if (ph === 'title' || ph === 'ctrTitle') title.push(words);
-    lines.push(words);
+  const named = (el: Element | undefined) => {
+    const tx = el && child(el, C, 'tx');
+    return textIn(tx, A, 't', '') || textIn(tx, C, 'v', ' ');
+  };
+  const chart = doc.getElementsByTagNameNS(C, 'chart')[0];
+  const title = chart ? named(child(chart, C, 'title')) : '';
+  const series = Array.from(doc.getElementsByTagNameNS(C, 'ser'));
+  const names = [...new Set(series.map((s) => named(s)).filter(Boolean))];
+  const cat = series[0] && child(series[0], C, 'cat');
+  const cats = cat ? Array.from(cat.getElementsByTagNameNS(C, 'pt')).map((pt) => tidy(child(pt, C, 'v')?.textContent ?? '')).filter(Boolean) : [];
+  const axes = ['catAx', 'dateAx', 'valAx'].flatMap((n) => Array.from(doc.getElementsByTagNameNS(C, n)))
+    .map((ax) => named(child(ax, C, 'title'))).filter(Boolean);
+  return [title, names.join(', '), cats.slice(0, 12).join(', ') + (cats.length > 12 ? '…' : ''), axes.join(', ')].filter(Boolean).join(' · ');
+}
+
+const child = (el: Element, ns: string, name: string) =>
+  Array.from(el.children).find((c) => c.namespaceURI === ns && c.localName === name);
+
+function offsetOf(el: Element): { x: number; y: number } {
+  const holder = child(el, P, 'spPr') ?? child(el, P, 'grpSpPr') ?? el;
+  const xfrm = child(holder, A, 'xfrm') ?? child(holder, P, 'xfrm');
+  const off = xfrm && child(xfrm, A, 'off');
+  return off ? { x: Number(off.getAttribute('x')), y: Number(off.getAttribute('y')) } : { x: NaN, y: NaN };
+}
+
+/** The largest type size set on a run with words, else the box's own default, in points. */
+function sizeOf(body: Element): number {
+  let most = 0;
+  for (const run of Array.from(body.getElementsByTagNameNS(A, 'r'))) {
+    if (!run.getElementsByTagNameNS(A, 't')[0]?.textContent?.trim()) continue;
+    most = Math.max(most, Number(run.getElementsByTagNameNS(A, 'rPr')[0]?.getAttribute('sz')) || 0);
   }
-  const hidden = doc.documentElement.getAttribute('show') === '0';
-  return { title: title.join(' '), text: lines.join('\n'), hidden };
+  if (!most) for (const d of Array.from(body.getElementsByTagNameNS(A, 'defRPr'))) most = Math.max(most, Number(d.getAttribute('sz')) || 0);
+  return most / 100;
+}
+
+function shapesIn(parent: Element, charts: Map<string, string>, at?: { x: number; y: number }): SlideShape[] {
+  const out: SlideShape[] = [];
+  for (const el of Array.from(parent.children)) {
+    if (el.localName === 'AlternateContent') {
+      const pick = child(el, el.namespaceURI ?? '', 'Fallback') ?? child(el, el.namespaceURI ?? '', 'Choice');
+      if (pick) out.push(...shapesIn(pick, charts, at));
+      continue;
+    }
+    if (el.namespaceURI !== P) continue;
+    const pos = at ?? offsetOf(el);
+    if (el.localName === 'sp') {
+      const body = child(el, P, 'txBody');
+      const lines = body ? Array.from(body.getElementsByTagNameNS(A, 'p')).map(paragraphText).filter(Boolean) : [];
+      if (!body || !lines.length) continue;
+      const ph = el.getElementsByTagNameNS(P, 'ph')[0];
+      out.push({ ph: ph ? ph.getAttribute('type') ?? 'body' : '', ...pos, size: sizeOf(body), lines });
+    } else if (el.localName === 'pic') {
+      const info = el.getElementsByTagNameNS(P, 'cNvPr')[0];
+      const said = tidy(info?.getAttribute('descr') || info?.getAttribute('title') || '');
+      if (said && !NO_DESCRIPTION.test(said)) out.push({ ph: '', ...pos, size: 0, lines: [`(Picture: ${said})`], role: 'picture' });
+    } else if (el.localName === 'graphicFrame') {
+      const id = el.getElementsByTagNameNS(C, 'chart')[0]?.getAttributeNS(R, 'id');
+      const words = id ? charts.get(id) : '';
+      if (words) { out.push({ ph: '', ...pos, size: 0, lines: [`(Chart: ${words})`], role: 'chart' }); continue; }
+      const table = el.getElementsByTagNameNS(A, 'tbl')[0];
+      if (!table) continue;
+      const rows = Array.from(table.getElementsByTagNameNS(A, 'tr'))
+        .map((tr) => Array.from(tr.getElementsByTagNameNS(A, 'tc')).map((tc) => Array.from(tc.getElementsByTagNameNS(A, 'p')).map(paragraphText).filter(Boolean).join(' ')))
+        .filter((r) => r.some(Boolean));
+      if (rows.length) out.push({ ph: '', ...pos, size: 0, lines: rows.map((r) => r.join(' | ')), rows });
+    } else if (el.localName === 'grpSp') {
+      // A group's members keep their own order, at the group's place on the slide.
+      out.push(...shapesIn(el, charts, pos));
+    }
+  }
+  return out;
+}
+
+/** About a fifth of an inch: boxes this close in height read as one row. */
+const ROW = 182_880;
+
+/**
+ * What a slide says, box by box, in reading order: top to bottom, then left to right, when
+ * every box has a place on the slide (blank-layout decks are often built in any order);
+ * otherwise in the file's order, which placeholder layouts keep sensible.
+ */
+export function slideShapes(xml: string, charts: Map<string, string> = new Map()): { shapes: SlideShape[]; hidden: boolean } {
+  const doc = parse(xml);
+  const tree = doc.getElementsByTagNameNS(P, 'spTree')[0];
+  const shapes = tree ? shapesIn(tree, charts) : [];
+  if (shapes.every((s) => Number.isFinite(s.x) && Number.isFinite(s.y))) {
+    shapes.sort((a, b) => Math.round(a.y / ROW) - Math.round(b.y / ROW) || a.x - b.x);
+  }
+  return { shapes, hidden: doc.documentElement.getAttribute('show') === '0' };
+}
+
+/** A short plain text box at one spot: if it is on most slides, it is a label, not content. */
+export function labelKey(s: SlideShape): string {
+  const words = s.lines.join(' ');
+  if (s.rows || (s.ph && s.ph !== 'body') || words.length > 80 || !Number.isFinite(s.x)) return '';
+  return `${words}@${Math.round(s.x / ROW)},${Math.round(s.y / ROW)}`;
+}
+
+/** Labels repeated at the same spot on at least half the slides (and on three or more). */
+export function repeatedLabels(slides: SlideShape[][]): Set<string> {
+  const seen = new Map<string, number>();
+  for (const shapes of slides) {
+    for (const key of new Set(shapes.map(labelKey).filter(Boolean))) seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  const least = Math.max(3, slides.length / 2);
+  return new Set([...seen].filter(([, n]) => n >= least).map(([k]) => k));
+}
+
+const LINK = /^(?:https?:\/\/|www\.)\S+$|^[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|edu|gov|io|co|uk|cn|ai|app|dev)(?:\/\S*)?$/i;
+
+/**
+ * The slide's name: its title placeholder; on a slide without one, the box in the largest
+ * type, skipping labels repeated on every slide, web addresses and long passages.
+ */
+function pickTitle(shapes: SlideShape[], repeated: Set<string>): SlideShape[] {
+  const placed = shapes.filter((s) => s.ph === 'title' || s.ph === 'ctrTitle');
+  if (placed.length) return placed;
+  let best: SlideShape | undefined;
+  for (const s of shapes) {
+    const words = s.lines.join(' ');
+    if (s.rows || s.role || FURNITURE.has(s.ph) || repeated.has(labelKey(s)) || LINK.test(words) || words.length > 90 || s.lines.length > 2) continue;
+    if (!best || s.size > best.size) best = s;
+  }
+  return best ? [best] : [];
+}
+
+/** Title and text of a slide, in reading order. Labels found on most slides are left out. */
+export function slideWords(xml: string, repeated: Set<string> = new Set(), charts: Map<string, string> = new Map()): Omit<PptxSlide, 'number' | 'notes'> {
+  const { shapes, hidden } = slideShapes(xml, charts);
+  const kept = shapes.filter((s) => !FURNITURE.has(s.ph) && !repeated.has(labelKey(s)));
+  const named = pickTitle(kept, repeated);
+  return {
+    title: named.map((s) => s.lines.join(' ')).join(' '),
+    text: kept.flatMap((s) => s.lines).join('\n'),
+    hidden,
+    body: kept.filter((s) => !s.rows && !named.includes(s)).flatMap((s) => s.lines),
+    tables: kept.flatMap((s) => (s.rows ? [s.rows] : [])),
+  };
 }
 
 /** The speaker notes of a notes slide: the body placeholder's paragraphs. */
@@ -148,11 +303,20 @@ export async function readPptx(buffer: ArrayBuffer): Promise<PptxDeck> {
       .sort((a, b) => Number(/(\d+)\.xml$/.exec(a)![1]) - Number(/(\d+)\.xml$/.exec(b)![1]));
   }
   if (!files.length) throw new Error('This PowerPoint file has no slides.');
-  const slides: PptxSlide[] = [];
-  for (const [i, file] of files.entries()) {
-    const words = slideWords((await read(file)) ?? '');
+  const parts = await Promise.all(files.map(async (file) => {
     const folder = file.slice(0, file.lastIndexOf('/'));
     const slideRels = relationships(await read(`${folder}/_rels/${file.slice(folder.length + 1)}.rels`), folder);
+    const charts = new Map<string, string>();
+    for (const [id, rel] of slideRels) {
+      const chart = rel.type.endsWith('/chart') ? await read(rel.target) : undefined;
+      if (chart) charts.set(id, chartWords(chart));
+    }
+    return { xml: (await read(file)) ?? '', slideRels, charts };
+  }));
+  const repeated = repeatedLabels(parts.map((p) => slideShapes(p.xml, p.charts).shapes));
+  const slides: PptxSlide[] = [];
+  for (const [i, { xml, slideRels, charts }] of parts.entries()) {
+    const words = slideWords(xml, repeated, charts);
     const notesPart = [...slideRels.values()].find((r) => r.type.endsWith('/notesSlide'))?.target;
     const notesXml = notesPart ? await read(notesPart) : undefined;
     slides.push({ number: i + 1, ...words, notes: notesXml ? notesWords(notesXml) : '' });
@@ -165,32 +329,41 @@ export async function readPptx(buffer: ArrayBuffer): Promise<PptxDeck> {
 
 // ─── Questions on slides ──────────────────────────────────────────────
 
-const OPTION = /^[(（]?([A-Fa-f])\s*[).:．、）]\s*(.+)$/;
+const OPTION = /^[(（]?([A-Fa-f])\s*([).:：．、）])\s*(.+)$/;
+const ASKS = /[?？]\s*$/;
+/** Lines that sound like speech, not choices: "A: Let's go!" */
+const SAID = /[!！]["”’」]?\s*$/;
 const MARK = /\s*(?:[✓✔☑✅]|\((?:correct|right|answer)\)|\*)\s*$|^\s*(?:[✓✔☑✅]|\*)\s*/i;
 const ANSWER_IN_NOTES = /(?:answer|correct(?:\s+answer)?|solution|答案|正确答案)\s*(?:is|:|：|-|–|=)?\s*[(（]?([A-F])(?![A-Za-z])/i;
 
 /**
  * A multiple-choice question written on a slide: a question line, then choices lettered
  * A, B, C… in order. The right choice is the one marked with a tick or "(correct)", or the
- * letter the speaker notes give ("Answer: B"). Null when the slide asks nothing like that.
+ * letter the speaker notes give ("Answer: B"). Null when the slide asks nothing like that,
+ * as with a dialogue between A and B ("A: Let's cross!") and no question asked.
  */
 export function findQuestion(text: string, notes = ''): FoundQuestion | null {
   const lines = text.split('\n').map(tidy).filter(Boolean);
   const start = lines.findIndex((l) => OPTION.exec(l)?.[1]?.toUpperCase() === 'A');
   if (start < 1) return null;
   const options: string[] = [];
+  const marks: string[] = [];
   let marked = -1;
   for (const line of lines.slice(start)) {
     const m = OPTION.exec(line);
     if (!m || m[1]!.toUpperCase() !== 'ABCDEF'[options.length]) break;
-    let value = m[2]!;
+    let value = m[3]!;
     if (MARK.test(value)) { marked = options.length; value = value.replace(MARK, '').trim(); }
     options.push(value);
+    marks.push(m[2]!);
     if (options.length === 6) break;
   }
   if (options.length < 2) return null;
   const before = lines.slice(0, start);
-  const question = [...before].reverse().find((l) => /[?？]\s*$/.test(l)) ?? before[before.length - 1]!;
+  const asked = [...before].reverse().find((l) => ASKS.test(l));
+  // Speakers A and B, or lines exclaimed: a dialogue, unless a question comes first.
+  if (!asked && (marks.every((s) => s === ':' || s === '：') || options.some((o) => SAID.test(o)))) return null;
+  const question = asked ?? before[before.length - 1]!;
   const fromNotes = ANSWER_IN_NOTES.exec(notes)?.[1]?.toUpperCase();
   const noted = fromNotes ? 'ABCDEF'.indexOf(fromNotes) : -1;
   const correct = marked >= 0 ? marked : noted < options.length ? noted : -1;

@@ -1,5 +1,6 @@
 // Checks a deck against Lectern's own rules: slides whose text doesn't fit, words over the
-// audience's budget, slides without key notes, and a session too short for its slides.
+// audience's budget, slides without key notes, and a session too short for its slides. Talks
+// add one: four slides of the same type in a row.
 // Code decides what fails, so the same check can run after an AI draft, on AI suggestions and
 // as a list in the studio. Each rule reads the laid-out deck and returns issues; more rules
 // (repeated layouts, repeated text, long stretches without a question, contrast) join the list.
@@ -107,6 +108,34 @@ export const MINUTES_RULE: CheckRule = {
 };
 
 export const CORE_RULES: CheckRule[] = [OVERFLOW_RULE, WORDS_RULE, NOTES_RULE, MINUTES_RULE];
+
+// ─── Talk rules ───────────────────────────────────────────────────────
+
+/** More slides of one type in a row than this, and a talk loses its rhythm. */
+export const MOST_IN_A_ROW = 3;
+
+/** Kinds that don't count towards a run: a finished deck is all designed slides, and dividers break a run anyway. */
+const RUN_BREAKERS = new Set(['designed', 'section']);
+
+/** The slide where a run of one type grows past three, once per run. */
+export function sameTypeRuns(slides: Slide[]): CheckIssue[] {
+  const out: CheckIssue[] = [];
+  let run = 0;
+  slides.forEach((s, i) => {
+    run = i > 0 && s.kind === slides[i - 1]!.kind && !RUN_BREAKERS.has(s.kind) ? run + 1 : 1;
+    if (run !== MOST_IN_A_ROW + 1) return;
+    const label = getKind(s.kind)?.label ?? s.kind;
+    out.push({ rule: 'rhythm', severity: 'info', slideId: s.id, message: `${run} ${label} slides in a row. Change the slide type every one to three slides: a picture, a quote or a big number keeps a talk moving.` });
+  });
+  return out;
+}
+
+export const RHYTHM_RULE: CheckRule = {
+  id: 'rhythm',
+  run: ({ slides }) => sameTypeRuns(slides.map((s) => s.slide)),
+};
+
+export const TALK_RULES: CheckRule[] = [RHYTHM_RULE];
 
 // ─── Lesson rules ─────────────────────────────────────────────────────
 // What a slide asks comes from its kind's checks(): a question, a recall prompt, a statement to judge,
@@ -236,9 +265,10 @@ export const SAME_CHECK_RULE: CheckRule = {
 
 export const LESSON_RULES: CheckRule[] = [GIVEN_AWAY_RULE, SAME_CHECK_RULE];
 
-/** The rules a deck is checked against: the core ones, and the lesson rules for a lesson. */
+/** The rules a deck is checked against: the core ones, with the lesson rules for a lesson and the talk rules for a talk. */
 export function rulesFor(deck: Pick<Deck, 'purpose' | 'lessonId'>): CheckRule[] {
-  return deckPurpose(deck) === 'lesson' ? [...CORE_RULES, ...LESSON_RULES] : CORE_RULES;
+  const purpose = deckPurpose(deck);
+  return purpose === 'lesson' ? [...CORE_RULES, ...LESSON_RULES] : purpose === 'talk' ? [...CORE_RULES, ...TALK_RULES] : CORE_RULES;
 }
 
 /** The lesson rules alone, on the visible slides, for the studio and the assistant. Empty for other purposes. */
@@ -246,6 +276,12 @@ export function lessonIssues(deck: Pick<Deck, 'slides' | 'title' | 'purpose' | '
   if (deckPurpose(deck) !== 'lesson') return [];
   const shown = deck.slides.filter((s) => !s.hidden);
   return [...givenAway(shown, deck.title), ...sameChecks(shown)];
+}
+
+/** The text-only rules of the deck's purpose, on the visible slides: the lesson rules, or the talk's rhythm. */
+export function purposeIssues(deck: Pick<Deck, 'slides' | 'title' | 'purpose' | 'lessonId'>): CheckIssue[] {
+  if (deckPurpose(deck) === 'talk') return sameTypeRuns(deck.slides.filter((s) => !s.hidden));
+  return lessonIssues(deck);
 }
 
 /** One slide laid out as the studio stage draws it: every warning, the overflow ones, and the words against the budget. */

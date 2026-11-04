@@ -5,7 +5,7 @@
 import type { Box, ChartBox, TableBox } from '../engine/boxes';
 import { cssFont, wrapLines } from '../engine/measure';
 import type { Theme } from '../engine/themes';
-import { M, type LayoutContext, fam, read, shape, slideTitle, sz, text } from './kit';
+import { M, SOURCE_FIELD, type LayoutContext, fam, read, shape, slideTitle, sourceLine, sz, text } from './kit';
 import type { AnyKind, SlideKindDefinition } from './types';
 
 type C = Record<string, unknown>;
@@ -145,6 +145,22 @@ export function chartTypeOf(variant: string | undefined): ChartType {
   return (CHART_TYPES as readonly string[]).includes(variant ?? '') ? variant as ChartType : 'column';
 }
 
+/** Whether a takeaway names this label: as a whole word, or anywhere in Chinese, Japanese or Korean. */
+function names(takeaway: string, label: string): boolean {
+  const l = label.trim().toLowerCase();
+  if (!l) return false;
+  const t = takeaway.toLowerCase();
+  if (/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u.test(l)) return t.includes(l);
+  const escaped = l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^\\p{L}\\p{N}])${escaped}(?:[^\\p{L}\\p{N}]|$)`, 'u').test(t);
+}
+
+/** The one category a takeaway names, or -1 when it names none or several. */
+export function namedLabel(takeaway: string, labels: string[]): number {
+  const hits = labels.map((l, i) => (names(takeaway, l) ? i : -1)).filter((i) => i >= 0);
+  return hits.length === 1 ? hits[0]! : -1;
+}
+
 /** Builds the chart box for a content area. Exported so other kinds can place a chart too. */
 export function chartBox(ctx: LayoutContext, c: C, variant: string | undefined, area: { x: number; y: number; w: number; h: number }, extra: Partial<ChartBox> = {}): ChartBox | null {
   const chart = chartTypeOf(variant);
@@ -159,7 +175,18 @@ export function chartBox(ctx: LayoutContext, c: C, variant: string | undefined, 
   const decimals = Math.max(0, ...all.map(decimalsOf));
   const unit = read.str(c, 'unit').trim().replace(/["&<>\\]/g, '').slice(0, 8);
   const showValues = read.bool(c, 'values', true);
-  const colors = round ? sliceColors(ctx.theme, rows.length) : seriesColors(ctx.theme).slice(0, series.length);
+  let colors = round ? sliceColors(ctx.theme, rows.length) : seriesColors(ctx.theme).slice(0, series.length);
+  // A takeaway says what to look at: that keeps its colour and the rest go grey. With two series,
+  // the first is the one the slide is about and the second the comparison.
+  let pointColors: string[] | undefined;
+  const takeaway = read.str(c, 'takeaway').trim();
+  if (takeaway && read.bool(c, 'highlight', true)) {
+    const grey = round ? ctx.theme.colors.muted : mix(ctx.theme.colors.muted, ctx.theme.colors.bg, 0.45);
+    const named = namedLabel(takeaway, labels);
+    if (two) colors = [colors[0]!, grey];
+    else if (named >= 0 && round) colors = labels.map((_, i) => (i === named ? ctx.theme.colors.accent : grey));
+    else if (named >= 0 && chart !== 'line') pointColors = labels.map((_, i) => (i === named ? colors[0]! : grey));
+  }
   let axis: ChartBox['axis'];
   if (!round) {
     const lo = Math.min(...all);
@@ -169,7 +196,7 @@ export function chartBox(ctx: LayoutContext, c: C, variant: string | undefined, 
     if (showValues && hi > 0 && axis.max - hi < axis.step * 0.2) axis = { ...axis, max: Number((axis.max + axis.step).toPrecision(12)) };
   }
   const box: ChartBox = {
-    type: 'chart', id: 'chart', ...area, chart, labels, series, colors,
+    type: 'chart', id: 'chart', ...area, chart, labels, series, colors, ...(pointColors ? { pointColors } : {}),
     font: 'body', fontSize: sz(ctx, 26),
     textColor: ctx.theme.colors.muted, valueColor: ctx.theme.colors.ink, insideColor: ctx.theme.colors.onAccent,
     gridColor: ctx.theme.colors.line, edgeColor: ctx.theme.colors.bg,
@@ -210,9 +237,11 @@ const chart: SlideKindDefinition<C> = {
     { key: 'unit', label: 'Unit', type: 'text', placeholder: '%, $, kg…' },
     { key: 'unitBefore', label: 'Put the unit before the number', type: 'toggle', help: 'For currencies, like $40.' },
     { key: 'takeaway', label: 'Takeaway', type: 'textarea', rows: 2, help: 'One line that says what the chart shows.' },
+    SOURCE_FIELD,
     { key: 'values', label: 'Show values', type: 'toggle' },
     { key: 'legend', label: 'Show legend', type: 'toggle', help: 'Shown for two series, and for pie and doughnut charts.' },
     { key: 'reveal', label: 'Show the takeaway on click', type: 'toggle' },
+    { key: 'highlight', label: 'Highlight what the takeaway names', type: 'toggle', help: 'The bar or slice the takeaway names (with two series, the first series) keeps its colour, and the rest turn grey.' },
   ],
   create: () => ({
     title: 'Revenue by quarter',
@@ -224,7 +253,7 @@ const chart: SlideKindDefinition<C> = {
     ],
     series: 'This year', series2: 'Last year', unit: '$', unitBefore: true,
     takeaway: 'Q4 was our best quarter, up 37% on last year.',
-    values: true, legend: true, reveal: false,
+    values: true, legend: true, reveal: false, highlight: true,
   }),
   heading: (c) => read.str(c, 'title') || 'Chart',
   text: (c) => {
@@ -236,12 +265,15 @@ const chart: SlideKindDefinition<C> = {
       rows.length ? read.str(c, 'series') : '',
       two ? read.str(c, 'series2') : '',
       read.str(c, 'takeaway'),
+      read.str(c, 'source'),
     ].filter((s) => s.trim());
   },
   layout(c, ctx, variant) {
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title'));
     const boxes: Box[] = [box];
-    let chartBottom = M.bottom;
+    const source = sourceLine(ctx, read.str(c, 'source'));
+    if (source.box) boxes.push(source.box);
+    let chartBottom = source.bottom;
     const takeaway = read.str(c, 'takeaway').trim();
     if (takeaway) {
       const step = read.bool(c, 'reveal') ? 1 : undefined;
@@ -250,7 +282,7 @@ const chart: SlideKindDefinition<C> = {
         id: 'takeaway', text: takeaway, x: M.x + bar + 32, y: 0, w: M.w - bar - 32 - 120, h: sz(ctx, 40) * 1.3 * 2 + 4,
         max: 40, min: 28, weight: 600, maxLines: 2, hug: true, bind: 'takeaway', step,
       });
-      t.y = M.bottom - t.h;
+      t.y = source.bottom - t.h;
       boxes.push(shape({ id: 'takeaway-bar', shape: 'rect', x: M.x, y: t.y, w: bar, h: t.h, radius: bar / 2, fill: ctx.theme.colors.accent, step }));
       boxes.push(t);
       chartBottom = t.y - sz(ctx, 40);

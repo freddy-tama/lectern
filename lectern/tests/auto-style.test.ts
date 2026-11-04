@@ -97,7 +97,7 @@ describe('suggested look', () => {
 
   it('follows the purpose for reports and pitches', () => {
     expect(suggestLook(deckOf([], { purpose: 'report' }))).toBe('minimal');
-    expect(suggestLook(deckOf([], { purpose: 'pitch' }))).toBe('midnight');
+    expect(suggestLook(deckOf([], { purpose: 'pitch' }))).toBe('campus');
   });
 });
 

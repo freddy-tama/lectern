@@ -123,7 +123,7 @@ function Axes({ box, fmt, width, font }: { box: ChartBox; fmt: Fmt; width: Width
         const y = scale(v);
         const yTop = Math.min(y, zero);
         const h = Math.abs(zero - y);
-        parts.push(<rect key={`b${si}-${i}`} x={x} y={yTop} width={bw} height={Math.max(h, 0)} fill={box.colors[si % box.colors.length]} />);
+        parts.push(<rect key={`b${si}-${i}`} x={x} y={yTop} width={bw} height={Math.max(h, 0)} fill={box.pointColors?.[i] ?? box.colors[si % box.colors.length]} />);
         if (box.showValues) {
           parts.push(<text key={`v${si}-${i}`} x={x + bw / 2} y={v >= 0 ? y - fs * 0.45 : y + fs * 0.45} textAnchor="middle" dominantBaseline={v >= 0 ? 'auto' : 'hanging'} fill={valueColor}>{fmt(v)}</text>);
         }
@@ -167,7 +167,7 @@ function Axes({ box, fmt, width, font }: { box: ChartBox; fmt: Fmt; width: Width
     // PowerPoint stacks the first series lowest within each group.
     const y = y0 + slot * i + (slot - group) / 2 + (k - 1 - si) * bh * (1 - OVERLAP);
     const x = scale(v);
-    parts.push(<rect key={`b${si}-${i}`} x={Math.min(x, zero)} y={y} width={Math.abs(x - zero)} height={bh} fill={box.colors[si % box.colors.length]} />);
+    parts.push(<rect key={`b${si}-${i}`} x={Math.min(x, zero)} y={y} width={Math.abs(x - zero)} height={bh} fill={box.pointColors?.[i] ?? box.colors[si % box.colors.length]} />);
     if (box.showValues) {
       parts.push(<text key={`v${si}-${i}`} x={v >= 0 ? x + fs * 0.35 : x - fs * 0.35} y={y + bh / 2} textAnchor={v >= 0 ? 'start' : 'end'} dominantBaseline="central" fill={valueColor}>{fmt(v)}</text>);
     }

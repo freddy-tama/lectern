@@ -4,7 +4,7 @@
 // into proposals the presenter reviews. Nothing here touches the real deck.
 
 import { partPlaces } from '../../../core/deck/auto-style';
-import { lessonIssues } from '../../../core/deck/check';
+import { purposeIssues } from '../../../core/deck/check';
 import { hasSession, sessionMinutes, slideTimeLabel, slideTimes } from '../../../core/deck/timing';
 import { type Deck, type Slide, deckPurpose } from '../../../core/deck/types';
 import type { SlideLayout } from '../../../core/engine/boxes';
@@ -177,7 +177,7 @@ export class Workspace {
     const planned = this.plannedMinutes && this.plannedMinutes !== total ? this.plannedMinutes : null;
     // A lesson's slides also carry what the lesson rules found: answers given away, one thing tested twice.
     const taught = new Map<string, string[]>();
-    for (const issue of lessonIssues(d)) if (issue.slideId) taught.set(issue.slideId, [...(taught.get(issue.slideId) ?? []), issue.message]);
+    for (const issue of purposeIssues(d)) if (issue.slideId) taught.set(issue.slideId, [...(taught.get(issue.slideId) ?? []), issue.message]);
     const lines = [
       `Deck: “${d.title || 'Untitled'}” · a ${deckPurpose(d)} for ${d.audience === 'young' ? 'young learners aged 6-11' : d.audience === 'teen' ? 'teenagers' : 'adults'} · look: ${t.name}`,
       hasSession(d)

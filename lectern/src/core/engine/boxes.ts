@@ -98,6 +98,8 @@ export interface ChartBox extends BoxBase {
   series: ChartSeries[];
   /** Colours in order: one per series, or one per slice for pie and doughnut. */
   colors: string[];
+  /** One colour per category, for a single series of columns or bars: the highlighted one in colour, the rest grey. */
+  pointColors?: string[];
   font: FontRole;
   /** Axis, label and legend text size in canvas px. */
   fontSize: number;
