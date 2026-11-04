@@ -44,7 +44,7 @@ describe('where a document comes from', () => {
     zip.file('word/document.xml', '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body/></w:document>');
     zip.file('docProps/core.xml', `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/">
       <dc:creator>Dewi</dc:creator><dcterms:created>2023-05-04T10:00:00Z</dcterms:created><dcterms:modified>2025-01-09T10:00:00Z</dcterms:modified></cp:coreProperties>`);
-    const file = new File([await zip.generateAsync({ type: 'uint8array' })], 'survey.docx');
+    const file = new File([await zip.generateAsync({ type: 'blob' })], 'survey.docx');
     expect(await documentDetails(file)).toEqual({ author: 'Dewi', published: '2023-05-04', modified: '2025-01-09' });
     // A file that says nothing gives nothing, and never throws.
     expect(await documentDetails(new File(['plain'], 'notes.txt'))).toEqual({});
