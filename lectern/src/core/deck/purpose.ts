@@ -84,7 +84,7 @@ const LESSON: PurposeWording = {
 - keyPoints are what a learner must remember, phrased so they make sense without the slide. checkQuestion and checkAnswer test understanding of that slide.
 - Close with takeaways, then at most two follow-up tasks: one to practise what was taught, and one open or preview question about what comes next.
 - Keep slides small and the pace quick: about 1-1.5 minutes a slide, and about 1 minute for young learners. A 40-minute lesson has about 25-40 slides.
-- Put a task and its answer on separate slides: the task first, the answer or a model answer on the next slide.
+- Put a task and its answer on separate slides: a task slide with lettered parts and what a good answer includes, then the same task slide with "showAnswers" on and a model answer for each part.
 - Show a passage one chunk at a time: one paragraph or a few sentences on a slide, with its question after it.`,
 };
 

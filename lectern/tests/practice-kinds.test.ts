@@ -230,6 +230,51 @@ describe('match or sort', () => {
   });
 });
 
+describe('task and model answer', () => {
+  const content = {
+    title: 'Task A',
+    task: 'Read paragraph 2 again, then answer in full sentences.',
+    parts: [
+      { prompt: 'Why did the boy leave school in Hawaii?', answer: 'His brother sent him home because he wanted to become a Christian.' },
+      { prompt: 'What did he study next?', answer: 'Medicine, in Hong Kong.' },
+    ],
+    checklist: ['Uses evidence from the text', 'Answers in full sentences'],
+  };
+
+  it('letters the parts, shows what a good answer includes, and gives each model answer its own click', () => {
+    for (const audience of ['young', 'teen', 'adult'] as const) {
+      const layout = lay('task', content, { audience });
+      expect(layout.warnings.filter((w) => !w.includes('words on this slide'))).toEqual([]);
+      expect(layout.steps).toBe(2);
+      inside(layout.boxes);
+    }
+    const { boxes } = lay('task', content);
+    expect(texts(boxes).filter((b) => b.id.startsWith('letter-')).map((b) => b.text)).toEqual(['a)', 'b)']);
+    expect(byId(boxes, 'answer-1')).toMatchObject({ text: 'Medicine, in Hong Kong.', step: 2, reveal: 'answer', bind: 'parts.1.answer' });
+    expect(byId(boxes, 'checklist')).toMatchObject({ text: '•  Uses evidence from the text\n•  Answers in full sentences' });
+    expect(getKind('task')!.checks!(content)).toEqual(content.parts);
+  });
+
+  it('shows the answers from the start on the answer slide, ticks the checklist, and asks nothing', () => {
+    const answers = { ...content, showAnswers: true };
+    const layout = lay('task', answers);
+    expect(layout.steps).toBe(0);
+    expect(byId(layout.boxes, 'answer-0')).toMatchObject({ step: undefined, reveal: undefined });
+    expect((byId(layout.boxes, 'checklist') as TextBox).text.startsWith('✓')).toBe(true);
+    // It tells rather than asks, so the check doesn't count the same thing tested twice.
+    expect(getKind('task')!.checks!(answers)).toEqual([]);
+    expect(getKind('task')!.heading({ showAnswers: true })).toBe('Model answer');
+  });
+
+  it('takes one model answer for a task without parts', () => {
+    const whole = { title: 'Write it', task: 'Describe the water cycle in three sentences.', answer: 'Water evaporates. It condenses into clouds. It falls as rain.' };
+    const layout = lay('task', whole);
+    inside(layout.boxes);
+    expect(byId(layout.boxes, 'answer')).toMatchObject({ step: 1, reveal: 'answer' });
+    expect(getKind('task')!.checks!(whole)).toEqual([{ prompt: whole.task, answer: whole.answer }]);
+  });
+});
+
 describe('title credits', () => {
   it('puts a second credit line under the presenter, in both layouts', () => {
     for (const variant of ['left', 'center']) {
