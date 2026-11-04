@@ -73,21 +73,130 @@ function placeholderOf(p: Element): string {
 
 const FURNITURE = new Set(['sldNum', 'dt', 'ftr', 'hdr']);
 
-/** Title and text of a slide, in the order they appear in the file. */
-export function slideWords(xml: string): { title: string; text: string; hidden: boolean } {
-  const doc = parse(xml);
-  const title: string[] = [];
-  const lines: string[] = [];
-  for (const p of Array.from(doc.getElementsByTagNameNS(A, 'p'))) {
-    const words = paragraphText(p);
-    if (!words) continue;
-    const ph = placeholderOf(p);
-    if (FURNITURE.has(ph)) continue;
-    if (ph === 'title' || ph === 'ctrTitle') title.push(words);
-    lines.push(words);
+/** A text box (or table) on a slide: where it sits, how big its type is and what it says. */
+export interface SlideShape {
+  /** Placeholder type ("title", "body"…), or "" for a plain text box. */
+  ph: string;
+  /** Top-left corner in EMU; NaN when the slide leaves it to the layout. */
+  x: number;
+  y: number;
+  /** The largest type size in it, in points; 0 when the slide leaves it to the layout. */
+  size: number;
+  lines: string[];
+  /** A table's rows of cells. */
+  rows?: string[][];
+}
+
+const child = (el: Element, ns: string, name: string) =>
+  Array.from(el.children).find((c) => c.namespaceURI === ns && c.localName === name);
+
+function offsetOf(el: Element): { x: number; y: number } {
+  const holder = child(el, P, 'spPr') ?? child(el, P, 'grpSpPr') ?? el;
+  const xfrm = child(holder, A, 'xfrm') ?? child(holder, P, 'xfrm');
+  const off = xfrm && child(xfrm, A, 'off');
+  return off ? { x: Number(off.getAttribute('x')), y: Number(off.getAttribute('y')) } : { x: NaN, y: NaN };
+}
+
+/** The largest type size set on a run with words, else the box's own default, in points. */
+function sizeOf(body: Element): number {
+  let most = 0;
+  for (const run of Array.from(body.getElementsByTagNameNS(A, 'r'))) {
+    if (!run.getElementsByTagNameNS(A, 't')[0]?.textContent?.trim()) continue;
+    most = Math.max(most, Number(run.getElementsByTagNameNS(A, 'rPr')[0]?.getAttribute('sz')) || 0);
   }
-  const hidden = doc.documentElement.getAttribute('show') === '0';
-  return { title: title.join(' '), text: lines.join('\n'), hidden };
+  if (!most) for (const d of Array.from(body.getElementsByTagNameNS(A, 'defRPr'))) most = Math.max(most, Number(d.getAttribute('sz')) || 0);
+  return most / 100;
+}
+
+function shapesIn(parent: Element, at?: { x: number; y: number }): SlideShape[] {
+  const out: SlideShape[] = [];
+  for (const el of Array.from(parent.children)) {
+    if (el.localName === 'AlternateContent') {
+      const pick = child(el, el.namespaceURI ?? '', 'Fallback') ?? child(el, el.namespaceURI ?? '', 'Choice');
+      if (pick) out.push(...shapesIn(pick, at));
+      continue;
+    }
+    if (el.namespaceURI !== P) continue;
+    const pos = at ?? offsetOf(el);
+    if (el.localName === 'sp') {
+      const body = child(el, P, 'txBody');
+      const lines = body ? Array.from(body.getElementsByTagNameNS(A, 'p')).map(paragraphText).filter(Boolean) : [];
+      if (!body || !lines.length) continue;
+      const ph = el.getElementsByTagNameNS(P, 'ph')[0];
+      out.push({ ph: ph ? ph.getAttribute('type') ?? 'body' : '', ...pos, size: sizeOf(body), lines });
+    } else if (el.localName === 'graphicFrame') {
+      const table = el.getElementsByTagNameNS(A, 'tbl')[0];
+      if (!table) continue;
+      const rows = Array.from(table.getElementsByTagNameNS(A, 'tr'))
+        .map((tr) => Array.from(tr.getElementsByTagNameNS(A, 'tc')).map((tc) => Array.from(tc.getElementsByTagNameNS(A, 'p')).map(paragraphText).filter(Boolean).join(' ')))
+        .filter((r) => r.some(Boolean));
+      if (rows.length) out.push({ ph: '', ...pos, size: 0, lines: rows.flat().filter(Boolean), rows });
+    } else if (el.localName === 'grpSp') {
+      // A group's members keep their own order, at the group's place on the slide.
+      out.push(...shapesIn(el, pos));
+    }
+  }
+  return out;
+}
+
+/** About a fifth of an inch: boxes this close in height read as one row. */
+const ROW = 182_880;
+
+/**
+ * What a slide says, box by box, in reading order: top to bottom, then left to right, when
+ * every box has a place on the slide (blank-layout decks are often built in any order);
+ * otherwise in the file's order, which placeholder layouts keep sensible.
+ */
+export function slideShapes(xml: string): { shapes: SlideShape[]; hidden: boolean } {
+  const doc = parse(xml);
+  const tree = doc.getElementsByTagNameNS(P, 'spTree')[0];
+  const shapes = tree ? shapesIn(tree) : [];
+  if (shapes.every((s) => Number.isFinite(s.x) && Number.isFinite(s.y))) {
+    shapes.sort((a, b) => Math.round(a.y / ROW) - Math.round(b.y / ROW) || a.x - b.x);
+  }
+  return { shapes, hidden: doc.documentElement.getAttribute('show') === '0' };
+}
+
+/** A short plain text box at one spot: if it is on most slides, it is a label, not content. */
+export function labelKey(s: SlideShape): string {
+  const words = s.lines.join(' ');
+  if (s.rows || (s.ph && s.ph !== 'body') || words.length > 80 || !Number.isFinite(s.x)) return '';
+  return `${words}@${Math.round(s.x / ROW)},${Math.round(s.y / ROW)}`;
+}
+
+/** Labels repeated at the same spot on at least half the slides (and on three or more). */
+export function repeatedLabels(slides: SlideShape[][]): Set<string> {
+  const seen = new Map<string, number>();
+  for (const shapes of slides) {
+    for (const key of new Set(shapes.map(labelKey).filter(Boolean))) seen.set(key, (seen.get(key) ?? 0) + 1);
+  }
+  const least = Math.max(3, slides.length / 2);
+  return new Set([...seen].filter(([, n]) => n >= least).map(([k]) => k));
+}
+
+const LINK = /^(?:https?:\/\/|www\.)\S+$|^[\w-]+(?:\.[\w-]+)*\.(?:com|org|net|edu|gov|io|co|uk|cn|ai|app|dev)(?:\/\S*)?$/i;
+
+/**
+ * The slide's name: its title placeholder; on a slide without one, the box in the largest
+ * type, skipping labels repeated on every slide, web addresses and long passages.
+ */
+function pickTitle(shapes: SlideShape[], repeated: Set<string>): string {
+  const placed = shapes.filter((s) => s.ph === 'title' || s.ph === 'ctrTitle');
+  if (placed.length) return placed.map((s) => s.lines.join(' ')).join(' ');
+  let best: SlideShape | undefined;
+  for (const s of shapes) {
+    const words = s.lines.join(' ');
+    if (s.rows || FURNITURE.has(s.ph) || repeated.has(labelKey(s)) || LINK.test(words) || words.length > 90 || s.lines.length > 2) continue;
+    if (!best || s.size > best.size) best = s;
+  }
+  return best ? best.lines.join(' ') : '';
+}
+
+/** Title and text of a slide, in reading order. Labels found on most slides are left out. */
+export function slideWords(xml: string, repeated: Set<string> = new Set()): { title: string; text: string; hidden: boolean } {
+  const { shapes, hidden } = slideShapes(xml);
+  const kept = shapes.filter((s) => !FURNITURE.has(s.ph) && !repeated.has(labelKey(s)));
+  return { title: pickTitle(kept, repeated), text: kept.flatMap((s) => s.lines).join('\n'), hidden };
 }
 
 /** The speaker notes of a notes slide: the body placeholder's paragraphs. */
@@ -148,9 +257,11 @@ export async function readPptx(buffer: ArrayBuffer): Promise<PptxDeck> {
       .sort((a, b) => Number(/(\d+)\.xml$/.exec(a)![1]) - Number(/(\d+)\.xml$/.exec(b)![1]));
   }
   if (!files.length) throw new Error('This PowerPoint file has no slides.');
+  const xml = await Promise.all(files.map(async (f) => (await read(f)) ?? ''));
+  const repeated = repeatedLabels(xml.map((x) => slideShapes(x).shapes));
   const slides: PptxSlide[] = [];
   for (const [i, file] of files.entries()) {
-    const words = slideWords((await read(file)) ?? '');
+    const words = slideWords(xml[i]!, repeated);
     const folder = file.slice(0, file.lastIndexOf('/'));
     const slideRels = relationships(await read(`${folder}/_rels/${file.slice(folder.length + 1)}.rels`), folder);
     const notesPart = [...slideRels.values()].find((r) => r.type.endsWith('/notesSlide'))?.target;
