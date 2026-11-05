@@ -3,7 +3,7 @@ import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { emptyNotes } from '../src/core/deck/types';
 import { db } from '../src/data/db';
-import { type SiteDeck, addSiteDecks, siteDeckId } from '../src/data/site-decks';
+import { type SiteDeck, addSiteDecks, siteDeckId, wantsSiteDecks } from '../src/data/site-decks';
 
 function deckFile(title: string) {
   return JSON.stringify({
@@ -71,5 +71,20 @@ describe('site decks', () => {
   it('does nothing when the site ships no decks', async () => {
     expect(await addSiteDecks()).toBe(0);
     expect(await db.settings.get('site-decks')).toBeUndefined();
+  });
+});
+
+describe('which pages fetch site decks', () => {
+  it('skips phones joining a share or opening a hand-out link', () => {
+    expect(wantsSiteDecks('/join/KAP83B')).toBe(false);
+    expect(wantsSiteDecks('/join')).toBe(false);
+    expect(wantsSiteDecks('/pack')).toBe(false);
+  });
+
+  it('fetches them everywhere else', () => {
+    expect(wantsSiteDecks('/')).toBe(true);
+    expect(wantsSiteDecks('/decks')).toBe(true);
+    expect(wantsSiteDecks('/joiner')).toBe(true);
+    expect(wantsSiteDecks('/present/d_1')).toBe(true);
   });
 });

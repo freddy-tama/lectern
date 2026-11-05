@@ -38,8 +38,10 @@ async function seed() {
     await db.settings.put({ key: 'seeded', value: true });
   }
   await addSampleNotes();
-  const { addSiteDecks } = await import('./site-decks');
-  await addSiteDecks();
+  // Site decks can be large, so they load in the background, and site-decks.ts skips share pages.
+  void import('./site-decks')
+    .then(({ addSiteDecks, wantsSiteDecks }) => (typeof location === 'undefined' || wantsSiteDecks(location.pathname) ? addSiteDecks() : 0))
+    .catch((error: unknown) => console.error('Could not add the site decks', error));
 }
 
 /** Sample notes and timetables came after the first samples. Adds them once where the sample courses still exist. */
