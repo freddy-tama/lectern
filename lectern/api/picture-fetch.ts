@@ -18,7 +18,9 @@ import { isIP } from 'node:net';
 export const MAX_PICTURE_BYTES = 12 * 1024 * 1024;
 const TIMEOUT_MS = 15_000;
 const MAX_REDIRECTS = 4;
-const USER_AGENT = 'Lectern/0.1 (slide picture finder)';
+// Wikimedia's API refuses requests from cloud servers (EdgeOne's, for one) unless the user agent
+// says how to reach the operator: https://meta.wikimedia.org/wiki/User-Agent_policy
+const USER_AGENT = 'Lectern/0.1 (https://github.com/freddy-tama/lectern; slide picture finder)';
 
 export class PictureFetchError extends Error {
   constructor(message: string, readonly status = 400) {

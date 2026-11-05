@@ -5,7 +5,7 @@ import type { FieldSpec } from '../../core/kinds/types';
 import type { DeckDraft } from '../../core/plugins/api';
 import { draftingHints } from '../../core/plugins/registry';
 import type { Density } from '../../data/profile';
-import { aiPost } from '../account/session';
+import { aiPost, aiStatus as askStatus } from '../account/session';
 
 export interface AiStatus {
   available: boolean;
@@ -20,7 +20,7 @@ let status: Promise<AiStatus> | null = null;
 
 /** Asks the server whether AI drafting is configured. Cached for the session. */
 export function aiStatus(): Promise<AiStatus> {
-  status ??= fetch('/api/draft-deck', { method: 'GET' })
+  status ??= askStatus('/api/draft-deck')
     .then((r) => (r.ok ? r.json() : { available: false }))
     .then((j: AiStatus) => ({ available: Boolean(j.available), model: j.model, needsCode: Boolean(j.needsCode) }))
     .catch(() => ({ available: false }));

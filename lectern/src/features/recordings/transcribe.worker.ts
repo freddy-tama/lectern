@@ -8,15 +8,41 @@
 
 import { Tensor, WhisperTextStreamer, env, pipeline } from '@huggingface/transformers';
 import { SAMPLE_RATE, isQuiet, loudestWindow, planSections, windowCount } from '../../core/transcribe/audio';
+import { modelHosts, pickModelHost, probeUrl } from '../../core/transcribe/model-hosts';
 import { cleanSegments, offsetSegments } from '../../core/transcribe/segments';
 import type { TranscriptSegment } from '../../core/transcribe/types';
 import type { Device, FromWorker, ToWorker } from './protocol';
 
 env.allowLocalModels = false;
 env.useBrowserCache = true;
+const wasm = (env.backends.onnx as { wasm?: { numThreads?: number; wasmPaths?: unknown } } | undefined)?.wasm;
 // Without cross-origin isolation (sharing needs cross-origin connections) WebAssembly runs on one thread.
-const wasm = (env.backends.onnx as { wasm?: { numThreads?: number } } | undefined)?.wasm;
 if (wasm && !(self as unknown as { crossOriginIsolated?: boolean }).crossOriginIsolated) wasm.numThreads = 1;
+// transformers.js fetches the speech engine's WebAssembly from jsDelivr, which is unreliable in
+// mainland China. The build already ships the same file in /assets, so production uses that copy.
+// (The dev server pre-bundles transformers.js away from the file, so development keeps jsDelivr.)
+if (wasm && import.meta.env.PROD) wasm.wasmPaths = undefined;
+
+const MODEL_HOSTS = modelHosts(import.meta.env.VITE_MODEL_HOSTS as string | undefined, self.location.href);
+/** transformers.js keeps downloaded model files in this cache, under their full address. */
+const MODEL_CACHE = 'transformers-cache';
+const hostFor = new Map<string, Promise<string>>();
+
+/** The host a model was downloaded from before, so it opens offline, or else the first that answers. */
+function modelHost(model: string): Promise<string> {
+  let host = hostFor.get(model);
+  if (!host) {
+    host = (async () => {
+      try {
+        const cache = await caches.open(MODEL_CACHE);
+        for (const h of MODEL_HOSTS) if (await cache.match(probeUrl(h, model))) return h;
+      } catch { /* no Cache Storage here: ask the hosts */ }
+      return pickModelHost(MODEL_HOSTS, model);
+    })();
+    hostFor.set(model, host);
+  }
+  return host;
+}
 
 const CHUNK_SECONDS = 30;
 const STRIDE_SECONDS = 5;
@@ -90,6 +116,8 @@ async function load(jobId: number, model: string, avoidWebgpu = false): Promise<
     post({ type: 'model', jobId, loaded: sum, total });
   };
   let lastError: unknown = null;
+  post({ type: 'phase', jobId, phase: 'model', device: attempts[0]!.device });
+  env.remoteHost = await modelHost(model);
   for (const attempt of attempts) {
     post({ type: 'phase', jobId, phase: 'model', device: attempt.device });
     try {

@@ -1,7 +1,7 @@
 // Client side of /api/deck-assistant: one request of the deck assistant. The loop (./agent/loop.ts) runs here,
 // calling the server once per step; this file is the server call and the request the panel makes.
 
-import { aiPost, refreshCreditsSoon } from '../account/session';
+import { aiPost, aiStatus, refreshCreditsSoon } from '../account/session';
 import { type CallEvent, type CallModel, type HistoryMessage, type LoopEvent, type StepCard, type TurnInput, type TurnResult, runTurn } from './agent/loop';
 import { SlideAiError } from './slide-ai';
 
@@ -15,7 +15,7 @@ let status: Promise<{ available: boolean; needsCode: boolean }> | null = null;
 
 /** Whether the server has the assistant set up. Asked once per session; a failed check is asked again. */
 export function assistantStatus() {
-  status ??= fetch(ENDPOINT, { method: 'GET' })
+  status ??= aiStatus(ENDPOINT)
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
     .then((j: { available?: boolean; needsCode?: boolean }) => ({ available: Boolean(j.available), needsCode: Boolean(j.needsCode) }))
     .catch(() => {

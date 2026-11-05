@@ -1,7 +1,7 @@
 // Client for the optional AI step: class notes from a transcript (api/lecture-notes.ts).
 
 import type { LectureNotes } from '../../core/transcribe/types';
-import { aiPost } from '../account/session';
+import { aiPost, aiStatus } from '../account/session';
 
 export interface NotesAiStatus {
   available: boolean;
@@ -12,7 +12,7 @@ let status: Promise<NotesAiStatus> | null = null;
 
 /** Asks the server whether AI class notes are set up. Cached for the session. */
 export function notesAiStatus(): Promise<NotesAiStatus> {
-  status ??= fetch('/api/lecture-notes', { method: 'GET' })
+  status ??= aiStatus('/api/lecture-notes')
     .then((r) => (r.ok && /json/.test(r.headers.get('content-type') ?? '') ? r.json() : { available: false }))
     .then((j: Partial<NotesAiStatus>) => ({ available: Boolean(j.available), needsCode: Boolean(j.needsCode) }))
     .catch(() => ({ available: false, needsCode: false }));

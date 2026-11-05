@@ -6,7 +6,7 @@ import type { CallUsage } from '../../core/ai/prices';
 import { findQuestion } from '../../core/import/finished';
 import { type Deck, type Slide, deckPurpose } from '../../core/deck/types';
 import { db } from '../../data/db';
-import { aiPost } from '../account/session';
+import { aiPost, aiStatus } from '../account/session';
 import { readUsage } from '../autodeck/usage';
 import { aiCopy } from './render';
 
@@ -19,7 +19,7 @@ let status: Promise<NotesStatus> | null = null;
 
 /** Asks the server whether AI notes are set up. Cached for the session. */
 export function notesStatus(): Promise<NotesStatus> {
-  status ??= fetch('/api/teleprompter', { method: 'GET' })
+  status ??= aiStatus('/api/teleprompter')
     .then((r) => (r.ok && /json/.test(r.headers.get('content-type') ?? '') ? r.json() : { available: false }))
     .then((j: Partial<NotesStatus>) => ({ available: Boolean(j.available), needsCode: Boolean(j.needsCode) }))
     .catch(() => ({ available: false, needsCode: false }));

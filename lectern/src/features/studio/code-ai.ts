@@ -4,7 +4,7 @@
 import type { Audience, DeckPurpose } from '../../core/deck/types';
 import { type Theme, THEMES, fontFamily } from '../../core/engine/themes';
 import { cleanSvg, extractHtml, looksLikeHtml, svgAspect } from '../../core/media/embed';
-import { aiPost } from '../account/session';
+import { aiPost, aiStatus } from '../account/session';
 
 const ENDPOINT = '/api/make-code';
 
@@ -17,7 +17,7 @@ let status: Promise<CodeAiStatus> | null = null;
 
 /** Whether the server can write code. Asked once per session; a failed check is asked again. */
 export function codeAiStatus(): Promise<CodeAiStatus> {
-  status ??= fetch(ENDPOINT, { method: 'GET' })
+  status ??= aiStatus(ENDPOINT)
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
     .then((j: Partial<CodeAiStatus>) => ({ available: Boolean(j.available), needsCode: Boolean(j.needsCode) }))
     .catch(() => {

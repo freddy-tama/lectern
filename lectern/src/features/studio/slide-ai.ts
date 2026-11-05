@@ -8,7 +8,7 @@ import { DENSITY, wordBudget } from '../../core/kinds/kit';
 import { getKind } from '../../core/kinds/registry';
 import type { AnyKind, FieldSpec } from '../../core/kinds/types';
 import { draftingHints } from '../../core/plugins/registry';
-import { aiPost } from '../account/session';
+import { aiPost, aiStatus } from '../account/session';
 import { aiFieldType } from './ai';
 
 const ENDPOINT = '/api/revise-slide';
@@ -164,7 +164,7 @@ let status: Promise<SlideAiStatus> | null = null;
 
 /** Whether the server has AI set up for slides. Asked once per session; a failed check is asked again. */
 export function slideAiStatus(): Promise<SlideAiStatus> {
-  status ??= fetch(ENDPOINT, { method: 'GET' })
+  status ??= aiStatus(ENDPOINT)
     .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
     .then((j: Partial<SlideAiStatus>) => ({ available: Boolean(j.available), needsCode: Boolean(j.needsCode) }))
     .catch(() => {
