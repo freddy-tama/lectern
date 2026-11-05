@@ -1,5 +1,5 @@
 import {
-  AlertCircle, AudioLines, Check, Download, Eye, FileText, Image as ImageIcon, Loader2, MonitorPlay, NotebookPen, Pencil, Presentation,
+  AlertCircle, AudioLines, Camera, Check, Download, Eye, FileText, Globe, Image as ImageIcon, Link2, Loader2, MonitorPlay, NotebookPen, Pencil, Presentation,
   RotateCcw, Sparkles, Upload, Wand2, X,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
@@ -7,16 +7,18 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from '
 import { Link, useNavigate } from 'react-router-dom';
 import { draftToDeck } from '../../core/deck/draft';
 import { fitChanged } from '../../core/deck/fit';
+import { photosToAdd } from '../../core/deck/photo-notes';
 import { sessionMinutes } from '../../core/deck/timing';
+import { DECK_LANGUAGES, deckLanguage } from '../../core/deck/languages';
 import { AUDIENCES, type Audience, type Deck, type DeckPurpose, PURPOSES, uid } from '../../core/deck/types';
 import { allThemes, fontFamily } from '../../core/engine/themes';
 import { DENSITY, wordBudget } from '../../core/kinds/kit';
-import { documentPictures, fileToOutline } from '../../core/import/files';
+import { documentDetails, documentPictures, fileToOutline } from '../../core/import/files';
 import { draftingHints } from '../../core/plugins/registry';
 import { transcriptText } from '../../core/transcribe/segments';
 import { db } from '../../data/db';
 import { type DraftJob, type DraftRequest, type PlannedSlide, type UsageByModel, deleteJob, getJob, openJob } from '../../data/draft-jobs';
-import { DENSITIES, type Density, LENGTHS, rememberDeckPrefs, useProfile } from '../../data/profile';
+import { DENSITIES, type Density, LENGTHS, PHOTO_CHOICES, type PhotoChoice, photoChoice, rememberDeckPrefs, useProfile } from '../../data/profile';
 import { addDeck, isoDate, saveAsset } from '../../data/repo';
 import { useToast } from '../../ui/Toast';
 import { addRecordingFile } from '../recordings/actions';
@@ -33,15 +35,17 @@ import { type AiQuestion, draftOutline, fetchQuestions } from './ai';
 import { approveOutline, createJob, finishJob, recover, runJob, runsSnapshot, saveOutline, stopJob, subscribeRuns, toggleDraftFit } from './drafting';
 import { DraftingView, ResumeCard, useJobPictures } from './DraftingView';
 import { dragHasFiles, onHandOff, takeHandedOff } from './handoff';
-import { ACCEPT_ALL, PICTURE_ROLES, type PictureRole, type Source, buildMaterial, countWords, fallbackTopic, hasMaterial, kindOf, offlineDraft, picturesOf, placePictures, purposeLabel, stem } from './make';
+import { asLink, fetchLink, mergeDetails } from './links';
+import { isResearch, researchSource, researchTopic } from './research';
+import { ACCEPT_ALL, PICTURE_ROLES, type PictureRole, type Source, buildMaterial, countWords, fallbackTopic, hasMaterial, kindOf, offlineDraft, originLine, picturesOf, placePictures, purposeLabel, stem } from './make';
 import { pictureForAi, pictureForDeck } from './pictures';
 import { OutlineEditor } from './OutlineEditor';
 import { type Answer, QuestionDialog } from './QuestionDialog';
-import { usageCost, usageLine, usageTotals } from './usage';
+import { type CallUsage, usageCost, usageLine, usageTotals } from './usage';
 import '../../styles/autodeck.css';
 
 /** "job" shows the open drafting job: its outline, its slides being written, or the finished deck. */
-type Stage = 'gather' | 'reading' | 'asking' | 'outlining' | 'building' | 'job' | 'done';
+type Stage = 'gather' | 'researching' | 'reading' | 'asking' | 'outlining' | 'building' | 'job' | 'done';
 
 const NOTHING: ReadonlySet<string> = new Set();
 
@@ -83,6 +87,20 @@ function useSources(): Source[] {
   );
 }
 
+/**
+ * Reads a document into its source: its text, the pictures inside it, and where it comes from.
+ * A web page read from a link is named by its own title.
+ */
+function readDocument(s: Pick<Source, 'id' | 'file' | 'details'>) {
+  Promise.all([fileToOutline(s.file), documentPictures(s.file).catch(() => []), documentDetails(s.file)])
+    .then(([text, pictures, found]) => {
+      const title = s.details?.url && /\.html?$/i.test(s.file.name) ? /^# (.+)$/m.exec(text)?.[1]?.trim().slice(0, 90) : undefined;
+      const file = title ? new File([s.file], `${title.replace(/[\\/:*?"<>|]+/g, ' ')}.html`, { type: s.file.type }) : s.file;
+      patch(s.id, { status: 'ready', file, text, words: countWords(text), pictures, details: mergeDetails(s.details ?? {}, found) });
+    })
+    .catch((e: Error) => patch(s.id, { status: 'error', error: e.message }));
+}
+
 let listening = false;
 
 /** A finished transcript becomes that file's text, whether or not the page is open. */
@@ -116,6 +134,11 @@ export default function MakePage() {
   const [density, setDensity] = useState<Density>(profile.deck.density);
   const [themeId, setThemeId] = useState(profile.deck.themeId);
   const [ask, setAsk] = useState(profile.askQuestions);
+  const [language, setLanguage] = useState(deckLanguage(profile.deck.language));
+  const [research, setResearch] = useState(profile.deck.research === true);
+  const [photos, setPhotos] = useState<PhotoChoice>(photoChoice(profile.deck));
+  /** What the web search cost, added to the job's usage once the outline is made. */
+  const researchUsage = useRef<CallUsage[]>([]);
   const [ai, setAi] = useState<AiStatus | null>(null);
   const [code, setCode] = useState(savedCode);
   const [stage, setStage] = useState<Stage>(kept.jobId ? 'job' : 'gather');
@@ -125,6 +148,7 @@ export default function MakePage() {
   const [deck, setDeck] = useState<Deck | null>(null);
   const [error, setError] = useState('');
   const [dragging, setDragging] = useState(false);
+  const [link, setLink] = useState('');
   const [exporting, setExporting] = useState(false);
   const [saving, setSaving] = useState(false);
   const [jobId, setJobIdState] = useState(kept.jobId);
@@ -182,9 +206,7 @@ export default function MakePage() {
     if (fresh.some((s) => s.kind === 'audio')) listenForTranscripts();
     for (const s of fresh) {
       if (s.kind === 'doc') {
-        Promise.all([fileToOutline(s.file), documentPictures(s.file).catch(() => [])])
-          .then(([text, pictures]) => patch(s.id, { status: 'ready', text, words: countWords(text), pictures }))
-          .catch((e: Error) => patch(s.id, { status: 'error', error: e.message }));
+        readDocument(s);
       } else if (s.kind === 'audio') {
         addRecordingFile(s.file, { title: stem(s.file.name), date: isoDate(new Date()) })
           .then((rec) => { patch(s.id, { recordingId: rec.id }); return transcribe(rec.id, loadPrefs()); })
@@ -192,6 +214,26 @@ export default function MakePage() {
       }
     }
   }, [toast, openJobId]);
+
+  /** A pasted link: the server downloads it, then it reads like a dropped file, or joins the pictures. */
+  const addLink = () => {
+    const url = asLink(link);
+    if (!url) { setError('Paste a whole link, starting with https://'); return; }
+    if (kept.sources.length >= MAX_FILES) { toast.show(`Up to ${MAX_FILES} files at a time.`, { tone: 'error' }); return; }
+    setError('');
+    setLink('');
+    setStage((s) => (s === 'done' ? 'gather' : s));
+    const host = new URL(url).hostname.replace(/^www\./, '');
+    const s: Source = { id: uid('src'), file: new File([], host), kind: 'doc', status: 'reading', text: '', words: 0, pictures: [], details: { url } };
+    setSources((existing) => [...existing, s]);
+    fetchLink(url)
+      .then((got) => {
+        if (got.picture) { patch(s.id, { file: got.file, kind: 'picture', status: 'ready', pictures: [got.file], details: got.details }); return; }
+        patch(s.id, { file: got.file, details: got.details });
+        readDocument({ id: s.id, file: got.file, details: got.details });
+      })
+      .catch((e: Error) => patch(s.id, { status: 'error', error: e.message }));
+  };
 
   // Files dropped elsewhere in the app arrive here.
   useEffect(() => {
@@ -217,7 +259,9 @@ export default function MakePage() {
   const offlineOnly = ai?.available === false || blocked;
   const material = hasMaterial(ready);
 
-  const draft = async (answers: Answer[], suggestion: { title: string; topic: string } | null) => {
+  const draft = async (answers: Answer[], suggestion: { title: string; topic: string } | null, list: Source[] = ready) => {
+    const marked = picturesOf(list);
+    const pictures = marked.map((p) => p.file);
     started.current = Date.now();
     const controller = abort.current ?? new AbortController();
     abort.current = controller;
@@ -228,14 +272,14 @@ export default function MakePage() {
     const real = answers.filter((a) => a.key !== PURPOSE_KEY);
     const known = profile.remembered.filter((r) => !real.some((a) => a.key === r.key));
     const remember = () => rememberDeckPrefs(
-      { purpose: chosen, audience, minutes, density, themeId },
+      { purpose: chosen, audience, minutes, density, themeId, language, research, photos, findPictures: photos === 'find' },
       real.filter((a) => a.remember).map((a) => ({ key: a.key, question: a.question, answer: a.answer, updatedAt: Date.now() })),
     );
     try {
       if (!aiOn) {
         setStage('building');
-        let result = offlineDraft(ready, suggestion?.title || stem(ready.find((s) => s.kind !== 'picture')?.file.name ?? 'New deck'));
-        const shown = picturesOf(ready.filter((s) => s.pictureRole !== 'read')).map((p) => p.file);
+        let result = offlineDraft(list, suggestion?.title || stem(list.find((s) => s.kind !== 'picture')?.file.name ?? 'New deck'));
+        const shown = picturesOf(list.filter((s) => s.pictureRole !== 'read')).map((p) => p.file);
         result = await placePictures(result, shown, async (f) => saveAsset(await pictureForDeck(f), f.name));
         const made = draftToDeck(result, { audience, themeId, purpose: chosen });
         await addDeck(made);
@@ -254,17 +298,20 @@ export default function MakePage() {
         return p ? { id: `pic${i + 1}`, name: f.name, role, ...p } : null;
       }))).filter((p): p is NonNullable<typeof p> => p !== null);
       const request: DraftRequest = {
-        topic: brief.trim() || suggestion?.topic || fallbackTopic(ready),
+        topic: brief.trim() || suggestion?.topic || fallbackTopic(list),
         audience,
         purpose: chosen,
         minutes,
         density,
-        material: buildMaterial(ready),
+        material: buildMaterial(list),
         answers: [...real, ...known].map(({ question, answer }) => ({ question, answer })),
         pictures: forAi,
         kinds: kindCatalogue(),
         hints: draftingHints(),
         budget: { bullets: DENSITY[audience].bullets, words: wordBudget(audience, chosen, density) },
+        today: isoDate(new Date()),
+        ...(language ? { language } : {}),
+        ...(photos === 'find' ? { findPictures: true } : photos === 'notes' ? { photoNotes: true } : {}),
       };
       const startedAt = Date.now();
       const res = await draftOutline(request, controller.signal);
@@ -276,9 +323,10 @@ export default function MakePage() {
         pictures,
         title: res.title || suggestion?.title || 'Untitled deck',
         outline: res.outline,
-        usage: res.usage,
+        usage: [...researchUsage.current, ...res.usage],
         startedAt,
       });
+      researchUsage.current = [];
       openJobId(made.id);
       setStage('job');
     } catch (e) {
@@ -343,24 +391,48 @@ export default function MakePage() {
       return;
     }
     abort.current = new AbortController();
-    if (!canDraft || !ask) { void draft([], null); return; }
+    let list = ready;
+    // A web search for recent facts first, once: its notes join the files as a source.
+    if (canDraft && research && !ready.some(isResearch)) {
+      setStage('researching');
+      started.current = Date.now();
+      const today = isoDate(new Date());
+      try {
+        const found = await researchTopic({
+          topic: brief.trim() || fallbackTopic(ready),
+          brief: brief.trim(),
+          purpose,
+          excerpt: buildMaterial(ready, 6_000),
+          language,
+          today,
+        }, abort.current.signal);
+        const source = researchSource(uid('src'), found, today);
+        setSources((all) => [...all, source]);
+        list = [...ready, source];
+        researchUsage.current = found.usage;
+      } catch (e) {
+        if ((e as Error).name === 'AbortError') { setStage('gather'); return; }
+        toast.show(`Skipped the web search. ${(e as Error).message}`, { tone: 'error' });
+      }
+    }
+    if (!canDraft || !ask) { void draft([], null, list); return; }
     setStage('reading');
     started.current = Date.now();
     try {
       const res = await fetchQuestions({
         brief: brief.trim(),
-        excerpt: buildMaterial(ready, 20_000),
-        files: ready.map((s) => ({ name: s.file.name, kind: s.kind, words: s.words })),
+        excerpt: buildMaterial(list, 20_000),
+        files: list.map((s) => ({ name: s.file.name, kind: s.kind, words: s.words })),
         purpose, audience, minutes, density,
         pictures: pictures.length,
         remembered: profile.remembered,
       }, abort.current.signal);
       const suggestion = { title: res.title, topic: res.topic };
       setHint(suggestion);
-      const list = [...res.questions];
+      const questionList = [...res.questions];
       if (!purposeTouched && res.purpose && res.purpose !== purpose) {
         const others = PURPOSES.filter((p) => p.id !== res.purpose && p.id !== purpose).map((p) => p.label);
-        list.unshift({
+        questionList.unshift({
           key: PURPOSE_KEY,
           question: `This reads like a ${purposeLabel(res.purpose).toLowerCase()}. What kind of deck should it be?`,
           options: [purposeLabel(res.purpose), `${purposeLabel(purpose)} (your usual)`, ...others],
@@ -368,13 +440,13 @@ export default function MakePage() {
           remember: false,
         });
       }
-      if (!list.length) { void draft([], suggestion); return; }
-      setQuestions(list);
+      if (!questionList.length) { void draft([], suggestion, list); return; }
+      setQuestions(questionList);
       setStage('asking');
     } catch (e) {
       if ((e as Error).name === 'AbortError') { setStage('gather'); return; }
       toast.show('Skipped the questions: the AI couldn’t read your files just now.');
-      void draft([], null);
+      void draft([], null, list);
     }
   };
 
@@ -415,8 +487,9 @@ export default function MakePage() {
     if (view === 'gather' || view === 'result') addFiles(Array.from(e.dataTransfer.files));
   };
 
-  const usual = purpose === profile.deck.purpose && audience === profile.deck.audience && minutes === profile.deck.minutes && density === profile.deck.density && themeId === profile.deck.themeId;
-  const working = stage === 'reading' || stage === 'asking' || stage === 'outlining' || stage === 'building';
+  const usual = purpose === profile.deck.purpose && audience === profile.deck.audience && minutes === profile.deck.minutes && density === profile.deck.density && themeId === profile.deck.themeId
+    && language === deckLanguage(profile.deck.language) && research === (profile.deck.research === true) && photos === photoChoice(profile.deck);
+  const working = stage === 'researching' || stage === 'reading' || stage === 'asking' || stage === 'outlining' || stage === 'building';
   /** What the page shows; "loading" while the open job is read. */
   const view = stage === 'done' && deck ? 'result'
     : stage !== 'job' ? 'gather'
@@ -482,7 +555,7 @@ export default function MakePage() {
           </header>
 
           {working ? (
-            <Working stage={stage} sources={ready.length} asked={asked} started={started.current} onCancel={cancel} />
+            <Working stage={stage} sources={ready.filter((s) => !isResearch(s)).length} asked={asked} searched={research && aiOn} started={started.current} onCancel={cancel} />
           ) : (
             <>
             {waiting && waiting.id !== jobId && (
@@ -503,6 +576,20 @@ export default function MakePage() {
                   <input ref={fileInput} type="file" multiple accept={ACCEPT_ALL} hidden onChange={(e) => { addFiles(Array.from(e.target.files ?? [])); e.target.value = ''; }} />
                 </div>
 
+                <form className="ad-link-row" onSubmit={(e) => { e.preventDefault(); addLink(); }}>
+                  <Link2 size={16} aria-hidden />
+                  <input
+                    className="input"
+                    type="text"
+                    inputMode="url"
+                    value={link}
+                    onChange={(e) => setLink(e.target.value)}
+                    placeholder="Or paste a link to a web page, PDF or picture"
+                    aria-label="Link to a web page, PDF or picture"
+                  />
+                  <button type="submit" className="btn btn-secondary btn-sm" disabled={!link.trim()}>Add link</button>
+                </form>
+
                 {sources.length > 0 && (
                   <ul className="ad-files" aria-label="Your files">
                     {sources.map((s) => {
@@ -510,7 +597,7 @@ export default function MakePage() {
                       const progress = job ? (job.phase === 'model' && job.modelTotal ? job.modelLoaded / job.modelTotal : job.progress) : undefined;
                       return (
                         <li key={s.id} className={`ad-file is-${s.status}`}>
-                          <span className="ad-file-icon">{KIND_ICON[s.kind]}</span>
+                          <span className="ad-file-icon">{isResearch(s) ? <Globe size={18} /> : KIND_ICON[s.kind]}</span>
                           <span className="ad-file-body">
                             <strong title={s.file.name}>{s.file.name}</strong>
                             <span className="ad-file-meta">
@@ -520,11 +607,23 @@ export default function MakePage() {
                                 <>
                                   <Check size={13} />
                                   {s.kind === 'picture' ? `Picture · ${formatBytes(s.file.size)}` : `${s.words.toLocaleString()} words${s.pictures.length ? ` · ${s.pictures.length} picture${s.pictures.length === 1 ? '' : 's'}` : ''}`}
+                                  {originLine(s.details) && <> · {originLine(s.details)}</>}
+                                  {s.found && <> · {s.found.length} source{s.found.length === 1 ? '' : 's'}</>}
                                   {s.kind === 'audio' && s.recordingId && <> · <Link to={`/recordings/${s.recordingId}`}>Transcript in Recordings</Link></>}
                                 </>
                               )}
                               {s.status === 'error' && <><AlertCircle size={13} /> {s.error}</>}
                             </span>
+                            {s.found && s.found.length > 0 && (
+                              <details className="ad-found">
+                                <summary>What the search found</summary>
+                                <ul>
+                                  {s.found.map((f) => (
+                                    <li key={f.url}><a href={f.url} target="_blank" rel="noreferrer noopener">{f.title}</a>{f.date && <span className="faint"> · {f.date}</span>}</li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
                             {s.status === 'transcribing' && progress !== undefined && (
                               <span className="progress ad-file-progress"><span style={{ width: `${Math.round(progress * 100)}%` }} /></span>
                             )}
@@ -648,10 +747,33 @@ export default function MakePage() {
                   </div>
                 </div>
                 {aiOn && (
-                  <label className="switch ad-ask-toggle">
-                    <input type="checkbox" checked={ask} onChange={(e) => setAsk(e.target.checked)} />
-                    <span>Ask me a few questions first</span>
+                  <label className="field">
+                    <span className="field-label">Language</span>
+                    <select className="select" value={language} onChange={(e) => setLanguage(e.target.value)}>
+                      {DECK_LANGUAGES.map((l) => <option key={l.id || 'same'} value={l.id}>{l.label}</option>)}
+                    </select>
                   </label>
+                )}
+                {aiOn && (
+                  <label className="field">
+                    <span className="field-label">Photos</span>
+                    <select className="select" value={photos} onChange={(e) => setPhotos(e.target.value as PhotoChoice)} aria-describedby="ad-photos-help">
+                      {PHOTO_CHOICES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                    </select>
+                    <span className="field-help" id="ad-photos-help">{PHOTO_CHOICES.find((c) => c.id === photos)?.detail}</span>
+                  </label>
+                )}
+                {aiOn && (
+                  <>
+                    <label className="switch ad-ask-toggle">
+                      <input type="checkbox" checked={research} onChange={(e) => setResearch(e.target.checked)} />
+                      <span>Search the web for recent facts</span>
+                    </label>
+                    <label className="switch ad-ask-toggle">
+                      <input type="checkbox" checked={ask} onChange={(e) => setAsk(e.target.checked)} />
+                      <span>Ask me a few questions first</span>
+                    </label>
+                  </>
                 )}
                 {ai?.needsCode && (
                   <label className="field">
@@ -681,7 +803,7 @@ export default function MakePage() {
   );
 }
 
-function Working({ stage, sources, asked, started, onCancel }: { stage: Stage; sources: number; asked: number; started: number; onCancel(): void }) {
+function Working({ stage, sources, asked, searched, started, onCancel }: { stage: Stage; sources: number; asked: number; searched: boolean; started: number; onCancel(): void }) {
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     const t = window.setInterval(() => setNow(Date.now()), 1000);
@@ -690,7 +812,8 @@ function Working({ stage, sources, asked, started, onCancel }: { stage: Stage; s
   const secs = Math.max(0, Math.round((now - started) / 1000));
   const steps = [
     { label: `Read ${sources} file${sources === 1 ? '' : 's'}`, state: 'done' },
-    { label: stage === 'reading' ? 'Looking for questions to ask' : asked ? `Answered ${asked} question${asked === 1 ? '' : 's'}` : 'Questions skipped', state: stage === 'reading' ? 'active' : 'done' },
+    ...(searched ? [{ label: stage === 'researching' ? 'Searching the web for recent facts' : 'Searched the web', state: stage === 'researching' ? 'active' : 'done' }] : []),
+    { label: stage === 'reading' ? 'Looking for questions to ask' : stage === 'researching' ? 'Questions' : asked ? `Answered ${asked} question${asked === 1 ? '' : 's'}` : 'Questions skipped', state: stage === 'reading' ? 'active' : stage === 'researching' ? 'todo' : 'done' },
     { label: stage === 'building' ? 'Building the slides from your files' : 'Planning the outline', state: stage === 'outlining' || stage === 'building' ? 'active' : 'todo' },
   ];
   return (
@@ -707,7 +830,9 @@ function Working({ stage, sources, asked, started, onCancel }: { stage: Stage; s
         ))}
       </ol>
       <p className="faint ad-working-time">
-        {stage === 'outlining'
+        {stage === 'researching'
+          ? (secs < 30 ? 'Searching and reading pages. This takes a minute or two.' : `Still searching · ${secs} s. Each page is read before its figures are used.`)
+          : stage === 'outlining'
           ? (secs < 20 ? 'This usually takes under a minute. You’ll check the plan next.' : `Still planning · ${secs} s. Long files take a little longer.`)
           : stage === 'building' ? 'Almost there…' : 'Reading your files…'}
       </p>
@@ -768,6 +893,7 @@ function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, 
 }) {
   const shown = deck.slides.filter((s) => !s.hidden);
   const recordings = sources.filter((s) => s.kind === 'audio' && s.recordingId);
+  const toAdd = photosToAdd(deck).length;
   return (
     <section className="ad-result" aria-labelledby="ad-result-title">
       <div className="ad-result-head">
@@ -780,6 +906,11 @@ function Result({ deck, sources, remembered, usage, fit, exporting, onDownload, 
           <p className="ad-fit" role="status">
             {fit.undone || !fit.canUndo ? <AlertCircle size={15} /> : <Check size={15} />} {fit.text}
             {fit.canUndo && <> <button type="button" className="ad-link" onClick={fit.onToggle}>{fit.undone ? 'Redo' : 'Undo'}</button></>}
+          </p>
+        )}
+        {toAdd > 0 && (
+          <p className="ad-fit ad-photos" role="status">
+            <Camera size={15} /> {toAdd === 1 ? '1 slide says' : `${toAdd} slides say`} what photo to add. The editor lists them under Photos to add; in PowerPoint a box marks each place.
           </p>
         )}
         {usage && <UsageNote usage={usage} />}

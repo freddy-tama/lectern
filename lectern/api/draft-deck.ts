@@ -4,6 +4,7 @@
 //   "deck" (default) → { draft, usage }             the whole deck in one call
 //   "outline"        → { title, outline, usage }    a plan of every slide, for the presenter to edit
 //   "slides"         → { slides, missing, usage }   the slides with the given numbers, from an approved outline
+//   "research"       → { notes, sources, searches, usage }  a web search for recent facts (api/_lib/research.ts)
 //   Errors           → { error, code, usage? }
 //
 // Outline and slides calls send the same prefix (system prompt, output schema, brief, material
@@ -23,6 +24,10 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { CallUsage } from '../src/core/ai/prices.js';
 import { admit, charge, usageOf } from './_lib/account.js';
+import { cleanLanguage, cleanToday, longDate } from './_lib/input.js';
+import { research } from './_lib/research.js';
+
+export { cleanLanguage, cleanToday };
 
 export type { CallUsage };
 export { usageOf };
@@ -81,6 +86,14 @@ interface DraftBody {
   outline?: unknown;
   /** "slides" mode: which slides to write, numbered from 1 in the outline. */
   numbers?: unknown;
+  /** Today as YYYY-MM-DD in the presenter's time zone. */
+  today?: unknown;
+  /** The language to write the deck in, such as "Simplified Chinese". */
+  language?: unknown;
+  /** true: the outline names photos to find in free libraries ("search"). */
+  findPictures?: unknown;
+  /** true: the outline describes the photo the presenter adds later ("photo"). Ignored with findPictures. */
+  photoNotes?: unknown;
 }
 
 /**
@@ -162,8 +175,13 @@ export function pictureRoom(kind: CatalogueKind): number {
 const NOTES_SCHEMA = {
   type: 'object',
   additionalProperties: false,
-  required: ['script', 'keyPoints', 'cues', 'checkQuestion', 'checkAnswer', 'minutes'],
+  required: ['script', 'keyPoints', 'cues', 'checkQuestion', 'checkAnswer', 'minutes', 'links'],
   properties: {
+    links: {
+      type: 'array',
+      items: { type: 'object', additionalProperties: false, required: ['label', 'url'], properties: { label: { type: 'string' }, url: { type: 'string' } } },
+      description: 'Addresses from the material that back up this slide, labelled with site and year. Often empty.',
+    },
     script: { type: 'string', description: 'What the presenter says, written as natural speech.' },
     keyPoints: { type: 'array', items: { type: 'string' }, description: '2-4 points the audience must remember. Empty for title and section slides.' },
     cues: { type: 'array', items: { type: 'string' }, description: 'Short delivery reminders such as "Pause for guesses". Often empty.' },
@@ -210,18 +228,20 @@ export function slideSchema(kinds: CatalogueKind[]) {
  * The output schema of outline and slides calls. Both use this one schema, because a different
  * output format would break the shared prompt cache. Each task fills one array and leaves the other empty.
  */
-export function stagedSchema(kinds: CatalogueKind[], pictures: Picture[]) {
+export function stagedSchema(kinds: CatalogueKind[], pictures: Picture[], search = false, notes = false) {
   const shown = placeable(pictures);
   const item = {
     type: 'object',
     additionalProperties: false,
-    required: ['title', 'kind', 'minutes', 'point', ...(shown.length ? ['pictures'] : [])],
+    required: ['title', 'kind', 'minutes', 'point', ...(shown.length ? ['pictures'] : []), ...(search ? ['search'] : []), ...(notes ? ['photo'] : [])],
     properties: {
       title: { type: 'string', description: 'The slide\'s heading.' },
       kind: { type: 'string', enum: kinds.map((k) => k.kind) },
       minutes: { type: 'number' },
       point: { type: 'string', description: 'One line: what this slide must get across.' },
       ...(shown.length ? { pictures: { type: 'array', items: { type: 'string', enum: shown.map((p) => p.id) }, description: 'Ids of the pictures this slide shows. Often empty.' } } : {}),
+      ...(search ? { search: { type: 'string', description: 'A few plain English words to find a photo for this slide in free libraries, or "". Usually "".' } } : {}),
+      ...(notes ? { photo: { type: 'string', description: 'One short sentence on the photo the presenter adds to this slide later: what it shows and the kind of shot, or "". Usually "".' } } : {}),
     },
   };
   return {
@@ -295,7 +315,7 @@ const PURPOSE_RULES: Record<Purpose, string> = {
 - The competition slide names the alternatives and says why you win, for example on a 2 by 2 diagram with you in the best corner. The team slide shows the people and why they are the ones to do this (a people slide).
 - A short pitch may merge the solution and the product, or the market and why now, but keeps the business model, the competition, the team and the ask.
 - Lead with the problem in the audience's terms. One claim per slide, each backed by a number or an example from the material.
-- Each title states the slide's claim ("Clinics lose 6 hours a week to scheduling"), not its topic ("The problem"). Chart and big-number slides give their source when the material says where the figures come from.
+- Each title states the slide's claim ("Clinics lose 6 hours a week to scheduling"), not its topic ("The problem"). Chart and big-number slides give their source and its year when the material says where the figures come from.
 - keyPoints are what the audience should believe after the slide. checkQuestion is a question they will likely ask about the slide and checkAnswer is your answer, short and direct.
 - End with a slide that states the ask: the amount, what it buys (where the money goes, or the milestones it reaches), and what it makes possible.
 - Do not invent traction, customers or figures. If the material has none, say what the slide should show in plain words rather than making numbers up.`,
@@ -303,7 +323,7 @@ const PURPOSE_RULES: Record<Purpose, string> = {
 - Use numbers wherever the material has them: big-number, chart and table slides before bullet lists. Say what each number means in notes.script.
 - Group slides as summary, findings, analysis, then what happens next.
 - Each title states the finding ("Replies got 42% faster after the new rota"), not the topic ("Response times"), most of all on chart, table and big-number slides.
-- Chart and big-number slides give their source (where the figures come from) when the material says; tables put it in the caption.
+- Chart and big-number slides give their source and its year (where the figures come from) when the material says; tables put it in the caption.
 - keyPoints are the findings or figures to keep. checkQuestion is a likely question from the reader and checkAnswer is the answer with its evidence.
 - End with the decisions needed and next steps, with owners and dates only if the material gives them.
 - Never invent data. Use only figures from the material.`,
@@ -326,6 +346,12 @@ const STAGED_RULES = `How you work:
 
 const STAGED_PICTURES = `- In an outline, give each slide the ids of the pictures it shows in "pictures". Use each picture at most once in the deck, only on slide types that hold pictures, and never a picture that is material only. When writing slides, put a slide's pictures in its picture fields and use no other pictures.`;
 
+/** When the presenter asks Lectern to find photos: the outline names what to search free libraries for. */
+const STAGED_SEARCH = `- Photos from free libraries: in an outline, give "search" a few plain English words for a photo that would help a slide ("students writing Chinese characters", "Surabaya city skyline"), on slide types that hold a picture and only where no provided picture fits. Leave it empty on most slides: about one slide in three at most, never on chart, table, question or agenda slides. Lectern finds the photo and puts it in the slide's picture field after the slides are written, so leave picture fields empty for it.`;
+
+/** When the presenter adds photos later: the outline describes each photo, and the slide keeps it as a note. */
+const STAGED_NOTES = `- Photos the presenter adds later: in an outline, give "photo" one short, concrete sentence describing a real photo that would help a slide: what it shows, where, and the kind of shot, such as "Wide shot of a language class at a secondary school, students at their desks and the teacher at the board" or "Close-up of the cover of the report the slide quotes". Name the real places, people, events and documents of the material where they fit, never a scene that can't be photographed. Use it on slide types that hold 1 picture and only where no provided picture fits: about one slide in three at most, never on chart, table, question or agenda slides. Leave it "" elsewhere. Write it in the language of the presenter's brief. The presenter adds the photo, so leave picture fields empty for it.`;
+
 /** How to treat the person's pictures, by role. Said once in the system prompt. */
 const PICTURE_RULES = `- Pictures from the material are attached, each with an id such as "pic1" and a role:
   - "for the slides": the presenter wants it shown. Put it on the slide where it fits best.
@@ -346,11 +372,11 @@ function fieldLine(f: CatalogueField, pictures: boolean): string[] {
   return [`${f.key} [objects: ${sub.map((s) => (pictures && images.has(s) ? `${s} (picture)` : toggles.has(s) ? `${s} (true/false)` : s)).join(', ')}]`];
 }
 
-function systemPrompt(kinds: CatalogueKind[], hints: string, purpose: Purpose, pictures: Picture[], staged = false) {
+function systemPrompt(kinds: CatalogueKind[], hints: string, purpose: Purpose, pictures: Picture[], staged = false, search = false, notes = false) {
   // Only the pictures that may be shown make picture fields worth listing.
   const canShow = placeable(pictures).length > 0;
   const catalogue = kinds.map((k) => {
-    const room = staged && canShow ? pictureRoom(k) : 0;
+    const room = staged && (canShow || search || notes) ? pictureRoom(k) : 0;
     const holds = room ? ` Holds ${room === 1 ? '1 picture' : `up to ${room} pictures`}.` : '';
     const fields = [...k.fields.flatMap((f) => fieldLine(f, canShow)), ...(k.kind === 'question' ? ['correct [number]'] : k.kind === 'agenda' ? ['current [number]'] : [])];
     return `- ${k.kind} (${k.label}): ${k.description} Fields: ${fields.join(', ')}${holds}`;
@@ -368,14 +394,16 @@ How to write a deck:
 - A slide's "contentJson" is a JSON object of its type's fields, written as a string. Give every field the type lists and no others: [text] and [textarea] take a string, [list] an array of strings, [objects] an array of objects with the listed keys, each a string except (true/false) keys, which take true or false, [toggle] true or false, and [number] a number.${canShow ? ' [picture] fields and (picture) keys take the id of a provided picture, or "".' : ''}
 - The title slide's "credit" line is for a second name the presenter gives, such as a supervisor. Leave it empty otherwise.
 - Facts in the provided material are authoritative; use them as written and do not contradict them. Do not invent statistics, quotes or sources; if you are not sure a figure is right, leave it out.
-- Write in the language of the topic and material.
+- The brief gives today's date. Prefer the newest figures in the material and say each figure's year. When the material has the same measure for several years, show the newest unless the slide is about the change over time. Where a slide type has a "source" field, put the source and its year there.
+- When the material gives a web address for a fact on a slide, add it to notes.links, labelled with the site or publisher and the year. Never write an address the material doesn't have.
+- Write in the language the brief asks for; without one, in the language of the topic and material.
 ${pictures.length ? PICTURE_RULES : '- The presenter adds pictures later.'}
 
 What this deck is for:
 ${PURPOSE_RULES[purpose]}
 
 Slide types (use only these):
-${catalogue}${hints ? `\n\nExtra guidance from installed mods:\n${hints}` : ''}${staged ? `\n\n${STAGED_RULES}${canShow ? `\n${STAGED_PICTURES}` : ''}` : ''}`;
+${catalogue}${hints ? `\n\nExtra guidance from installed mods:\n${hints}` : ''}${staged ? `\n\n${STAGED_RULES}${canShow ? `\n${STAGED_PICTURES}` : ''}${search ? `\n${STAGED_SEARCH}` : ''}${notes ? `\n${STAGED_NOTES}` : ''}` : ''}`;
 }
 
 /** Everything a draft is made from, after cleaning. Outline and slides calls must send the same input. */
@@ -393,6 +421,14 @@ export interface DraftInput {
   answers: { q: string; a: string }[];
   /** How much one slide holds for the audience, from the client's layout rules. */
   budget: Budget | null;
+  /** Today as YYYY-MM-DD, from the client, so a job's calls keep one date (and one cached prompt). */
+  today: string;
+  /** The language to write in, such as "Simplified Chinese"; empty means the material's language. */
+  language: string;
+  /** Whether the outline names photos for Lectern to find in free libraries. */
+  findPictures: boolean;
+  /** Whether the outline describes the photos the presenter adds later. Never with findPictures. */
+  photoNotes: boolean;
 }
 
 /** Reads and cleans the request body. Returns a message for the person when something essential is missing. */
@@ -416,6 +452,10 @@ export function readInput(body: DraftBody): DraftInput | string {
       ? (body.answers as Record<string, unknown>[]).slice(0, 16).map((a) => ({ q: text(a?.question, 300), a: text(a?.answer, 300) })).filter((a) => a.a)
       : [],
     budget: cleanBudget(body.budget),
+    today: cleanToday(body.today),
+    language: cleanLanguage(body.language),
+    findPictures: body.findPictures === true,
+    photoNotes: body.photoNotes === true && body.findPictures !== true,
   };
 }
 
@@ -423,6 +463,8 @@ export function readInput(body: DraftBody): DraftInput | string {
 function briefBlocks(input: DraftInput): Anthropic.Beta.BetaContentBlockParam[] {
   const brief = [
     `Make a ${input.purpose} deck for a ${input.minutes}-minute session.`,
+    `Today's date: ${longDate(input.today)}.`,
+    input.language ? `Language: write every slide, heading and note in ${input.language}, even where the material is in another language. Keep names, figures and quotes accurate.` : '',
     `Audience: ${audienceRule(input.audience, input.budget)}`,
     input.density ? `Words on a slide: ${DENSITY_RULES[input.density]}` : '',
     `What the deck is about: ${input.topic}`,
@@ -448,9 +490,9 @@ export function stagedRequest(input: DraftInput, task: string) {
   const last = shared[shared.length - 1]!;
   shared[shared.length - 1] = { ...last, cache_control: { type: 'ephemeral' } } as Anthropic.Beta.BetaContentBlockParam;
   return {
-    system: systemPrompt(input.kinds, input.hints, input.purpose, input.pictures, true),
+    system: systemPrompt(input.kinds, input.hints, input.purpose, input.pictures, true, input.findPictures, input.photoNotes),
     content: [...shared, { type: 'text', text: task }] as Anthropic.Beta.BetaContentBlockParam[],
-    schema: stagedSchema(input.kinds, input.pictures),
+    schema: stagedSchema(input.kinds, input.pictures, input.findPictures, input.photoNotes),
   };
 }
 
@@ -464,6 +506,10 @@ export interface OutlineSlide {
   point: string;
   /** Ids of the pictures it shows, such as "pic2". */
   pictures: string[];
+  /** What photo to find for it in free libraries, when the presenter asked Lectern to find photos. */
+  search?: string;
+  /** What photo the presenter adds to it later, when they asked for photo notes. */
+  photo?: string;
 }
 
 /** Quarter minutes from 15 seconds: fast lessons and talks plan slides under a minute. Times are shares of the session. */
@@ -490,7 +536,11 @@ export function cleanOutline(raw: unknown, kinds: CatalogueKind[], pictureIds: s
       used.add(id);
       pictures.push(id);
     }
-    return [{ title: text(o.title, 200), kind: kind.kind, minutes: minutesOf(o.minutes), point: text(o.point, 300), pictures }];
+    // A photo search only where the slide type can show it, and none where the person's own picture already goes.
+    const search = pictureRoom(kind) && !pictures.length ? text(o.search, 80) : '';
+    // A photo note goes in the slide type's own picture field, so only types with one get it.
+    const photo = kind.fields.some((f) => f.type === 'image') && !pictures.length && !search ? text(o.photo, 240) : '';
+    return [{ title: text(o.title, 200), kind: kind.kind, minutes: minutesOf(o.minutes), point: text(o.point, 300), pictures, ...(search ? { search } : {}), ...(photo ? { photo } : {}) }];
   });
 }
 
@@ -513,7 +563,7 @@ function listNumbers(numbers: number[]): string {
 export function slidesTask(title: string, outline: OutlineSlide[], numbers: number[]): string {
   const want = new Set(numbers);
   const lines = outline.map((s, i) => {
-    const pics = s.pictures.length ? ` · pictures: ${s.pictures.join(', ')}` : '';
+    const pics = s.pictures.length ? ` · pictures: ${s.pictures.join(', ')}` : s.search ? ` · photo Lectern adds: ${s.search}` : s.photo ? ` · photo the presenter adds later: ${s.photo}` : '';
     return `${want.has(i + 1) ? '→' : ' '} ${i + 1}. [${s.kind}] ${s.title || '(no heading yet: write one)'} · ${s.minutes} min · ${s.point || '(no point given)'}${pics}`;
   });
   const list = listNumbers(numbers);
@@ -533,19 +583,33 @@ export interface SlideNotes {
   cues: string[];
   check: { question: string; answer: string } | null;
   minutes: number;
-  links: never[];
+  links: { label: string; url: string }[];
 }
 
-export function cleanNotes(raw: unknown): SlideNotes {
+/** A web address as written in text, without the punctuation that often follows one. */
+const trimUrl = (u: string) => u.replace(/[.,;:!?)\]}>'"。，）》]+$/u, '');
+
+/** Every web address the material writes out: the only ones a slide's notes may link to. */
+export function materialLinks(material: string): Set<string> {
+  return new Set([...material.matchAll(/https?:\/\/[^\s<>"'`\])}　-〿（），]+/gu)].map((m) => trimUrl(m[0])));
+}
+
+/** A slide's key notes, cleaned. Links stay only when the material wrote their address, so none is made up. */
+export function cleanNotes(raw: unknown, known: Set<string> = new Set()): SlideNotes {
   const n = record(raw);
   const question = text(n.checkQuestion, 400);
+  const links = (Array.isArray(n.links) ? n.links : []).flatMap((l) => {
+    const o = record(l);
+    const url = trimUrl(text(o.url, 600));
+    return known.has(url) ? [{ label: text(o.label, 120), url }] : [];
+  });
   return {
     script: text(n.script, 4_000),
     keyPoints: Array.isArray(n.keyPoints) ? n.keyPoints.map((p) => text(p, 300)).filter(Boolean).slice(0, 6) : [],
     cues: Array.isArray(n.cues) ? n.cues.map((p) => text(p, 60)).filter(Boolean).slice(0, 4) : [],
     check: question ? { question, answer: text(n.checkAnswer, 400) } : null,
     minutes: Math.max(0.25, Math.min(30, Number(n.minutes) || 2)),
-    links: [],
+    links: links.filter((l, i) => links.findIndex((x) => x.url === l.url) === i).slice(0, 4),
   };
 }
 
@@ -597,7 +661,7 @@ export interface DraftedSlide {
  * once, with the kind the outline gives it and only the pictures the outline assigns to it.
  * Anything else, or content that can't be read, is dropped, and what didn't come back is reported as missing.
  */
-export function checkBatch(raw: unknown, numbers: number[], outline: OutlineSlide[], kinds: CatalogueKind[]) {
+export function checkBatch(raw: unknown, numbers: number[], outline: OutlineSlide[], kinds: CatalogueKind[], links: Set<string> = new Set()) {
   const wanted = new Set(numbers);
   const byKind = new Map(kinds.map((k) => [k.kind, k]));
   const seen = new Set<number>();
@@ -614,7 +678,7 @@ export function checkBatch(raw: unknown, numbers: number[], outline: OutlineSlid
       continue;
     }
     seen.add(number);
-    slides.push({ number, kind: kind.kind, content: cleanContent(kind, content, new Set(plan.pictures)), notes: cleanNotes(o.notes) });
+    slides.push({ number, kind: kind.kind, content: cleanContent(kind, content, new Set(plan.pictures)), notes: cleanNotes(o.notes, links) });
   }
   slides.sort((a, b) => a.number - b.number);
   return { slides, missing: numbers.filter((n) => !seen.has(n)), dropped };
@@ -663,6 +727,8 @@ export async function POST(request: Request) {
   } catch {
     return json({ error: 'The request could not be read.', code: 'bad_request' }, 400);
   }
+  // Research lives here, not in a function of its own: the Hobby plan allows 12 functions a deployment.
+  if (body.mode === 'research') return research(body as Record<string, unknown>, caller);
   const mode: Mode = MODES.includes(body.mode as Mode) ? (body.mode as Mode) : 'deck';
   const input = readInput(body);
   if (typeof input === 'string') return json({ error: input, code: 'bad_request' }, 400);
@@ -719,16 +785,17 @@ export async function POST(request: Request) {
       return json({ title: input.title || text(parsed.title, 200) || 'Untitled deck', outline: planned, usage });
     }
     if (mode === 'slides') {
-      const { slides, missing } = checkBatch(parsed.slides, numbers, outline, input.kinds);
+      const { slides, missing } = checkBatch(parsed.slides, numbers, outline, input.kinds, materialLinks(input.material));
       return json({ slides, missing, usage });
     }
 
     const byKind = new Map(input.kinds.map((k) => [k.kind, k]));
     const every = new Set(ids);
+    const links = materialLinks(input.material);
     const slides = (Array.isArray(parsed.slides) ? parsed.slides : []).flatMap((s) => {
       const o = record(s);
       const kind = byKind.get(text(o.kind, 60));
-      return kind ? [{ kind: kind.kind, content: cleanContent(kind, readContent(o.contentJson) ?? {}, every), notes: cleanNotes(o.notes) }] : [];
+      return kind ? [{ kind: kind.kind, content: cleanContent(kind, readContent(o.contentJson) ?? {}, every), notes: cleanNotes(o.notes, links) }] : [];
     });
     if (!slides.length) return json({ error: 'The AI returned an empty deck. Try again.', code: 'empty', usage }, 502);
     return json({ draft: { title: input.title || text(parsed.title, 200) || 'Untitled deck', minutes: input.minutes, slides }, usage });

@@ -1,6 +1,7 @@
 // Client for the AI's questions before drafting (api/deck-questions.ts), and for drafting a
 // deck as an outline and then batches of slides (api/draft-deck.ts).
 
+import { cleanPhotoNote } from '../../core/deck/photo-notes';
 import type { Audience, DeckPurpose } from '../../core/deck/types';
 import type { DraftRequest, PlannedSlide, WrittenSlide } from '../../data/draft-jobs';
 import type { Density, RememberedAnswer } from '../../data/profile';
@@ -86,6 +87,8 @@ function readOutline(raw: unknown): Omit<PlannedSlide, 'id'>[] {
       minutes: Number(o.minutes) || 2,
       point: asText(o.point, 300),
       pictures: Array.isArray(o.pictures) ? o.pictures.filter((p): p is string => typeof p === 'string') : [],
+      ...(typeof o.search === 'string' && o.search.trim() ? { search: asText(o.search.trim(), 80) } : {}),
+      ...(cleanPhotoNote(o.photo) ? { photo: cleanPhotoNote(o.photo) } : {}),
     };
   }).filter((s) => s.kind);
 }

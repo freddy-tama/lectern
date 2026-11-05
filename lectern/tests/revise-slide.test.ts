@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it } from 'vitest';
-import { GET, POST, type KindSpec, cleanBudget, cleanContent, cleanKind, cleanNotes, cleanProblems, contentSchema, fitRequest, responseSchema } from '../api/revise-slide';
+import { GET, POST, type KindSpec, askParams, cleanBudget, cleanContent, cleanKind, cleanNotes, cleanProblems, contentSchema, fitRequest, responseSchema } from '../api/revise-slide';
 import { DENSITY } from '../src/core/kinds/kit';
 import { type Slide, emptyNotes } from '../src/core/deck/types';
 import { registerCoreKinds } from '../src/core/kinds/core-kinds';
@@ -225,6 +225,18 @@ describe('the endpoint without a model call', () => {
     delete process.env.ANTHROPIC_API_KEY;
     expect(await (await GET()).json()).toMatchObject({ available: false });
     expect((await post({})).status).toBe(503);
+  });
+
+  it('caches a conversation about a selection, so follow-up questions read the earlier turns', () => {
+    const first = askParams('System', [{ role: 'user', content: 'Why this word?' }]);
+    const next = askParams('System', [{ role: 'user', content: 'Why this word?' }, { role: 'assistant', content: 'Because.' }, { role: 'user', content: 'And this one?' }]);
+    expect(first.cache_control).toEqual({ type: 'ephemeral' });
+    expect(next.cache_control).toEqual({ type: 'ephemeral' });
+    // The same settings and system each time: anything different before the turns would miss the cache.
+    const { messages: _a, ...firstRest } = first;
+    const { messages: _b, ...nextRest } = next;
+    expect(nextRest).toEqual(firstRest);
+    expect(next.messages[0]).toEqual(first.messages[0]);
   });
 
   it('asks for the access code before anything else', async () => {

@@ -1271,6 +1271,23 @@
   color: var(--brand);
 }
 
+.ad-link-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 10px 0 0;
+  color: var(--ink-3);
+}
+
+.ad-link-row > svg {
+  flex: none;
+}
+
+.ad-link-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
 .ad-finished {
   display: flex;
   gap: 10px;
@@ -1287,4 +1304,67 @@
   flex: none;
   margin-top: 2px;
   color: var(--brand);
+}
+
+/* A photo Lectern finds in free libraries once the slides are written. */
+.ol-search {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 3px 4px 3px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink-2);
+  font-size: 12.5px;
+}
+
+.ol-search button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+}
+
+.ol-search button:hover {
+  color: var(--danger);
+}
+
+/* A photo the presenter adds later: a longer note, so it wraps. */
+.ol-photo {
+  align-items: flex-start;
+  border-style: dashed;
+  border-radius: 12px;
+  line-height: 1.4;
+}
+
+.ol-photo > svg {
+  flex: none;
+  margin-top: 2px;
+}
+
+/* The pages a web search read, under its row in the file list. */
+.ad-found {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.ad-found summary {
+  cursor: pointer;
+  color: var(--ink-2);
+}
+
+.ad-found ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.ad-found li {
+  margin: 2px 0;
+  overflow-wrap: anywhere;
 }

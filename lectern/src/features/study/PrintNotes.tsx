@@ -58,6 +58,7 @@ export default function PrintNotes() {
               {n.script && (forLearners ? <p className="print-script">{n.script}</p> : <p className="print-script">{n.script}</p>)}
               {!forLearners && n.cues.length > 0 && <p className="faint">Cues: {n.cues.join(' · ')}</p>}
               {n.check && <p><strong>{forLearners ? w.handoutCheck : `${w.askEyebrow}:`}</strong> {n.check.question}{!forLearners && n.check.answer ? ` — ${n.check.answer}` : ''}</p>}
+              {n.links.length > 0 && <p className="faint print-credit">{n.links.length === 1 ? 'Source' : 'Sources'}: {n.links.map((l) => (l.label ? `${l.label} (${l.url})` : l.url)).join('; ')}</p>}
               {credits.length > 0 && <p className="faint print-credit">{credits.length === 1 ? 'Picture credit' : 'Picture credits'}: {credits.join('; ')}</p>}
             </div>
           </section>

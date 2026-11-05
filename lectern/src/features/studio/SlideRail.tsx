@@ -1,8 +1,9 @@
 import { DndContext, type DragEndEvent, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Copy, EyeOff, Eye, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Camera, Copy, EyeOff, Eye, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { openPhotoNote } from '../../core/deck/photo-notes';
 import type { Deck, Slide } from '../../core/deck/types';
 import { getKind } from '../../core/kinds/registry';
 import { Menu } from '../../ui/Menu';
@@ -72,6 +73,7 @@ function RailItem({ slide, deck, number, selected, onSelect, onDuplicate, onDele
   }, [selected]);
   const def = getKind(slide.kind);
   const heading = def ? def.heading(slide.content) : slide.kind;
+  const photo = slide.hidden ? '' : openPhotoNote(slide);
   return (
     <li
       ref={(el) => { setNodeRef(el); ref.current = el; }}
@@ -84,12 +86,13 @@ function RailItem({ slide, deck, number, selected, onSelect, onDuplicate, onDele
         className="rail-thumb"
         onClick={onSelect}
         aria-current={selected ? 'true' : undefined}
-        aria-label={`Slide ${number ?? '(hidden)'}: ${def?.label ?? slide.kind}, ${heading}`}
+        aria-label={`Slide ${number ?? '(hidden)'}: ${def?.label ?? slide.kind}, ${heading}${photo ? '. Photo to add' : ''}`}
         {...attributes}
         {...listeners}
       >
         <SlideView slide={slide} deck={deck} number={number ?? 0} count={deck.slides.length} framed />
         {slide.hidden && <span className="rail-badge"><EyeOff size={12} /> Hidden</span>}
+        {photo && <span className="rail-badge rail-photo" title={`Photo to add: ${photo}`}><Camera size={12} /> Photo to add</span>}
       </button>
       <div className="rail-menu">
         <Menu align="start" trigger={(p) => <button type="button" className="icon-btn" aria-label={`Actions for slide ${number ?? ''}`} {...p}><MoreHorizontal size={16} /></button>}>

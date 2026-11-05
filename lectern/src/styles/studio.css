@@ -28,6 +28,16 @@
   align-content: start;
 }
 
+.new-deck-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.new-deck-row > .field {
+  flex: 1 1 160px;
+}
+
 .dropzone {
   display: grid;
   gap: 10px;
@@ -345,6 +355,13 @@
   font-weight: 600;
 }
 
+/* A photo still to add: quieter than Hidden, so the thumbnail still reads. */
+.rail-badge.rail-photo {
+  background: var(--panel);
+  color: var(--ink-2);
+  border: 1px dashed var(--line-strong);
+}
+
 .rail-menu {
   position: absolute;
   top: 4px;
@@ -541,6 +558,18 @@
 .cue-input {
   flex: 1;
   min-width: 120px;
+  font-size: 13.5px;
+}
+
+.note-link {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr) auto;
+  gap: 6px;
+  align-items: center;
+}
+
+.note-link .input,
+.note-links > .input {
   font-size: 13.5px;
 }
 
@@ -752,6 +781,39 @@ fieldset.field legend {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+/* What photo goes in an empty picture field, to add later. */
+.photo-note {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 10px;
+  background: var(--sunk);
+}
+
+.photo-note .field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.photo-note-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.photo-note-row .textarea {
+  flex: 1;
+  min-width: 0;
+}
+
+.photo-note-add {
+  justify-self: start;
+  margin-top: 6px;
 }
 
 .image-actions,
@@ -2289,4 +2351,35 @@ body.is-dragging-box * {
   margin: 0;
   padding: 0 10px 8px;
   font-size: 12.5px;
+}
+
+/* The photos still to add, from the studio's top bar. */
+.photos-to-add {
+  display: grid;
+  max-height: min(60vh, 460px);
+  overflow-y: auto;
+}
+
+.photos-to-add .menu-label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.photos-to-add-item {
+  align-items: flex-start;
+  line-height: 1.4;
+}
+
+.photos-to-add-num {
+  flex: none;
+  min-width: 22px;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+
+.photos-to-add-foot {
+  margin: 4px 10px 6px;
+  font-size: 12.5px;
+  color: var(--ink-3);
 }

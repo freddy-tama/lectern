@@ -28,6 +28,10 @@ export interface PlannedSlide {
   point: string;
   /** Ids of the pictures it shows, such as "pic2" for the second picture. */
   pictures: string[];
+  /** What photo to find in free libraries for it, when the presenter asked Lectern to find photos. */
+  search?: string;
+  /** What photo the presenter means to add to it later, when they asked for photo notes. */
+  photo?: string;
 }
 
 /** A slide as the AI wrote it, numbered by its place in the approved outline (from 1). */
@@ -101,6 +105,14 @@ export interface DraftRequest {
   hints: string;
   /** How much one slide holds for the audience, from the layout rules (DENSITY in core/kinds/kit). */
   budget?: { words: number; bullets: number };
+  /** Today as YYYY-MM-DD, fixed when the job starts so every call shares one cached prompt. */
+  today?: string;
+  /** The language to write in, by its English name; unset means the files' language. */
+  language?: string;
+  /** Find photos in free libraries for the slides whose outline names a search. */
+  findPictures?: boolean;
+  /** Leave a note of what photo to add on the slides that would show one, for the presenter to add later. */
+  photoNotes?: boolean;
 }
 
 export interface DraftJob {

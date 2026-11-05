@@ -323,6 +323,24 @@ How to edit:
 ${contextBlock(ctx, kind)}${hints ? `\n\nExtra guidance from installed mods:\n${hints}` : ''}`;
 }
 
+/**
+ * A question about the selected text, with the conversation so far. The cache mark follows the
+ * conversation, so each follow-up question reads the slide and the earlier turns from the cache.
+ */
+export function askParams(system: string, history: Anthropic.Beta.BetaMessageParam[]) {
+  return {
+    model: MODEL,
+    max_tokens: 4_000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default' as const,
+    thinking: { type: 'adaptive' as const },
+    output_config: { effort: 'low' as const },
+    cache_control: { type: 'ephemeral' as const },
+    system,
+    messages: history,
+  };
+}
+
 function askSystem(ctx: ReturnType<typeof deckContext>, kind: KindSpec, slide: string, selection: string) {
   return `You help a presenter who is editing one slide of a presentation in Lectern. They selected some text on the slide or in its key notes and asked about it.
 
@@ -383,16 +401,7 @@ export async function POST(request: Request) {
       while (history.length && history[0].role !== 'user') history.shift();
       if (!selection) return json({ error: 'Select some text first.' }, 400);
       if (!history.length || history[history.length - 1].role !== 'user') return json({ error: 'Write a question.' }, 400);
-      const response = await client.beta.messages.stream({
-        model: MODEL,
-        max_tokens: 4_000,
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default',
-        thinking: { type: 'adaptive' },
-        output_config: { effort: 'low' },
-        system: askSystem(ctx, kind, slide, selection),
-        messages: history,
-      }).finalMessage();
+      const response = await client.beta.messages.stream(askParams(askSystem(ctx, kind, slide, selection), history)).finalMessage();
       await charge(caller, 'revise-slide:ask', usageOf(response));
       if (response.stop_reason === 'refusal') return json({ error: 'The AI declined to answer that. Try asking another way.' }, 422);
       if (response.stop_reason === 'max_tokens') return json({ error: 'The answer ran too long. Try a narrower question.' }, 422);

@@ -3,7 +3,7 @@
 
 import { outlineToDraft } from '../../core/deck/outline';
 import { type DeckPurpose, PURPOSES } from '../../core/deck/types';
-import { OUTLINE_ACCEPT } from '../../core/import/files';
+import { type DocDetails, OUTLINE_ACCEPT, detailsLine } from '../../core/import/files';
 import { getKind } from '../../core/kinds/registry';
 import type { FieldSpec } from '../../core/kinds/types';
 import type { DeckDraft } from '../../core/plugins/api';
@@ -27,6 +27,16 @@ export interface Source {
   pictures: File[];
   /** What its pictures are for: to show on slides, only to read (a page, a scan), or for the AI to decide. */
   pictureRole?: PictureRole;
+  /** Where it comes from: the link it was read from, its site, author and dates. */
+  details?: DocDetails;
+  /** For web research: the pages the search read, each with its date when the search gave one. */
+  found?: FoundPage[];
+}
+
+export interface FoundPage {
+  title: string;
+  url: string;
+  date?: string;
 }
 
 export type PictureRole = 'auto' | 'show' | 'read';
@@ -55,6 +65,22 @@ export function kindOf(file: { name: string; type: string }): SourceKind {
 
 export const stem = (name: string) => name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ').trim();
 
+/** "2 Mar 2025" from "2025-03-02". */
+export function shortDate(iso: string): string {
+  const t = Date.parse(`${iso}T12:00:00Z`);
+  return Number.isFinite(t) ? new Date(t).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : iso;
+}
+
+/** Where a file comes from, for its row in the list: "unesa.ac.id · 2 Mar 2025". Empty when it says nothing. */
+export function originLine(d: DocDetails | undefined): string {
+  if (!d) return '';
+  let host = '';
+  try { host = d.url ? new URL(d.url).hostname.replace(/^www\./, '') : ''; } catch { /* not a link */ }
+  // A page updated since it was published (a wiki article, a revised report) shows its newer date.
+  const when = d.modified && (!d.published || d.modified > d.published) ? `updated ${shortDate(d.modified)}` : d.published ? shortDate(d.published) : '';
+  return [d.site || host, when].filter(Boolean).join(' · ');
+}
+
 export function countWords(text: string): number {
   return text.match(/[\p{L}\p{N}]+/gu)?.length ?? 0;
 }
@@ -65,7 +91,7 @@ const KIND_LABEL: Record<SourceKind, string> = { doc: 'document', audio: 'transc
  * Every file's text, labelled, within a character budget. When the files are too long
  * together, each gets a fair share, so one long file doesn't crowd out the others.
  */
-export function buildMaterial(sources: Pick<Source, 'file' | 'kind' | 'text'>[], limit = 60_000): string {
+export function buildMaterial(sources: Pick<Source, 'file' | 'kind' | 'text' | 'details'>[], limit = 60_000): string {
   const parts = sources.filter((s) => s.kind !== 'picture' && s.text.trim());
   if (!parts.length) return '';
   const budgets = new Map<number, number>();
@@ -80,7 +106,8 @@ export function buildMaterial(sources: Pick<Source, 'file' | 'kind' | 'text'>[],
   return parts.map((p, i) => {
     const take = budgets.get(i) ?? 0;
     const body = p.text.length > take ? `${p.text.slice(0, take).replace(/\s+\S*$/, '')}\n[…cut for length]` : p.text;
-    return `=== ${p.file.name} (${KIND_LABEL[p.kind]}) ===\n${body.trim()}`;
+    const from = detailsLine(p.details);
+    return `=== ${p.file.name} (${KIND_LABEL[p.kind]}${from ? `; ${from}` : ''}) ===\n${body.trim()}`;
   }).join('\n\n');
 }
 

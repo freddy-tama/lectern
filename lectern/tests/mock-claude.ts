@@ -164,9 +164,12 @@ export function draftReply(request: SentRequest): FakeReply {
     contentJson: JSON.stringify(s.content),
     notes: { script: s.script, keyPoints: [], cues: [], checkQuestion: '', checkAnswer: '', minutes: s.minutes },
   });
+  // Photo notes, when the brief asks for them: one for the picture slide and one for the points beside a picture.
+  const notes = Boolean(request.output_config?.format?.schema?.properties?.outline?.items?.properties?.photo);
+  const PHOTO: Record<string, string> = { image: 'Close-up of a pan of water boiling on a stove, steam rising', bullets: 'Wide shot of clouds over the sea on a sunny day' };
   let out: Record<string, unknown>;
   if (task.startsWith('Task: OUTLINE')) {
-    out = { title: 'The water cycle', outline: plan.map(({ title, kind, minutes, point }) => ({ title, kind, minutes, point })), slides: [] };
+    out = { title: 'The water cycle', outline: plan.map(({ title, kind, minutes, point }) => ({ title, kind, minutes, point, ...(notes ? { photo: PHOTO[kind] ?? '' } : {}) })), slides: [] };
   } else if (task.startsWith('Task: SLIDES')) {
     const wanted = [...task.matchAll(/^→ (\d+)\. /gm)].map((m) => Number(m[1]));
     out = { title: 'The water cycle', outline: [], slides: wanted.flatMap((n) => (plan[n - 1] ? [{ number: n, ...slide(plan[n - 1]!) }] : [])) };

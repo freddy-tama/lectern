@@ -27,12 +27,34 @@ export const DENSITIES: { id: Density; label: string; detail: string }[] = [
 
 export const LENGTHS = [5, 10, 15, 20, 30, 45, 60, 90];
 
+/** Photos for an AI-drafted deck: found in free libraries, a note of what to add later, or none. */
+export type PhotoChoice = 'find' | 'notes' | 'none';
+
+export const PHOTO_CHOICES: { id: PhotoChoice; label: string; detail: string }[] = [
+  { id: 'none', label: 'No photos', detail: 'Picture frames stay empty' },
+  { id: 'find', label: 'Find free photos', detail: 'From free photo libraries, with their credits' },
+  { id: 'notes', label: 'Leave a note of what photo to add', detail: 'Each photo slide says what to put there, for you to add later' },
+];
+
 export interface DeckPrefs {
   purpose: DeckPurpose;
   audience: Audience;
   themeId: string;
   minutes: number;
   density: Density;
+  /** The language decks are written in, by its English name ("Simplified Chinese"); unset means the files' language. */
+  language?: string;
+  /** Search the web for recent facts before drafting. */
+  research?: boolean;
+  /** Find photos in free libraries for the slides that would show one. Older profiles; see photos. */
+  findPictures?: boolean;
+  /** What to do about photos for the slides that would show one. */
+  photos?: PhotoChoice;
+}
+
+/** The photo choice saved in the deck settings, reading older profiles' findPictures too. */
+export function photoChoice(prefs: Pick<DeckPrefs, 'photos' | 'findPictures'>): PhotoChoice {
+  return prefs.photos === 'find' || prefs.photos === 'notes' || prefs.photos === 'none' ? prefs.photos : prefs.findPictures ? 'find' : 'none';
 }
 
 /** An answer to one of the AI's questions that the person asked Lectern to keep. */
@@ -121,6 +143,9 @@ export function normalizeProfile(raw: unknown): Profile {
       themeId: typeof deck.themeId === 'string' && deck.themeId ? deck.themeId.slice(0, 80) : base.deck.themeId,
       minutes: Number.isFinite(minutes) && minutes >= 5 && minutes <= 180 ? Math.round(minutes) : base.deck.minutes,
       density: oneOf(deck.density, DENSITIES.map((d) => d.id), base.deck.density),
+      ...(typeof deck.language === 'string' && deck.language.trim() ? { language: deck.language.trim().slice(0, 40) } : {}),
+      ...(deck.research === true ? { research: true } : {}),
+      ...(deck.findPictures === true ? { findPictures: true } : {}),
     },
     askQuestions: v.askQuestions === undefined ? true : Boolean(v.askQuestions),
     remembered,

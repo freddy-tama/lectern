@@ -67,6 +67,11 @@ export interface Slide<C = Record<string, unknown>> {
   overrides?: Record<string, BoxOverride>;
   /** Pictures, drawings, shapes, text and decorations placed freely on the slide, over or under its layout. */
   elements?: SlideElement[];
+  /**
+   * What photo the presenter means to add, such as "Wide shot of a Chinese class in Surabaya". It belongs to
+   * the slide type's first picture field and shows while that field is empty (see deck/photo-notes.ts).
+   */
+  photoNote?: string;
 }
 
 /** Where a box goes instead of where its layout put it. */

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { type CheckRule, CORE_RULES, LESSON_RULES, TALK_RULES, checkDeck, givenAway, lessonIssues, minutesOff, notesEmpty, purposeIssues, rulesFor, sameChecks, sameTypeRuns, slideProblems } from '../src/core/deck/check';
+import { type CheckRule, CORE_RULES, DATA_RULE, LESSON_RULES, TALK_RULES, checkDeck, dataIssues, givenAway, lessonIssues, minutesOff, newestYear, notesEmpty, purposeIssues, rulesFor, sameChecks, sameTypeRuns, slideProblems } from '../src/core/deck/check';
 import { retimeDeck, splitToFit } from '../src/core/deck/fit';
 import { CONT, fitsOnSlide } from '../src/core/deck/split';
 import { type Deck, type Slide, deckMinutes, emptyNotes } from '../src/core/deck/types';
@@ -203,6 +203,61 @@ describe('talk rules', () => {
     expect(checkDeck(deckOf(slides, { purpose: 'talk' })).issues.some((i) => i.rule === 'rhythm')).toBe(true);
     expect(checkDeck(deckOf(slides, { purpose: 'report' })).issues.some((i) => i.rule === 'rhythm')).toBe(false);
     expect(purposeIssues(deckOf(slides, { purpose: 'talk' }))).toHaveLength(1);
+  });
+});
+
+describe('data source rules', () => {
+  const NOW = new Date(2026, 10, 4);
+  const rows = [{ label: 'Q1', value: '42', value2: '' }, { label: 'Q2', value: '55', value2: '' }];
+  const chart = (source: string, id = 'c') => slideOf(id, 'chart', { title: 'Revenue', rows, source });
+  const stats = (source: string) => slideOf('n', 'stats', { title: 'Reach', stats: [{ value: '71%', label: 'of people', detail: '' }], source });
+  const table = (caption: string) => slideOf('t', 'table', { title: 'Prices', cells: 'Plan | Price\nStarter | $0', header: true, caption });
+  const tips = (slides: Slide[], purpose: Deck['purpose']) => dataIssues(deckOf(slides, { purpose }), NOW).map((i) => `${i.slideId} ${i.rule}`);
+
+  it('asks for a source on a report or pitch chart or big number with figures in it, as a tip', () => {
+    expect(tips([chart('')], 'report')).toEqual(['c source']);
+    expect(tips([chart('   ')], 'pitch')).toEqual(['c source']);
+    expect(tips([stats('')], 'report')).toEqual(['n source']);
+    expect(dataIssues(deckOf([chart('')], { purpose: 'report' }), NOW)[0]).toEqual({ rule: 'source', severity: 'info', slideId: 'c', message: 'Say where these figures come from. Add a source at the bottom of the slide.' });
+    expect(tips([chart('Source: BPS 2025')], 'report')).toEqual([]);
+    expect(tips([chart('')], 'lesson')).toEqual([]);
+    expect(tips([chart('')], 'talk')).toEqual([]);
+    // No figures, no need for a source; hidden slides are skipped.
+    expect(tips([slideOf('e', 'chart', { title: 'Empty', rows: [{ label: '', value: '', value2: '' }], source: '' })], 'report')).toEqual([]);
+    expect(tips([{ ...chart(''), hidden: true }], 'report')).toEqual([]);
+  });
+
+  it('flags a source whose newest year is three or more years back, for every purpose', () => {
+    const issues = dataIssues(deckOf([chart('Source: BPS census 2020')], { purpose: 'lesson' }), NOW);
+    expect(issues).toEqual([{ rule: 'old-figures', severity: 'info', slideId: 'c', message: 'These figures are from 2020. Look for newer ones if you can.' }]);
+    expect(tips([chart('Survey 2024')], 'report')).toEqual([]);
+    expect(tips([chart('Survey 2023')], 'report')).toEqual(['c old-figures']);
+    expect(tips([stats('Census 2018 and 2019')], 'talk')).toEqual(['n old-figures']);
+    expect(tips([chart('Census 2019, 2024')], 'talk')).toEqual([]);
+  });
+
+  it('reads a table caption for years', () => {
+    expect(tips([table('Data: 2019')], 'report')).toEqual(['t old-figures']);
+    expect(tips([table('Prices per seat, per month.')], 'report')).toEqual([]);
+    expect(tips([table('')], 'report')).toEqual([]);
+  });
+
+  it('does not read amounts or years to come as years', () => {
+    expect(newestYear('1,200,000 learners', NOW)).toBeNull();
+    expect(tips([chart('1,200,000 learners')], 'report')).toEqual([]);
+    expect(newestYear('2030 target', NOW)).toBeNull();
+    expect(newestYear('12345 and 3.2020', NOW)).toBeNull();
+    expect(newestYear('Census 2020; target 2030', NOW)).toBe(2020);
+    expect(newestYear('FY2021-22', NOW)).toBe(2021);
+    expect(newestYear('Since 1899', NOW)).toBeNull();
+  });
+
+  it('runs from checkDeck with the date pinned, and shows on the stage through purposeIssues', () => {
+    const deck = deckOf([chart('Source: BPS census 2020'), chart('', 'd')], { purpose: 'report' });
+    expect(rulesFor(deck)).toContain(DATA_RULE);
+    expect(checkDeck(deck, { today: NOW }).issues.filter((i) => i.rule === 'old-figures' || i.rule === 'source').map((i) => `${i.slideId} ${i.rule}`)).toEqual(['c old-figures', 'd source']);
+    expect(checkDeck(deck, { today: new Date(2022, 0, 1) }).issues.some((i) => i.rule === 'old-figures')).toBe(false);
+    expect(purposeIssues(deck, NOW).map((i) => i.rule)).toEqual(['old-figures', 'source']);
   });
 });
 

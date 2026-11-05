@@ -160,7 +160,7 @@ const PITCH: PurposeWording = {
 - The competition slide names the alternatives and says why you win, for example on a 2 by 2 diagram with you in the best corner. The team slide shows the people and why they are the ones to do this (a people slide).
 - A short pitch may merge the solution and the product, or the market and why now, but keeps the business model, the competition, the team and the ask.
 - Lead with the problem in the audience's terms. One claim per slide, each backed by a number or an example from the material.
-- Each title states the slide's claim ("Clinics lose 6 hours a week to scheduling"), not its topic ("The problem"). Chart and big-number slides give their source when the material says where the figures come from.
+- Each title states the slide's claim ("Clinics lose 6 hours a week to scheduling"), not its topic ("The problem"). Chart and big-number slides give their source and its year when the material says where the figures come from.
 - keyPoints are what the audience should believe after the slide. checkQuestion is a question they will likely ask about the slide and checkAnswer is your answer, short and direct.
 - End with a slide that states the ask: the amount, what it buys (where the money goes, or the milestones it reaches), and what it makes possible.
 - Do not invent traction, customers or figures. If the material has none, leave that slide to placeholders the presenter can fill, written as plain statements rather than made-up numbers.`,
@@ -198,7 +198,7 @@ const REPORT: PurposeWording = {
 - Use numbers wherever the material has them: big-number, chart and table slides before bullet lists. Say what each number means in notes.script.
 - Group slides as summary, findings, analysis, then what happens next.
 - Each title states the finding ("Replies got 42% faster after the new rota"), not the topic ("Response times"), most of all on chart, table and big-number slides.
-- Chart and big-number slides give their source (where the figures come from) when the material says; tables put it in the caption.
+- Chart and big-number slides give their source and its year (where the figures come from) when the material says; tables put it in the caption.
 - keyPoints are the findings or figures to keep. checkQuestion is a likely question from the reader and checkAnswer is the answer with its evidence.
 - End with the decisions needed and next steps, with owners and dates only if the material gives them.
 - Never invent data. Use only figures from the material.`,
