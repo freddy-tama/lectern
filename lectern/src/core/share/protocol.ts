@@ -145,6 +145,27 @@ export function peerIdFor(code: string): string {
   return `lectern-v1-${code}`;
 }
 
+/** Where a live deck is, as a phone following it sees it. */
+export interface LivePlace {
+  /** The slide on the big screen. */
+  index: number;
+  /** Its step: how many clicks have been shown. */
+  step: number;
+  /** The furthest slide the presenter has shown. */
+  reached: number;
+}
+
+/**
+ * The step a following phone draws slide i at; undefined draws every step. The live slide shows
+ * what the big screen shows; slides already shown show everything; slides further on show
+ * nothing that comes on a click, so a question's answer can't be read before its reveal.
+ */
+export function phoneStep(i: number, live: LivePlace | null): number | undefined {
+  if (!live) return undefined;
+  if (i === live.index) return live.step;
+  return i > live.reached ? 0 : undefined;
+}
+
 /** The link a QR code opens. The presenter token rides in the fragment, which never reaches a server. */
 export function joinUrl(origin: string, code: string, token?: string): string {
   return `${origin}/join/${code}${token ? `#p=${token}` : ''}`;

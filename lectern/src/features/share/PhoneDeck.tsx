@@ -13,7 +13,7 @@ import { wording } from '../../core/deck/purpose';
 import { getKind } from '../../core/kinds/registry';
 import { slideCreditLines, slidePictures } from '../../core/pictures/credits';
 import {
-  type CloudResult, type LiveState, type PollResult, type Role, type ShareOptions, cleanWord, cloudLimit, pollChoices, withLiveWords,
+  type CloudResult, type LivePlace, type LiveState, type PollResult, type Role, type ShareOptions, cleanWord, cloudLimit, phoneStep, pollChoices, withLiveWords,
 } from '../../core/share/protocol';
 import { useKeys } from '../../ui/hooks';
 import { pictureCredits } from '../pictures/store';
@@ -259,7 +259,15 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
   const liveIndex = link.state ? Math.min(link.state.index, count - 1) : 0;
   const index = following ? liveIndex : Math.min(browse ?? liveIndex, count - 1);
   const slide = slides[index];
-  const step = following ? link.state!.step : undefined;
+  // The furthest slide the presenter has shown while this phone followed. Slides past it are
+  // drawn without their clicks, so answers wait for their reveal on the big screen.
+  const [reached, setReached] = useState(0);
+  const onAir = live && link.status !== 'ended';
+  useEffect(() => { if (onAir) setReached((r) => Math.max(r, liveIndex)); }, [onAir, liveIndex]);
+  const place: LivePlace | null = onAir ? { index: liveIndex, step: (link.state ?? START).step, reached: Math.max(reached, liveIndex) } : null;
+  const step = phoneStep(index, place);
+  // While a question's answer is still to come, the deck can't be kept: the copy would show it.
+  const answersAhead = !!place && slides.some((s, i) => (i === place.index ? place.step < 1 : i > place.reached) && quizItem(s) !== null);
   const go = (i: number) => { setBrowse(Math.max(0, Math.min(count - 1, i))); setReveal(false); };
   const swipe = useSwipe(() => go(index + 1), () => go(index - 1));
   useEffect(() => { setReveal(false); }, [index]);
@@ -363,20 +371,20 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
           <p className="phone-credit faint">{creditLines.length === 1 ? 'Picture credit' : 'Picture credits'}: {creditLines.join('; ')}</p>
         )}
 
-        <button type="button" className="phone-files-btn" onClick={() => setFiles(true)}>
-          <Download size={18} /> <span><strong>Keep these slides</strong><span className="muted">{options.allowDownload ? 'PowerPoint, or review them later in Lectern' : 'Review them later in Lectern'}</span></span>
+        <button type="button" className="phone-files-btn" onClick={() => setFiles(true)} disabled={answersAhead}>
+          <Download size={18} /> <span><strong>Keep these slides</strong><span className="muted">{answersAhead ? 'After the quiz' : options.allowDownload ? 'PowerPoint, or review them later in Lectern' : 'Review them later in Lectern'}</span></span>
         </button>
       </div>
 
       <nav className="phone-strip" ref={stripRef} aria-label="All slides">
         {slides.map((s, i) => (
           <button key={s.id} type="button" data-i={i} className={`${i === index ? 'is-current' : ''} ${live && link.state && i === liveIndex ? 'is-live' : ''}`} onClick={() => go(i)} aria-label={`Slide ${i + 1}`}>
-            <SlideView slide={s} deck={deck} number={i + 1} count={count} framed />
+            <SlideView slide={s} deck={deck} number={i + 1} count={count} step={phoneStep(i, place)} framed />
           </button>
         ))}
       </nav>
 
-      {files && (
+      {files && !answersAhead && (
         <div className="phone-sheet" role="dialog" aria-modal="true" aria-labelledby="phone-sheet-title" onClick={(e) => { if (e.target === e.currentTarget) setFiles(false); }}>
           <div className="phone-sheet-card">
             <div className="phone-sheet-head">

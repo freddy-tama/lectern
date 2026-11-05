@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_OPTIONS, PartCollector, assetIds, deckForRole, deviceLabel, formatCode, joinUrl, newCode, normalizeCode, pollChoices,
+  DEFAULT_OPTIONS, PartCollector, assetIds, deckForRole, deviceLabel, formatCode, joinUrl, newCode, normalizeCode, phoneStep, pollChoices,
   splitParts, tally, tokenFromHash,
 } from '../src/core/share/protocol';
 import { buildSeed } from '../src/data/seed';
@@ -102,5 +102,29 @@ describe('device names', () => {
     expect(deviceLabel('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)')).toBe('iPhone');
     expect(deviceLabel('Mozilla/5.0 (Linux; Android 15; Pixel 9) Mobile')).toBe('Android phone');
     expect(deviceLabel('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe('Windows PC');
+  });
+});
+
+describe('what a following phone may draw', () => {
+  const place = { index: 2, step: 0, reached: 2 };
+
+  it('draws the live slide at the step the big screen shows', () => {
+    expect(phoneStep(2, place)).toBe(0);
+    expect(phoneStep(2, { ...place, step: 1 })).toBe(1);
+  });
+
+  it('keeps clicks hidden on slides the presenter has not reached, so answers wait for their reveal', () => {
+    expect(phoneStep(3, place)).toBe(0);
+    expect(phoneStep(5, place)).toBe(0);
+  });
+
+  it('draws slides already shown in full, even after the presenter goes back', () => {
+    expect(phoneStep(1, place)).toBeUndefined();
+    expect(phoneStep(4, { index: 1, step: 0, reached: 4 })).toBeUndefined();
+    expect(phoneStep(5, { index: 1, step: 0, reached: 4 })).toBe(0);
+  });
+
+  it('draws everything when the phone is not following a live deck', () => {
+    expect(phoneStep(5, null)).toBeUndefined();
   });
 });
