@@ -31,6 +31,46 @@ function lecternPlugins(): Plugin {
   };
 }
 
+const SITE_DECKS = 'virtual:lectern-site-decks';
+const SITE_DECK = 'virtual:lectern-site-deck/';
+
+/**
+ * Decks a site ships to every browser that opens it. LECTERN_SITE_DECKS names a folder of
+ * deck files (*.lectern.json, from Export ▸ Deck file). Each file becomes its own chunk, which
+ * only a browser without that copy loads; see src/data/site-decks.ts. Unset, nothing ships.
+ */
+function siteDecks(): Plugin {
+  const dir = process.env.LECTERN_SITE_DECKS?.trim();
+  const files = dir && existsSync(dir)
+    ? readdirSync(dir).filter((f) => f.toLowerCase().endsWith('.lectern.json')).sort().map((f) => join(dir, f))
+    : [];
+  if (dir && !files.length) console.warn(`LECTERN_SITE_DECKS: no .lectern.json files in ${dir}`);
+  const entry = (file: string, i: number) => {
+    const text = readFileSync(file, 'utf8');
+    let deck: { id?: unknown } | undefined;
+    try {
+      const parsed = JSON.parse(text) as { format?: unknown; deck?: { id?: unknown } };
+      if (parsed.format === 'lectern-deck') deck = parsed.deck;
+    } catch { /* reported below */ }
+    if (!deck) throw new Error(`LECTERN_SITE_DECKS: ${file} isn't a Lectern deck file.`);
+    const id = typeof deck.id === 'string' && /^[\w-]{1,80}$/.test(deck.id) ? deck.id : `file-${i + 1}`;
+    const version = createHash('sha256').update(text).digest('hex').slice(0, 16);
+    return `{ id: ${JSON.stringify(id)}, version: ${JSON.stringify(version)}, load: () => import(${JSON.stringify(`${SITE_DECK}site-deck-${i}`)}) }`;
+  };
+  return {
+    name: 'lectern-site-decks',
+    resolveId(id) {
+      return id === SITE_DECKS || id.startsWith(SITE_DECK) ? `\0${id}` : undefined;
+    },
+    load(id) {
+      if (id === `\0${SITE_DECKS}`) return `export default [${files.map(entry).join(',\n')}];\n`;
+      if (!id.startsWith(`\0${SITE_DECK}`)) return undefined;
+      const file = files[Number(/site-deck-(\d+)$/.exec(id)?.[1] ?? -1)];
+      return file ? `export default ${JSON.stringify(readFileSync(file, 'utf8'))};\n` : undefined;
+    },
+  };
+}
+
 function readBody(req: IncomingMessage): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
@@ -148,7 +188,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   for (const [k, v] of Object.entries(env)) if (process.env[k] === undefined) process.env[k] = v;
   return {
-    plugins: [react(), lecternPlugins(), devApi(), serviceWorker()],
+    plugins: [react(), lecternPlugins(), siteDecks(), devApi(), serviceWorker()],
     // The app's version, shown in the front page's footer.
     define: { __APP_VERSION__: JSON.stringify(pkg.version) },
     server: { port: 5180, host: '127.0.0.1' },

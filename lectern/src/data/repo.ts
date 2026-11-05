@@ -38,6 +38,8 @@ async function seed() {
     await db.settings.put({ key: 'seeded', value: true });
   }
   await addSampleNotes();
+  const { addSiteDecks } = await import('./site-decks');
+  await addSiteDecks();
 }
 
 /** Sample notes and timetables came after the first samples. Adds them once where the sample courses still exist. */

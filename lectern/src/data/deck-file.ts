@@ -191,9 +191,10 @@ export interface OpenedDeck {
 
 /**
  * Opens a deck file as a new deck: it gets a new id, its pictures are stored,
- * and its look is added when this browser doesn't have it yet.
+ * and its look is added when this browser doesn't have it yet. With `id`, the deck keeps
+ * that id instead and replaces a deck already stored under it.
  */
-export async function openDeckFile(input: string | Blob, options: { lessonId?: string } = {}): Promise<OpenedDeck> {
+export async function openDeckFile(input: string | Blob, options: { lessonId?: string; id?: string } = {}): Promise<OpenedDeck> {
   const file = readDeckFile(typeof input === 'string' ? input : await input.text());
   const now = Date.now();
   const included = new Map((file.assets ?? []).map((a) => [a.id, a]));
@@ -218,7 +219,7 @@ export async function openDeckFile(input: string | Blob, options: { lessonId?: s
     add.push({ id: newId, blob, mime: item.mime || blob.type, name: item.name || 'image', createdAt: now, ...(credit ? { credit } : {}) });
   }
 
-  const deck: Deck = { ...renameAssets(file.deck, renamed), id: uid('d'), purpose: deckPurpose(file.deck), createdAt: now, updatedAt: now };
+  const deck: Deck = { ...renameAssets(file.deck, renamed), id: options.id ?? uid('d'), purpose: deckPurpose(file.deck), createdAt: now, updatedAt: now };
   delete deck.lessonId;
   if (options.lessonId) deck.lessonId = options.lessonId;
   const theme = file.theme ? renameAssets(file.theme, renamed) : undefined;

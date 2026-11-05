@@ -8,3 +8,9 @@ declare module 'virtual:lectern-plugins' {
   const plugins: LecternPlugin[];
   export default plugins;
 }
+
+declare module 'virtual:lectern-site-decks' {
+  import type { SiteDeck } from './data/site-decks';
+  const decks: SiteDeck[];
+  export default decks;
+}
