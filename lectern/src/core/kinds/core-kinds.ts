@@ -1,8 +1,9 @@
 // The built-in slide kinds. Plugins register more through the same contract.
 
+import { cjkChars } from '../deck/words';
 import { type Box, CANVAS_H, CANVAS_W, type TextBox } from '../engine/boxes';
 import { fontWeight } from '../engine/themes';
-import { M, SOURCE_FIELD, type LayoutContext, card, heightAt, imageSrc, list, read, shape, slideTitle, sourceLine, sz, text } from './kit';
+import { CALLOUT_FIELD, M, SOURCE_FIELD, type LayoutContext, calloutLine, card, heightAt, imageSrc, list, read, shape, slideTitle, sourceLine, sz, text } from './kit';
 import { DATA_KINDS } from './data-kinds';
 import { DESIGNED_KINDS } from './designed-kind';
 import { LIVE_KINDS } from './live-kinds';
@@ -184,15 +185,18 @@ const bullets: SlideKindDefinition<C> = {
     { key: 'bullets', label: 'Points', type: 'list', itemLabel: 'Point', max: 8 },
     { key: 'reveal', label: 'Reveal points one at a time', type: 'toggle' },
     { key: 'image', label: 'Image', type: 'image' },
+    CALLOUT_FIELD,
   ],
   create: () => ({ title: 'Main idea', bullets: ['First point', 'Second point', 'Third point'], reveal: false, image: '' }),
   heading: (c) => read.str(c, 'title') || 'Points',
-  text: (c) => [read.str(c, 'title'), ...read.list(c, 'bullets')],
+  text: (c) => [read.str(c, 'title'), ...read.list(c, 'bullets'), ...(read.str(c, 'callout').trim() ? [read.str(c, 'callout')] : [])],
   layout(c, ctx, variant) {
     const src = imageSrc(ctx, c.image);
     const points = read.items(c, 'bullets');
     const reveal = read.bool(c, 'reveal');
-    if (variant === 'columns') return { boxes: pointColumns(ctx, read.str(c, 'title'), points, reveal, Boolean(src)) };
+    const callout = calloutLine(ctx, c.callout);
+    const floor = callout.bottom;
+    if (variant === 'columns') return { boxes: [...pointColumns(ctx, read.str(c, 'title'), points, reveal, Boolean(src), floor), ...callout.boxes] };
     // Picture left keeps an empty frame while editing, so there is somewhere to drop the picture.
     const left = variant === 'left';
     const framed = Boolean(src) || (left && ctx.mode === 'edit');
@@ -202,19 +206,20 @@ const bullets: SlideKindDefinition<C> = {
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title'), { x: textX, w: framed ? textW : M.w - 120 });
     const boxes: Box[] = [box];
     boxes.push(...list(ctx, points, {
-      x: textX, y: bottom, w: textW, h: M.bottom - bottom - 30, bindKey: 'bullets', reveal, vcenter: true,
+      x: textX, y: bottom, w: textW, h: floor - bottom - 30, bindKey: 'bullets', reveal, vcenter: true,
     }));
-    if (framed) boxes.push(...imageOrPlaceholder(ctx, 'image', src, left ? M.x : M.x + textW + 80, M.top + 20, imageW, M.bottom - M.top - 60));
+    if (framed) boxes.push(...imageOrPlaceholder(ctx, 'image', src, left ? M.x : M.x + textW + 80, M.top + 20, imageW, floor - M.top - 60));
+    boxes.push(...callout.boxes);
     return { boxes };
   },
 };
 
 /** Points in two columns of equal type, the first half on the left. */
-function pointColumns(ctx: LayoutContext, title: string, points: string[], reveal: boolean, hasImage: boolean): Box[] {
+function pointColumns(ctx: LayoutContext, title: string, points: string[], reveal: boolean, hasImage: boolean, floor = M.bottom): Box[] {
   const { box, bottom } = slideTitle(ctx, title, { w: M.w - 120 });
   if (hasImage) ctx.warnings.push('Two columns has no room for the picture. Pick Picture right or Picture left to show it.');
   const filled = points.map((p, i) => ({ p, i })).filter((e) => e.p.trim());
-  const h = M.bottom - bottom - 30;
+  const h = floor - bottom - 30;
   if (filled.length < 2) return [box, ...list(ctx, points, { x: M.x, y: bottom, w: M.w, h, bindKey: 'bullets', reveal, vcenter: true })];
   const half = Math.ceil(filled.length / 2);
   const cut = filled[half]!.i;
@@ -241,17 +246,19 @@ const compare: SlideKindDefinition<C> = {
     { key: 'rightHeading', label: 'Right heading', type: 'text' },
     { key: 'rightPoints', label: 'Right points', type: 'list', itemLabel: 'Point', max: 6 },
     { key: 'reveal', label: 'Show the right column on click', type: 'toggle' },
+    CALLOUT_FIELD,
   ],
   create: () => ({ title: 'Two ways to look at it', leftHeading: 'Option A', leftPoints: ['A point'], rightHeading: 'Option B', rightPoints: ['A point'], reveal: false }),
   heading: (c) => read.str(c, 'title') || 'Compare',
-  text: (c) => [read.str(c, 'title'), read.str(c, 'leftHeading'), ...read.list(c, 'leftPoints'), read.str(c, 'rightHeading'), ...read.list(c, 'rightPoints')],
+  text: (c) => [read.str(c, 'title'), read.str(c, 'leftHeading'), ...read.list(c, 'leftPoints'), read.str(c, 'rightHeading'), ...read.list(c, 'rightPoints'), ...(read.str(c, 'callout').trim() ? [read.str(c, 'callout')] : [])],
   layout(c, ctx) {
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title'));
-    const boxes: Box[] = [box];
+    const callout = calloutLine(ctx, c.callout);
+    const boxes: Box[] = [box, ...callout.boxes];
     const gap = 56;
     const colW = (M.w - gap) / 2;
     const top = bottom;
-    const h = M.bottom - top - 20;
+    const h = callout.bottom - top - 20;
     const pad = 52;
     (['left', 'right'] as const).forEach((side, i) => {
       const x = M.x + i * (colW + gap);
@@ -531,10 +538,12 @@ const steps: SlideKindDefinition<C> = {
   kind: 'steps', label: 'Steps', description: 'A process, left to right, or top to bottom when the steps have more to say.', icon: 'milestone', group: 'Explain',
   variants: [{ id: 'across', label: 'Left to right' }, { id: 'down', label: 'Top to bottom' }],
   // Steps with longer details run down the slide, where each detail gets the full width.
+  // So do labels too long for a narrow column, such as the events of a timeline.
   autoVariant: (c) => {
     const items = read.objects<Record<string, unknown>>(c, 'steps');
     const details = items.map((s) => String(s.detail ?? '').trim().length);
-    return Math.max(0, ...details) > 60 || details.reduce((a, b) => a + b, 0) > 180 ? 'down' : 'across';
+    const longLabel = items.some((s) => { const l = String(s.label ?? '').trim(); return cjkChars(l) > 10 || l.length > 28; });
+    return longLabel || Math.max(0, ...details) > 60 || details.reduce((a, b) => a + b, 0) > 180 ? 'down' : 'across';
   },
   fields: [
     { key: 'title', label: 'Title', type: 'textarea', rows: 2 },
@@ -543,16 +552,19 @@ const steps: SlideKindDefinition<C> = {
       { key: 'detail', label: 'Detail', type: 'textarea', rows: 2 },
     ] },
     { key: 'reveal', label: 'Reveal steps one at a time', type: 'toggle' },
+    CALLOUT_FIELD,
   ],
   create: () => ({ title: 'How it works', steps: [{ label: 'Observe', detail: '' }, { label: 'Ask', detail: '' }, { label: 'Test', detail: '' }], reveal: true }),
   heading: (c) => read.str(c, 'title') || 'Steps',
-  text: (c) => [read.str(c, 'title'), ...read.objects(c, 'steps').flatMap((s) => [String(s.label ?? ''), String(s.detail ?? '')])].filter(Boolean),
+  text: (c) => [read.str(c, 'title'), ...read.objects(c, 'steps').flatMap((s) => [String(s.label ?? ''), String(s.detail ?? '')]), read.str(c, 'callout')].filter(Boolean),
   layout(c, ctx, variant) {
     const items = read.objects<Record<string, unknown>>(c, 'steps').slice(0, 6);
     const { box, bottom } = slideTitle(ctx, read.str(c, 'title'));
-    const boxes: Box[] = [box];
+    const callout = calloutLine(ctx, c.callout);
+    const floor = callout.bottom;
+    const boxes: Box[] = [box, ...callout.boxes];
     if (!items.length) return { boxes };
-    if (variant === 'down') return { boxes: [...boxes, ...stepsDown(ctx, items, bottom, read.bool(c, 'reveal'))] };
+    if (variant === 'down') return { boxes: [...boxes, ...stepsDown(ctx, items, bottom, read.bool(c, 'reveal'), floor)] };
     const n = items.length;
     const colW = M.w / n;
     const d = sz(ctx, n > 4 ? 76 : 92);
@@ -569,17 +581,17 @@ const steps: SlideKindDefinition<C> = {
       const l = text(ctx, { id: `label-${i}`, text: String(s.label ?? ''), x: cx - tw / 2, y: trackY + d / 2 + 34, w: tw, h: 140, role: 'display', max: 46, min: 30, maxLines: 2, hug: true, align: 'center', step, bind: `steps.${i}.label` });
       boxes.push(l);
       const detail = String(s.detail ?? '');
-      if (detail) boxes.push({ ...text(ctx, { id: `detail-${i}`, text: detail, x: cx - tw / 2, y: l.y + l.h + 14, w: tw, h: M.bottom - (l.y + l.h + 14), max: 32, min: 22, align: 'center', color: ctx.theme.colors.muted, hug: true, step, bind: `steps.${i}.detail` }), moveWith: `label-${i}` });
+      if (detail) boxes.push({ ...text(ctx, { id: `detail-${i}`, text: detail, x: cx - tw / 2, y: l.y + l.h + 14, w: tw, h: floor - (l.y + l.h + 14), max: 32, min: 22, align: 'center', color: ctx.theme.colors.muted, hug: true, step, bind: `steps.${i}.detail` }), moveWith: `label-${i}` });
     });
     return { boxes };
   },
 };
 
 /** Steps down the slide: numbered nodes on a line at the left, each label with its detail beside it. */
-function stepsDown(ctx: LayoutContext, items: Record<string, unknown>[], bottom: number, reveal: boolean): Box[] {
+function stepsDown(ctx: LayoutContext, items: Record<string, unknown>[], bottom: number, reveal: boolean, floor = M.bottom): Box[] {
   const colors = ctx.theme.colors;
   const n = items.length;
-  const areaH = M.bottom - bottom;
+  const areaH = floor - bottom;
   const rowH = Math.min(sz(ctx, 210), areaH / n);
   const d = Math.round(Math.min(sz(ctx, 76), rowH * 0.62));
   const y0 = bottom + Math.max(0, Math.min((areaH - rowH * n) / 2, sz(ctx, 40)));

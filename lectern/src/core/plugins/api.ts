@@ -6,7 +6,7 @@
 // The public build ships with none.
 
 import type { ComponentType } from 'react';
-import type { Audience, Deck, KeyNotes, Slide } from '../deck/types';
+import type { Audience, Deck, KeyNotes, Slide, SlideElement } from '../deck/types';
 import type { Theme } from '../engine/themes';
 import type { AnyKind } from '../kinds/types';
 
@@ -16,7 +16,7 @@ export interface DeckDraft {
   audience?: Audience;
   themeId?: string;
   minutes?: number;
-  slides: Array<Pick<Slide, 'kind' | 'content'> & { notes?: Partial<KeyNotes>; variant?: string; photoNote?: string }>;
+  slides: Array<Pick<Slide, 'kind' | 'content'> & { notes?: Partial<KeyNotes>; variant?: string; photoNote?: string; elements?: SlideElement[] }>;
 }
 
 export interface DeckSourceProps {
