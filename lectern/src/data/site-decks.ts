@@ -4,6 +4,7 @@
 // - Each one is stored under a fixed id (site_<its deck id>), so it is never added twice.
 // - When the site ships a newer copy, that copy replaces the one in the browser.
 // - A site deck someone deletes stays away until the site ships a newer copy.
+// - Phones joining a live share (/join) or opening a hand-out link (/pack) don't fetch them.
 
 import shipped from 'virtual:lectern-site-decks';
 import { db } from './db';
@@ -19,6 +20,14 @@ export interface SiteDeck {
 }
 
 const KEY = 'site-decks';
+
+/**
+ * Whether a page should fetch the site's decks. Phones that only join a live share or open a
+ * hand-out link (/join, /pack) don't, since site decks can be large and a class has many phones.
+ */
+export function wantsSiteDecks(pathname: string): boolean {
+  return !/^\/(join|pack)(\/|$)/.test(pathname);
+}
 
 /** The id a site deck is stored under. */
 export const siteDeckId = (id: string) => `site_${id}`;

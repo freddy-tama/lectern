@@ -169,6 +169,8 @@ function serviceWorker(): Plugin {
         .map((f) => f.replace(/\\/g, '/'))
         .filter((f) => f === 'index.html' || (f !== 'sw.js' && SHELL_FILE.test(f)))
         .filter((f) => statSync(join(outDir, f)).isFile() && statSync(join(outDir, f)).size <= SHELL_MAX_BYTES)
+        // Site decks are fetched once by the pages that want them, never by every visitor's phone.
+        .filter((f) => !/(^|\/)site-deck-\d+-/.test(f))
         .sort((a, b) => (a === 'index.html' ? -1 : b === 'index.html' ? 1 : a.localeCompare(b)));
       const hash = createHash('sha256').update(template);
       for (const f of files) hash.update(`\0${f}\0`).update(readFileSync(join(outDir, f)));
