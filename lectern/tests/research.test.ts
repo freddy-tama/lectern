@@ -128,6 +128,14 @@ describe('POST', () => {
     // The paused turn goes back as the assistant's message, with no "continue" added.
     const second = sdk.calls[1] as { messages: { role: string }[] };
     expect(second.messages.map((m) => m.role)).toEqual(['user', 'assistant']);
+    // Both calls cache: the search steps and the continued turn read the pages found so far from the cache.
+    for (const call of sdk.calls) expect((call as { cache_control?: unknown }).cache_control).toEqual({ type: 'ephemeral' });
+    // The continued turn starts with exactly what the first call sent, so its cached prefix is read back.
+    const opening = sdk.calls[0] as { system: string; tools: unknown; messages: unknown[] };
+    const next = sdk.calls[1] as { system: string; tools: unknown; messages: unknown[] };
+    expect(next.system).toBe(opening.system);
+    expect(next.tools).toEqual(opening.tools);
+    expect(next.messages[0]).toEqual(opening.messages[0]);
     expect(body.notes).toContain('A Mandarin degree opened in 2024');
     expect(body.notes).not.toContain('invented.example');
     expect(body.sources).toEqual([{ title: 'Mandarin at the university', url: 'https://example.ac.id/news/mandarin', date: '2025-03-02' }]);
