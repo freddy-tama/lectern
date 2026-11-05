@@ -1,8 +1,9 @@
+import { cleanElements } from '../engine/elements';
 import { getKind } from '../kinds/registry';
 import type { DeckDraft } from '../plugins/api';
 import { cleanPhotoNote, settlePhotoNote } from './photo-notes';
 import { type Audience, type Deck, type DeckPurpose, type KeyNotes, type Slide, deckDensity, emptyNotes, normalizeNotes, uid } from './types';
-import { countWords } from './words';
+import { cjkChars, countWords } from './words';
 
 /** Words a presenter says per minute, for timing estimates. */
 export const SPEAKING_WPM = 130;
@@ -26,6 +27,13 @@ export function estimateMinutes(notes: Pick<KeyNotes, 'script' | 'check'>, kind:
   return Math.round(total * 2) / 2;
 }
 
+/** A line of a slide as a sentence of the starter script: its own stop kept, else a full stop in its own script. */
+function asSentence(line: string): string {
+  const s = line.replace(/\s+/g, ' ').trim().replace(/[.\s]+$/, '');
+  if (/[。！？!?…]$/.test(s)) return s;
+  return cjkChars(s.slice(-1)) ? `${s}。` : `${s}.`;
+}
+
 /**
  * Fills key points and a starter script from the slide's own text when they are empty.
  * Existing notes are never overwritten.
@@ -40,9 +48,8 @@ export function completeNotes(slide: Slide): Slide {
   const [head, ...rest] = parts;
   if (!notes.keyPoints.length && rest.length && !NO_AUTO_POINTS.has(slide.kind)) notes.keyPoints = rest.slice(0, 4).map((s) => s.replace(/\s+/g, ' ').slice(0, 160));
   if (!notes.script.trim() && head) {
-    notes.script = rest.length
-      ? `${head}. ${rest.slice(0, 4).map((r) => r.replace(/[.\s]+$/, '')).join('. ')}.`
-      : `${head}.`;
+    notes.script = [head, ...rest.slice(0, 4)].map(asSentence)
+      .reduce((a, s) => (!a ? s : /[。！？]$/.test(a) && cjkChars(s[0] ?? '') ? a + s : `${a} ${s}`), '');
   }
   if (!slide.notes.minutes || slide.notes.minutes === 2) notes.minutes = estimateMinutes(notes, slide.kind);
   return { ...slide, notes };
@@ -62,6 +69,7 @@ export function draftToDeck(draft: DeckDraft, o: { audience: Audience; themeId: 
         notes: normalizeNotes({ ...emptyNotes(), ...(s.notes ?? {}) }),
         ...(s.variant ? { variant: s.variant } : {}),
         ...(cleanPhotoNote(s.photoNote) ? { photoNote: cleanPhotoNote(s.photoNote) } : {}),
+        ...(s.elements?.length ? { elements: cleanElements(s.elements) } : {}),
       };
       return completeNotes(settlePhotoNote(slide));
     });

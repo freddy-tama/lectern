@@ -13,24 +13,25 @@
 //   ![alt](url)             → an image
 //   | a | b | + |---|---|   → a table
 //   ---                     → slide break
+//
+// Slides numbered in their headings ("### 第3页｜…", "## Slide 3: …") are read as such: the
+// number goes, a deeper heading is a part of its slide, and headings without a number (the
+// plan's own title, production notes) make no slides. A first slide called 封面 or Cover is the
+// title slide. Bold labels, quoted key lines, A/B/C list items and arrows are read by
+// outline-parts.ts, which says where each part goes.
 
 import { findPractice } from '../import/practice';
 import type { DeckDraft } from '../plugins/api';
+import { type OutlineBlock, addProgress, coverSlide, isRich, richBlockToSlides, unemphasize } from './outline-parts';
 import type { KeyNotes } from './types';
 import { countWords } from './words';
 
 type DraftSlide = DeckDraft['slides'][number];
 
-interface Block {
-  heading: string;
-  level: number;
-  lines: string[];
-  /** The line of the notes the block starts on. */
-  start: number;
-}
+type Block = OutlineBlock;
 
-const BULLET = /^\s*(?:[-*•▪◦]|\d+[.)])\s+(.*)$/;
-const ORDERED = /^\s*\d+[.)]\s+(.*)$/;
+const BULLET = /^\s*(?:[-*•▪◦]\s+|\d+(?:[.)]\s+|[、．]\s*))(.*)$/;
+const ORDERED = /^\s*\d+(?:[.)]\s+|[、．]\s*)(.*)$/;
 const OPTION = /^\s*(?:\(?([A-Fa-f])[).:]|-\s*\[( |x|X)\])\s+(.*)$/;
 const IMAGE = /!\[([^\]]*)\]\(([^)\s]+)\)/;
 const TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(?:\|\s*:?-{2,}:?\s*)*\|?\s*$/;
@@ -45,28 +46,65 @@ function sentences(text: string): string[] {
   return text.replace(/\s+/g, ' ').match(/[^.!?\u3002\uFF01\uFF1F]+[.!?\u3002\uFF01\uFF1F]?/g)?.map((s) => s.trim()).filter(Boolean) ?? [];
 }
 
-function splitBlocks(text: string): { title: string; subtitle: string; blocks: Block[] } {
+/** A slide number at the start of a heading: 第3页｜, 第三张：, 幻灯片 3, Slide 3:, Page 3 - */
+const PAGE = /^(?:第\s*[0-9０-９一二三四五六七八九十百]+\s*[页頁张張](?:幻灯片|ppt)?|幻灯片\s*\d+|(?:slide|page)\s*\d+)\s*[｜|:：.、\-—–]?\s*/i;
+const HEADING = /^(#{1,4})\s+(.*)$/;
+
+/** A plan's own heading as a deck title: "PPT结构：《…》案例分析（14页）" → "《…》案例分析". */
+function planTitle(heading: string): string {
+  return unemphasize(heading)
+    .replace(/^(?:ppt|幻灯片|课件|演示文稿)?\s*(?:结构|大纲|框架|提纲|outline|plan)\s*[:：]\s*/i, '')
+    .replace(/\s*[（(]\s*\d+\s*(?:页|张|slides?|pages?)\s*[)）]\s*$/i, '')
+    .trim();
+}
+
+function splitBlocks(text: string): { title: string; subtitle: string; planTitle: string; blocks: Block[] } {
   const lines = text.replace(/\r\n?/g, '\n').split('\n');
   let title = '';
   let subtitle = '';
   const blocks: Block[] = [];
   let current: Block | null = null;
   let beforeFirst = true;
+  // Numbered slides: two or more headings that start with a slide number.
+  const numbered = lines.flatMap((l) => {
+    const h = HEADING.exec(l.replace(/\s+$/, ''));
+    return h && PAGE.test(unemphasize(h[2]!).trim()) ? [h[1]!.length] : [];
+  });
+  const paging = numbered.length >= 2;
+  const pageLevel = paging ? Math.min(...numbered) : 0;
   for (const [i, raw] of lines.entries()) {
     const line = raw.replace(/\s+$/, '');
-    const h = /^(#{1,4})\s+(.*)$/.exec(line);
-    if (h && h[1].length === 1 && !title && beforeFirst) {
-      title = h[2].trim();
+    const h = HEADING.exec(line);
+    const head = h ? unemphasize(h[2]!).trim() : '';
+    if (h && h[1].length === 1 && !title && beforeFirst && !(paging && PAGE.test(head))) {
+      title = head;
+      continue;
+    }
+    if (h && paging) {
+      beforeFirst = false;
+      const page = PAGE.exec(head);
+      if (page) {
+        current = { heading: head.slice(page[0].length).trim(), level: h[1].length, lines: [], start: i, page: true };
+        blocks.push(current);
+      } else if (current?.page && h[1].length > pageLevel) {
+        // A heading inside a slide labels the part under it.
+        current.lines.push(`**${head.replace(/[:：]\s*$/, '')}：**`);
+      } else {
+        current = { heading: head, level: h[1].length, lines: [], start: i, meta: true };
+        blocks.push(current);
+      }
       continue;
     }
     if (h) {
       beforeFirst = false;
-      current = { heading: h[2].trim(), level: h[1].length, lines: [], start: i };
+      current = { heading: head, level: h[1].length, lines: [], start: i };
       blocks.push(current);
       continue;
     }
     if (/^\s*(?:-{3,}|\*{3,})\s*$/.test(line)) {
       beforeFirst = false;
+      // Between numbered slides a rule only separates them.
+      if (paging) continue;
       current = { heading: '', level: 2, lines: [], start: i };
       blocks.push(current);
       continue;
@@ -85,7 +123,9 @@ function splitBlocks(text: string): { title: string; subtitle: string; blocks: B
     }
     current?.lines.push(line);
   }
-  return { title, subtitle, blocks };
+  // A rule just before a heading starts no slide of its own.
+  const kept = blocks.filter((b) => b.heading || b.lines.some((l) => l.trim()));
+  return { title, subtitle, planTitle: planTitle(blocks.find((b) => b.meta)?.heading ?? ''), blocks: kept };
 }
 
 /** Plain text without headings: every paragraph becomes a slide. `firstLine` is the text's first line in the notes. */
@@ -231,10 +271,12 @@ function blockToSlides(block: Block, index: number): DraftSlide[] {
   const short = bullets.map((b) => (words(b) > 24 ? `${sentences(b)[0] ?? b}` : b));
   const longText = bullets.filter((b) => words(b) > 24).join(' ');
   const extraProse = prose.join(' ');
+  // Points past the eighth don't fit: they go to the script rather than away.
+  const spare = bullets.slice(8).join(' ');
   return [{
     kind: 'bullets',
     content: { title: heading || 'Key points', bullets: short.slice(0, 8), reveal: bullets.length >= 3, ...(image ? { image: image[2] } : {}) },
-    notes: { ...notes, script: notes.script || [extraProse, longText].filter(Boolean).join(' ') },
+    notes: { ...notes, script: [notes.script || [extraProse, longText].filter(Boolean).join(' '), spare].filter(Boolean).join(' ') },
   }];
 }
 
@@ -245,19 +287,25 @@ function blockToSlides(block: Block, index: number): DraftSlide[] {
 export function outlineSlides(source: string, fallbackTitle = 'Untitled deck'): { draft: DeckDraft; lines: number[] } {
   const text = source.trim();
   const parsed = splitBlocks(text);
-  let blocks = parsed.blocks;
+  let blocks = parsed.blocks.filter((b) => !b.meta);
   const hasHeadings = /^#{1,4}\s/m.test(text);
   if (!hasHeadings && blocks.length <= 1) blocks = paragraphsToBlocks(text.split('\n').slice(parsed.title ? 1 : 0).join('\n'), parsed.title ? 1 : 0);
-  const title = parsed.title || fallbackTitle;
-  const slides: DraftSlide[] = [{ kind: 'title', content: { title, subtitle: parsed.subtitle, eyebrow: '', presenter: '' } }];
+  // A cover page is the title slide.
+  const cover = blocks[0] ? coverSlide(blocks[0]) : null;
+  if (cover) blocks = blocks.slice(1);
+  const title = parsed.title || cover?.title || parsed.planTitle || fallbackTitle;
+  const slides: DraftSlide[] = [cover
+    ? { ...cover.slide, content: { ...cover.slide.content, title: cover.title || title } }
+    : { kind: 'title', content: { title, subtitle: parsed.subtitle, eyebrow: '', presenter: '' } }];
   const lines = [0];
   let sectionIndex = 0;
   for (const block of blocks) {
-    const made = blockToSlides(block, sectionIndex);
+    const made = isRich(block.lines) ? richBlockToSlides(block, sectionIndex, blockToSlides) : blockToSlides(block, sectionIndex);
     if (made[0]?.kind === 'section') sectionIndex += 1;
     slides.push(...made);
     lines.push(...made.map(() => block.start));
   }
+  addProgress(slides);
   return { draft: { title, slides }, lines };
 }
 

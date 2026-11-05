@@ -29,7 +29,7 @@ describe('kind spec from the registry', () => {
   it('describes core kinds with field types, limits and the correct-answer key', () => {
     const bullets = kindSpec(getKind('bullets')!);
     expect(bullets.kind).toBe('bullets');
-    expect(bullets.fields.map((f) => [f.key, f.type])).toEqual([['title', 'textarea'], ['bullets', 'list'], ['reveal', 'toggle'], ['image', 'image']]);
+    expect(bullets.fields.map((f) => [f.key, f.type])).toEqual([['title', 'textarea'], ['bullets', 'list'], ['reveal', 'toggle'], ['image', 'image'], ['callout', 'textarea']]);
     expect(bullets.fields.find((f) => f.key === 'bullets')).toMatchObject({ max: 8 });
     expect(kindSpec(getKind('question')!).fields.find((f) => f.key === 'options')).toMatchObject({ correctKey: 'correct' });
     const people = kindSpec(getKind('people')!).fields.find((f) => f.key === 'people')!;
@@ -57,11 +57,11 @@ describe('kind spec from the registry', () => {
 describe('content schema', () => {
   it('turns fields into JSON schema and leaves pictures out', () => {
     const s = contentSchema(specOf('bullets')) as Schema;
-    expect(Object.keys(s.properties!)).toEqual(['title', 'bullets', 'reveal']);
+    expect(Object.keys(s.properties!)).toEqual(['title', 'bullets', 'reveal', 'callout']);
     expect(s.properties!.title.type).toBe('string');
     expect(s.properties!.bullets).toMatchObject({ type: 'array', items: { type: 'string' } });
     expect(s.properties!.reveal.type).toBe('boolean');
-    expect(s.required).toEqual(['title', 'bullets', 'reveal']);
+    expect(s.required).toEqual(['title', 'bullets', 'reveal', 'callout']);
     expect(s.additionalProperties).toBe(false);
   });
 

@@ -406,6 +406,29 @@ export function sourceLine(ctx: LayoutContext, value: string): { box: TextBox | 
   return { box, bottom: box.y - sz(ctx, 24) };
 }
 
+/** The "Bottom line" field of slides with a list, steps, columns or cards: the one line to remember. */
+export const CALLOUT_FIELD = {
+  key: 'callout', label: 'Bottom line', type: 'textarea', rows: 2, more: true,
+  help: 'Optional. A key line under the content, such as the point to remember or a warning.',
+} as const;
+
+/**
+ * A slide's bottom line, beside an accent bar at the bottom of the content area, and the new
+ * bottom for the content above it. No boxes when it is empty.
+ */
+export function calloutLine(ctx: LayoutContext, value: unknown): { boxes: Box[]; bottom: number } {
+  const line = typeof value === 'string' ? value.trim() : '';
+  if (!line) return { boxes: [], bottom: M.bottom };
+  const bar = 10;
+  const t = text(ctx, {
+    id: 'callout', text: line, x: M.x + bar + 32, y: 0, w: M.w - bar - 32, h: sz(ctx, 40) * 1.3 * 3 + 4,
+    max: 40, min: 26, weight: 600, maxLines: 3, hug: true, bind: 'callout',
+  });
+  t.y = M.bottom - t.h;
+  const rule = shape({ id: 'callout-bar', shape: 'rect', x: M.x, y: t.y, w: bar, h: t.h, radius: bar / 2, fill: ctx.theme.colors.accent, moveWith: 'callout' });
+  return { boxes: [rule, t], bottom: t.y - sz(ctx, 36) };
+}
+
 /** The footer line and a quiet slide number, kept clear of a logo at the bottom. */
 export function footer(ctx: LayoutContext): Box[] {
   const boxes: Box[] = [];

@@ -10,7 +10,7 @@ import { displayUrl, pageEmbed } from '../media/embed';
 import { qrImage } from '../media/qr';
 import { clock, pickerHtml, timerHtml, timerSeconds } from '../media/templates';
 import { parseTime, parseVideo, videoLabel } from '../media/video';
-import { M, type LayoutContext, card, read, shape, slideTitle, sz, text } from './kit';
+import { CALLOUT_FIELD, M, type LayoutContext, calloutLine, card, read, shape, slideTitle, sz, text } from './kit';
 import type { AnyKind, SlideKindDefinition } from './types';
 
 type C = Record<string, unknown>;
@@ -336,6 +336,7 @@ const cards: SlideKindDefinition<C> = {
       ],
     },
     { key: 'reveal', label: 'Reveal cards one at a time', type: 'toggle' },
+    CALLOUT_FIELD,
   ],
   create: () => ({
     title: 'Why it works',
@@ -347,20 +348,21 @@ const cards: SlideKindDefinition<C> = {
     reveal: false,
   }),
   heading: (c) => read.str(c, 'title') || 'Cards',
-  text: (c) => [read.str(c, 'title'), ...cardItems(c).flatMap((o) => [o.heading, o.body])].filter(Boolean),
+  text: (c) => [read.str(c, 'title'), ...cardItems(c).flatMap((o) => [o.heading, o.body]), read.str(c, 'callout')].filter(Boolean),
   autoVariant: (c) => (cardItems(c).length >= 4 ? 'grid' : 'row'),
   layout(c, ctx, variant) {
     const items = cardItems(c);
     const boxes: Box[] = [];
     const t = slideTitle(ctx, read.str(c, 'title'));
-    boxes.push(t.box);
+    const callout = calloutLine(ctx, c.callout);
+    boxes.push(t.box, ...callout.boxes);
     if (!items.length) return { boxes };
     const n = items.length;
     const grid = variant === 'grid' && n > 2;
     const cols = grid ? (n <= 4 ? 2 : 3) : n;
     const rows = Math.ceil(n / cols);
     const gap = sz(ctx, 36);
-    const area: Area = { x: M.x, y: t.bottom, w: M.w, h: M.bottom - t.bottom };
+    const area: Area = { x: M.x, y: t.bottom, w: M.w, h: callout.bottom - t.bottom };
     const w = (area.w - gap * (cols - 1)) / cols;
     const h = Math.min((area.h - gap * (rows - 1)) / rows, grid ? 400 : 560);
     const reveal = read.bool(c, 'reveal');
@@ -394,7 +396,7 @@ const cards: SlideKindDefinition<C> = {
     const used = rows * h + gap * (rows - 1);
     if (used < area.h) {
       const shift = Math.min((area.h - used) / 2, sz(ctx, 60));
-      boxes.forEach((b) => { if (b.id !== 'title') b.y += shift; });
+      boxes.forEach((b) => { if (b.id !== 'title' && !b.id.startsWith('callout')) b.y += shift; });
     }
     return { boxes };
   },
