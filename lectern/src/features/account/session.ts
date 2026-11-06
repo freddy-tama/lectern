@@ -149,10 +149,33 @@ export function saveCode(code: string) {
   try { localStorage.setItem(CODE_KEY, code); } catch { /* private mode */ }
 }
 
+/**
+ * A new id for one AI request. On EdgeOne Makers the long AI routes run as Agents functions,
+ * which refuse a request without a makers-conversation-id header (6 to 36 letters, digits, "-",
+ * "_" or "."). Each request gets its own, so requests running at once never share a run. Other
+ * hosts ignore the header.
+ */
+export function requestId(): string {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  } catch { /* fall through */ }
+  return `lectern-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 /** Headers for an AI request: JSON, the server's access code if one was entered, and the sign-in. */
 export async function aiHeaders(): Promise<Record<string, string>> {
   const token = await accessToken().catch(() => '');
-  return { 'content-type': 'application/json', 'x-lectern-code': savedCode(), ...(token ? { authorization: `Bearer ${token}` } : {}) };
+  return {
+    'content-type': 'application/json',
+    'x-lectern-code': savedCode(),
+    'makers-conversation-id': requestId(),
+    ...(token ? { authorization: `Bearer ${token}` } : {}),
+  };
+}
+
+/** Asks an AI route whether it's set up (its GET answer), with the header EdgeOne's Agents functions need. */
+export function aiStatus(url: string): Promise<Response> {
+  return fetch(url, { method: 'GET', headers: { 'makers-conversation-id': requestId() } });
 }
 
 /** POSTs an AI request with the right headers, and reads the balance again once it's answered. */

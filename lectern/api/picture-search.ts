@@ -10,7 +10,9 @@
 //   OPENVERSE_CLIENT_ID       optional, with OPENVERSE_CLIENT_SECRET; raises Openverse's limits
 //   OPENVERSE_CLIENT_SECRET   (anonymous use has low rate limits)
 
-const USER_AGENT = 'Lectern/0.1 (slide picture finder)';
+// Wikimedia's API refuses requests from cloud servers (EdgeOne's, for one) unless the user agent
+// says how to reach the operator: https://meta.wikimedia.org/wiki/User-Agent_policy
+const USER_AGENT = 'Lectern/0.1 (https://github.com/freddy-tama/lectern; slide picture finder)';
 const PER_PAGE = 20;
 
 export type PictureProvider = 'openverse' | 'commons' | 'pexels';

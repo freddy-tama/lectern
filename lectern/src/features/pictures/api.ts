@@ -4,7 +4,7 @@
 import type { FoundPicture, PictureProvider } from '../../../api/picture-search';
 import type { PictureStyle } from '../../../api/picture-generate';
 import type { PictureShape } from '../../core/pictures/rank';
-import { aiPost } from '../account/session';
+import { aiPost, aiStatus } from '../account/session';
 
 export type { PictureProvider, PictureStyle };
 
@@ -65,7 +65,7 @@ let generateStatus: Promise<GenerateStatus> | null = null;
 
 /** Whether this server can make AI pictures. Cached for the session. */
 export function pictureGenerateStatus(): Promise<GenerateStatus> {
-  generateStatus ??= fetch('/api/picture-generate')
+  generateStatus ??= aiStatus('/api/picture-generate')
     .then((r) => (r.ok && r.headers.get('content-type')?.includes('json') ? r.json() : { available: false }))
     .then((j: GenerateStatus) => ({ ...j, available: Boolean(j.available) }))
     .catch(() => ({ available: false }));

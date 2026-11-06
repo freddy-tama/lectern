@@ -165,6 +165,7 @@ See [docs/mods.md](docs/mods.md) to write your own.
 | `CLOUDFLARE_TURN_KEY_ID`, `CLOUDFLARE_TURN_API_TOKEN` | A relay for Share to phones, from [Cloudflare's TURN service](https://developers.cloudflare.com/realtime/turn/). Phones on school or guest Wi-Fi that keeps devices apart, and many on mobile data, can only reach the presenter's computer through a relay. `/api/ice` makes short-lived relay passwords for each visitor, so no new build is needed. |
 | `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | Any other TURN relay, with fixed details. `TURN_URLS` is comma separated, such as `turn:relay.example.com:3478,turns:relay.example.com:443?transport=tcp`. A relay on port 443 gets through the strictest networks. |
 | `VITE_ICE_SERVERS` | JSON list of your own STUN/TURN servers, built into the app. It replaces the defaults and `/api/ice`. |
+| `VITE_MODEL_HOSTS` | Where transcription downloads its speech models, tried in order: https addresses or paths on this site. The default is Hugging Face, then `/hf/`, which the [EdgeOne deployment](docs/china-hosting.md) forwards to Hugging Face for mainland China. |
 | `VITE_PUBLIC_ORIGIN` | The public address of the site, such as `https://lectern.example.com`. The front page builds its quiz QR code from it, so a code shown on `localhost` or a preview deployment still opens on a phone. Without it, the code uses the address the page was opened at. |
 | `VITE_TESTSPRITE_URL` | A link to the site's TestSprite test results. When it's set, the front page's footer links to it; otherwise the line is left out. |
 
@@ -209,7 +210,7 @@ Before you see an AI deck, the browser checks it against Lectern's own layout ru
 
 ### How transcription works
 
-Transcription needs no server and no key. A Web Worker runs Whisper with [transformers.js](https://github.com/huggingface/transformers.js) on the device: on the graphics chip through WebGPU when the browser has it, otherwise on the processor through WebAssembly. Pick **Faster** (`whisper-tiny`), **Balanced** (`whisper-base`, the default) or **More accurate** (`whisper-small`); the model downloads from Hugging Face once and is cached. Pick the spoken language or let it be detected.
+Transcription needs no server and no key. A Web Worker runs Whisper with [transformers.js](https://github.com/huggingface/transformers.js) on the device: on the graphics chip through WebGPU when the browser has it, otherwise on the processor through WebAssembly. Pick **Faster** (`whisper-tiny`), **Balanced** (`whisper-base`, the default) or **More accurate** (`whisper-small`); the model downloads from Hugging Face once and is cached. Where Hugging Face is blocked, it comes through `/hf/` on Lectern's own address instead, when the host forwards that path (see [Deploy for mainland China](#deploy-for-mainland-china)). The speech engine itself is served from the site's own `/assets/`. Pick the spoken language or let it be detected.
 
 The browser decodes the audio straight to 16 kHz mono. Long recordings are cut into sections of about four minutes at quiet moments, and each section is read in 30-second windows that overlap by 5 seconds. Each section saves as soon as it's done, so the transcript appears as it goes, a stopped transcription carries on where it left off, and you can move around the app while it runs. Videos keep only their sound.
 
@@ -220,6 +221,16 @@ The browser decodes the audio straight to 16 kHz mono. Long recordings are cut i
 | Space | Play or pause |
 | ← / → | Back or forward 10 seconds |
 | Enter in search | Next match (Shift+Enter for the previous one) |
+
+## Deploy for mainland China
+
+`*.vercel.app` is blocked or throttled in mainland China. Lectern also runs on [Tencent EdgeOne Makers](https://pages.edgeone.ai), whose free plan serves the mainland from nearby nodes without an ICP filing, given a domain of your own. [`edgeone.json`](edgeone.json) holds the build, routing and headers. [`server/edgeone.ts`](server/edgeone.ts) runs the routes in `api/` unchanged: the short ones from `cloud-functions/api/` and the long AI ones from `agents/api/`. [`edge-functions/hf/`](edge-functions/hf/) forwards the speech models. Deploy from the `lectern` folder with an API token from the Makers console:
+
+```bash
+npx edgeone makers deploy -n lectern -t "$EDGEONE_API_TOKEN" -e preview --site global --area overseas
+```
+
+`--area overseas` serves the site from nodes outside the mainland, which needs no ICP filing. On Makers, functions run in Singapore. Cloud Functions stop after 120 s, so the routes Vercel gives longer run as Agents functions, with 300 s as on Vercel. Agents functions refuse requests without a `makers-conversation-id` header, so the browser sends a new one with each AI request; Vercel ignores it. The AI providers don't serve mainland China, Hong Kong or Macau; for now Lectern keeps Claude for everyone. [docs/china-hosting.md](docs/china-hosting.md) has the full plan: what works in China, the limits, each step of the move, and the options for AI.
 
 ## Testing
 
