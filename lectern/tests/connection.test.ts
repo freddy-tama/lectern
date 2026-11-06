@@ -3,10 +3,12 @@
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { GET, cleanServers, relayServers, resetRelayCache, staticServers } from '../api/ice';
-import { SILENT_AFTER } from '../src/core/share/protocol';
+import { emptyNotes } from '../src/core/deck/types';
+import { AWAY_FOR, SILENT_AFTER, WEAK_AFTER } from '../src/core/share/protocol';
 import { db } from '../src/data/db';
 import { buildSeed } from '../src/data/seed';
 import { DEFAULT_ICE, backoff, hasOwnRelay, isIceList, mergeIce, troubleMessage, troubleOf } from '../src/features/share/peer';
+import { SESSION_MAX } from '../src/features/share/session-store';
 
 // ─── A stand-in for PeerJS ────────────────────────────────────────────
 
@@ -218,17 +220,17 @@ describe('a phone joining and staying joined', () => {
     liveLink.join('ABC234');
     await settle();
     peers[0]!.emit('error', { type: 'peer-unavailable' });
-    for (let i = 0; i < 3; i++) await settle(16_000 + 3000);
+    for (let i = 0; i < 6; i++) await settle(21_000 + 3000);
     expect(liveLink.snapshot.status).toBe('error');
     expect(liveLink.snapshot.trouble).toBe('missing');
     expect(liveLink.snapshot.error).toMatch(/No presentation is using that code/);
   });
 
-  it('gives up after a few tries with what went wrong, and starts over on Try again', async () => {
+  it('says what went wrong after a few tries, and starts over on Try again', async () => {
     liveLink.join('ABC234');
     await settle();
     // Each try's link never opens: the network blocks it.
-    for (let i = 0; i < 4; i++) await settle(16_000 + 3000);
+    for (let i = 0; i < 6; i++) await settle(21_000 + 3000);
     expect(liveLink.snapshot.status).toBe('error');
     expect(liveLink.snapshot.trouble).toBe('blocked');
     expect(liveLink.snapshot.error).toMatch(/network/);
@@ -365,5 +367,377 @@ describe('the computer staying reachable', () => {
     await settle(100);
     expect(liveHost.snapshot.guests.map((g) => g.id)).toEqual(['phone-b']);
     expect(first.closed).toBe(true);
+  });
+});
+
+// ─── Keeping what a student did, through drops and reloads ────────────
+
+describe('a phone keeping its answers', () => {
+  const CODE = 'DEF234';
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    peers.length = 0;
+    openFails = 0;
+    localStorage.clear();
+    await db.settings.put({ key: `link:${CODE}`, value: { deckId: 'shared_d2', updatedAt: 1 } });
+    await db.decks.put({ ...buildSeed(new Date('2026-10-19T10:00:00')).decks[0]!, id: 'shared_d2' });
+  });
+
+  afterEach(async () => {
+    liveLink.leave();
+    await db.decks.delete('shared_d2');
+    await db.settings.delete(`link:${CODE}`);
+    vi.useRealTimers();
+  });
+
+  async function joined() {
+    liveLink.join(CODE);
+    await settle();
+    const c = lastConn();
+    c.accept();
+    c.hear({ t: 'welcome', role: 'audience', title: 'Deck', parts: 0, bytes: 0, same: true, acks: true });
+    await settle();
+    expect(liveLink.snapshot.status).toBe('ready');
+    return c;
+  }
+
+  it('holds an answer tapped while the link is down, and sends it on reconnecting, saying how long ago', async () => {
+    const first = await joined();
+    first.close();
+    expect(liveLink.snapshot.status).toBe('reconnecting');
+    liveLink.answer('q1', 2);
+    expect(liveLink.snapshot.myAnswers.q1).toBe(2);
+    expect(liveLink.snapshot.outbox).toHaveLength(1);
+    await settle(5000);
+    const second = lastConn();
+    expect(second).not.toBe(first);
+    second.accept();
+    second.hear({ t: 'welcome', role: 'audience', title: 'Deck', parts: 0, bytes: 0, same: true, acks: true });
+    await settle();
+    const sent = second.sent.find((m) => (m as { t: string }).t === 'answer') as { choice: number; ago: number };
+    expect(sent.choice).toBe(2);
+    expect(sent.ago).toBeGreaterThanOrEqual(5000);
+    // Still held until the computer says it has it.
+    expect(liveLink.snapshot.outbox).toHaveLength(1);
+    second.hear({ t: 'mine', answers: { q1: 2 }, votes: {}, words: {} });
+    expect(liveLink.snapshot.outbox).toEqual([]);
+  });
+
+  it('sends an unconfirmed answer again on a link that only looks fine', async () => {
+    const c = await joined();
+    liveLink.answer('q1', 1);
+    const count = () => c.sent.filter((m) => (m as { t: string }).t === 'answer').length;
+    expect(count()).toBe(1);
+    await settle(7000);
+    expect(count()).toBeGreaterThan(1);
+    c.hear({ t: 'mine', answers: { q1: 1 }, votes: {}, words: {} });
+    const after = count();
+    await settle(7000);
+    expect(count()).toBe(after);
+  });
+
+  it('remembers answers through a reload, and shows the saved deck straight away', async () => {
+    await joined();
+    liveLink.answer('q1', 0);
+    liveLink.vote('p1', 1);
+    // What a reload does: everything in memory goes, and the page joins again.
+    liveLink.leave();
+    expect(liveLink.snapshot.myAnswers).toEqual({});
+    liveLink.join(CODE);
+    expect(liveLink.snapshot.myAnswers).toEqual({ q1: 0 });
+    expect(liveLink.snapshot.myVotes).toEqual({ p1: 1 });
+    expect(liveLink.snapshot.outbox).toHaveLength(2);
+    await settle();
+    expect(liveLink.snapshot.status).toBe('reconnecting');
+    expect(liveLink.snapshot.deckId).toBe('shared_d2');
+  });
+
+  it('takes the computer’s word for what counted, and says when an answer came too late', async () => {
+    const c = await joined();
+    liveLink.answer('q1', 0);
+    liveLink.answer('q2', 2);
+    c.hear({ t: 'mine', answers: { q1: 1 }, votes: {}, words: {}, refused: ['q2'] });
+    // The computer had a different answer from before: that one stands.
+    expect(liveLink.snapshot.myAnswers).toEqual({ q1: 1 });
+    expect(liveLink.snapshot.outbox).toEqual([]);
+    expect(liveLink.snapshot.late).toEqual({ q2: true });
+  });
+
+  it('lets a question be answered again after the presenter starts the quiz over', async () => {
+    const c = await joined();
+    liveLink.answer('q1', 0);
+    c.hear({ t: 'mine', answers: { q1: 0 }, votes: {}, words: {} });
+    c.hear({ t: 'mine', answers: {}, votes: {}, words: {} });
+    expect(liveLink.snapshot.myAnswers).toEqual({});
+  });
+
+  it('doesn’t end when the computer goes missing for a long time, and comes back when it does', async () => {
+    const c = await joined();
+    c.close();
+    for (let i = 0; i < 8; i++) {
+      peers[peers.length - 1]!.emit('error', { type: 'peer-unavailable' });
+      await settle(30_000);
+    }
+    expect(liveLink.snapshot.status).toBe('reconnecting');
+    expect(liveLink.snapshot.trouble).toBe('missing');
+    const back = lastConn();
+    back.accept();
+    back.hear({ t: 'welcome', role: 'audience', title: 'Deck', parts: 0, bytes: 0, same: true, acks: true });
+    await settle();
+    expect(liveLink.snapshot.status).toBe('ready');
+  });
+
+  it('stops trying when the same phone opened the deck elsewhere, until asked', async () => {
+    const c = await joined();
+    c.hear({ t: 'replaced' });
+    expect(liveLink.snapshot.status).toBe('replaced');
+    const opened = peers.flatMap((p) => p.conns).length;
+    await settle(60_000);
+    expect(peers.flatMap((p) => p.conns).length).toBe(opened);
+    liveLink.retry();
+    await settle();
+    expect(peers.flatMap((p) => p.conns).length).toBe(opened + 1);
+  });
+
+  it('tries again straight away on Try now', async () => {
+    const c = await joined();
+    c.close();
+    expect(liveLink.snapshot.status).toBe('reconnecting');
+    const opened = peers.flatMap((p) => p.conns).length;
+    liveLink.tryNow();
+    await settle();
+    expect(peers.flatMap((p) => p.conns).length).toBe(opened + 1);
+  });
+
+  it('takes a fresh peer after hearing the computer is missing: a second offer from the old one hears nothing', async () => {
+    const c = await joined();
+    c.close();
+    await settle(2000);
+    const old = peers[peers.length - 1]!;
+    const before = peers.length;
+    old.emit('error', { type: 'peer-unavailable' });
+    expect(old.destroyed).toBe(true);
+    await settle(2500);
+    expect(peers.length).toBe(before + 1);
+  });
+
+  it('starts afresh when the network comes back, rather than wait for a try that may be dead', async () => {
+    const c = await joined();
+    c.close();
+    await settle(2000);
+    const before = peers.length;
+    window.dispatchEvent(new Event('online'));
+    await settle();
+    expect(peers.length).toBe(before + 1);
+  });
+
+  it('gives up on a try from before the phone slept when it’s back on screen', async () => {
+    const c = await joined();
+    c.close();
+    await settle(2000);
+    const before = peers.length;
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settle();
+    expect(peers.length).toBe(before);
+    await settle(6000);
+    document.dispatchEvent(new Event('visibilitychange'));
+    await settle();
+    expect(peers.length).toBe(before + 1);
+  });
+
+  it('notices a computer that goes quiet before its first ping', async () => {
+    await joined();
+    await settle(SILENT_AFTER + 3100);
+    expect(liveLink.snapshot.status).toBe('reconnecting');
+  });
+
+  it('stays on an older computer that never pings', async () => {
+    liveLink.join(CODE);
+    await settle();
+    await welcomeSame(lastConn());
+    await settle(SILENT_AFTER + 3100);
+    expect(liveLink.snapshot.status).toBe('ready');
+  });
+
+  it('says the signal is weak before it gives up on the link', async () => {
+    const c = await joined();
+    c.hear({ t: 'ping', at: 1 });
+    await settle(WEAK_AFTER + 3100);
+    expect(liveLink.snapshot.weak).toBe(true);
+    expect(liveLink.snapshot.status).toBe('ready');
+    c.hear({ t: 'ping', at: 2 });
+    await settle(3100);
+    expect(liveLink.snapshot.weak).toBe(false);
+  });
+
+  it('keeps joining by itself after it has shown an error', async () => {
+    await db.settings.delete(`link:${CODE}`);
+    liveLink.join(CODE);
+    await settle();
+    for (let i = 0; i < 6; i++) await settle(21_000 + 3000);
+    expect(liveLink.snapshot.status).toBe('error');
+    await settle(25_000);
+    await settle(1000);
+    const c = lastConn();
+    c.accept();
+    c.hear({ t: 'welcome', role: 'audience', title: 'Deck', parts: 1, bytes: 1 });
+    expect(liveLink.snapshot.status).toBe('receiving');
+    expect(liveLink.snapshot.error).toBeNull();
+  });
+});
+
+// ─── The computer through drops and reloads ───────────────────────────
+
+describe('the computer through drops and reloads', () => {
+  const deck = buildSeed(new Date('2026-10-19T10:00:00')).decks[0]!;
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
+    peers.length = 0;
+    openFails = 0;
+    localStorage.clear();
+    await db.decks.put(deck);
+  });
+
+  afterEach(async () => {
+    liveHost.stop();
+    await settle(1000);
+    vi.useRealTimers();
+  });
+
+  async function share() {
+    await liveHost.start(deck.id);
+    await settle();
+    return peers[0]!;
+  }
+
+  function phone(peer: FakePeer, id: string, player: string) {
+    const c = new FakeConn(id, { device: 'iPhone', player });
+    peer.emit('connection', c);
+    c.accept();
+    return c;
+  }
+
+  it('tells an older copy of a phone it was replaced, so the two don’t fight', async () => {
+    const peer = await share();
+    const first = phone(peer, 'tab-1', 'same');
+    await settle(100);
+    const second = phone(peer, 'tab-2', 'same');
+    await settle(100);
+    expect(first.sent).toContainEqual({ t: 'replaced' });
+    expect(second.sent).not.toContainEqual({ t: 'replaced' });
+    expect(liveHost.snapshot.guests.map((g) => g.id)).toEqual(['tab-2']);
+  });
+
+  it('shows a phone that lost its link as reconnecting, then one row when it is back', async () => {
+    const peer = await share();
+    const first = phone(peer, 'link-1', 'stu');
+    await settle(100);
+    first.close();
+    expect(liveHost.snapshot.guests).toHaveLength(1);
+    expect(liveHost.snapshot.guests[0]!.awaySince).toBeDefined();
+    phone(peer, 'link-2', 'stu');
+    await settle(100);
+    expect(liveHost.snapshot.guests.map((g) => [g.id, g.awaySince])).toEqual([['link-2', undefined]]);
+  });
+
+  it('takes a phone off the list when it doesn’t come back', async () => {
+    const peer = await share();
+    phone(peer, 'link-1', 'stu').close();
+    await settle(AWAY_FOR + 5000);
+    expect(liveHost.snapshot.guests).toEqual([]);
+  });
+
+  it('confirms answers, and counts one taken while the phone’s link was down from when it was tapped', async () => {
+    const peer = await share();
+    const c = phone(peer, 'link-1', 'stu');
+    await settle(300);
+    const mine = () => c.sent.filter((m) => (m as { t: string }).t === 'mine').pop() as { answers: Record<string, number>; refused?: string[] };
+    expect(mine()).toMatchObject({ answers: {}, votes: {}, words: {} });
+    // No question is open, so this answer can't count, and the phone is told.
+    c.hear({ t: 'answer', slideId: 'nothing', choice: 0, ago: 500 });
+    expect(mine().refused).toEqual(['nothing']);
+  });
+
+  it('counts a phone that reconnected and changed its vote once', async () => {
+    const poll = { id: 'poll', kind: 'question', content: { question: 'Which?', options: ['A', 'B'] }, notes: emptyNotes() };
+    await db.decks.put({ ...deck, slides: [poll] });
+    const peer = await share();
+    const first = phone(peer, 'link-1', 'stu');
+    await settle(100);
+    first.hear({ t: 'vote', slideId: 'poll', choice: 0 });
+    first.close();
+    const second = phone(peer, 'link-2', 'stu');
+    await settle(100);
+    second.hear({ t: 'vote', slideId: 'poll', choice: 1 });
+    expect(liveHost.snapshot.votes.poll).toEqual({ counts: [0, 1], total: 1 });
+    await db.decks.put(deck);
+  });
+
+  it('picks the session up after a reload: same code and token, scores and answers kept', async () => {
+    const quizSlide = { id: 'q1', kind: 'question', content: { question: 'Which?', options: ['A', 'B'], correct: 1 }, notes: emptyNotes() };
+    await db.decks.put({ ...deck, slides: [quizSlide] });
+    const peer = await share();
+    const { code, token } = liveHost.snapshot;
+    const c = phone(peer, 'link-1', 'stu');
+    await settle(100);
+    liveHost.setState({ index: 0, step: 0, blank: false, flags: {}, startedAt: null });
+    c.hear({ t: 'answer', slideId: 'q1', choice: 1, ago: 0 });
+    liveHost.keepNow();
+    const key = `lectern.share.session.${code}`;
+    const saved = localStorage.getItem(key)!;
+    expect(saved).toBeTruthy();
+    // What a reload does: the page is gone, what it wrote down stays. (stop() also clears it.)
+    liveHost.stop();
+    await settle(1000);
+    expect(localStorage.getItem(key)).toBeNull();
+    localStorage.setItem(key, saved);
+    const before = peers.length;
+    expect(await liveHost.resume()).toBe(true);
+    expect(liveHost.snapshot).toMatchObject({ status: 'live', code, token, resumed: true });
+    expect(liveHost.quizResults().questions[0]!.choicesBy).toEqual({ stu: 1 });
+    expect(liveHost.snapshot.state?.index).toBe(0);
+    await settle();
+    expect(peers.length).toBe(before + 1);
+    expect(liveHost.snapshot.signal).toBe('up');
+    // The phone comes back, and is told what it already answered.
+    const back = phone(peers[peers.length - 1]!, 'link-2', 'stu');
+    await settle(100);
+    expect(back.sent.filter((m) => (m as { t: string }).t === 'mine').pop()).toMatchObject({ answers: { q1: 1 } });
+    await db.decks.put(deck);
+  });
+
+  it('keeps trying for the code after a reload until the service gives it back', async () => {
+    await db.decks.put(deck);
+    await share();
+    const { code } = liveHost.snapshot;
+    liveHost.keepNow();
+    const key = `lectern.share.session.${code}`;
+    const saved = localStorage.getItem(key)!;
+    liveHost.stop();
+    await settle(1000);
+    localStorage.setItem(key, saved);
+    openFails = 3;
+    await liveHost.resume();
+    await settle(1000);
+    expect(liveHost.snapshot.signal).toBe('down');
+    await settle(30_000);
+    expect(liveHost.snapshot.signal).toBe('up');
+    expect(liveHost.snapshot.code).toBe(code);
+  });
+
+  it('forgets the session on Stop sharing, and doesn’t pick up an old one', async () => {
+    await share();
+    const { code } = liveHost.snapshot;
+    liveHost.keepNow();
+    const key = `lectern.share.session.${code}`;
+    const saved = JSON.parse(localStorage.getItem(key)!) as { at: number };
+    liveHost.stop();
+    await settle(1000);
+    expect(await liveHost.resume()).toBe(false);
+    localStorage.setItem(key, JSON.stringify({ ...saved, at: Date.now() - SESSION_MAX - 1000 }));
+    expect(await liveHost.resume()).toBe(false);
+    expect(localStorage.getItem(key)).toBeNull();
   });
 });

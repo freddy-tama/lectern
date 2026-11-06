@@ -4,6 +4,10 @@
 // It joins the same BroadcastChannel the presenter windows use (see present/sync.ts):
 // slide changes made on the computer go out to phones, and the presenter's phone
 // can move the slides on the computer.
+//
+// It also survives a reload of this page. The session is kept in this browser (session-store.ts)
+// and picked up again with the same code, scores and slide, so the QR code on the wall keeps
+// working and phones find their way back by themselves. Only "Stop sharing" ends it for them.
 
 import { liveQuery } from 'dexie';
 import type { DataConnection, Peer } from 'peerjs';
@@ -11,7 +15,7 @@ import { useSyncExternalStore } from 'react';
 import type { Deck } from '../../core/deck/types';
 import { getTheme, isBuiltInTheme } from '../../core/engine/themes';
 import {
-  type CloudResult, DEFAULT_OPTIONS, GONE_AFTER, type GuestMessage, type HostMessage, type JoinMetadata, type LiveState, PING_EVERY, type PollResult,
+  AWAY_FOR, type CloudResult, DEFAULT_OPTIONS, GONE_AFTER, type GuestMessage, type HostMessage, type JoinMetadata, type LiveState, type MineView, PING_EVERY, type PollResult,
   type Role, type SharePackage, type ShareOptions, assetIds, cleanWord, cloudLimit, deckForRole, joinUrl, newCode, newToken, peerIdFor, pollChoices,
   sharedAsset, splitParts, tally, tallyWords, wordKey,
 } from '../../core/share/protocol';
@@ -21,13 +25,20 @@ import {
 import { db } from '../../data/db';
 import { saveDeck } from '../../data/repo';
 import { backoff, heartbeat, keepAwake, openPeer, peerErrorMessage } from './peer';
+import { type SavedSession, clearSession, holdSession, letGoOfSession, saveSession, savedSessions, siteAccess } from './session-store';
 
 export interface GuestInfo {
   id: string;
   role: Role;
   device: string;
+  /** The phone's stable id, the same after it reconnects. */
+  player: string;
+  /** The name it gave for the leaderboard. */
+  name?: string;
   ready: boolean;
   since: number;
+  /** Since when its link has been lost. It usually comes back by itself. */
+  awaySince?: number;
 }
 
 export interface HostSnapshot {
@@ -56,6 +67,8 @@ export interface HostSnapshot {
   /** Every player, ranked. */
   quizBoard: BoardRow[];
   stage: QuizStage;
+  /** This session was picked up again after the page reloaded. */
+  resumed: boolean;
 }
 
 /** The quiz as the big screen shows it. */
@@ -83,7 +96,7 @@ function loadOptions(): ShareOptions {
 const idle = (): HostSnapshot => ({
   status: 'idle', error: null, signal: 'up', deckId: null, title: '', code: null, token: null, options: loadOptions(),
   guests: [], state: null, votes: {}, clouds: {}, onScreen: false, panel: { open: false, deckId: null },
-  quizSettings: loadQuizSettings(), quiz: null, quizBoard: [], stage: 'play',
+  quizSettings: loadQuizSettings(), quiz: null, quizBoard: [], stage: 'play', resumed: false,
 });
 
 let snap: HostSnapshot = idle();
@@ -92,6 +105,7 @@ const listeners = new Set<() => void>();
 function set(patch: Partial<HostSnapshot>) {
   snap = { ...snap, ...patch };
   listeners.forEach((l) => l());
+  if (snap.status === 'live') keepSoon();
 }
 
 // Session resources, alive while sharing.
@@ -109,6 +123,11 @@ let signalTimer: number | undefined;
 let quiz = new QuizEngine(loadQuizSettings());
 let quizTimer: number | undefined;
 let publishTimer: number | undefined;
+let keepTimer: number | undefined;
+/** Goes up when a session ends, so work still under way for it stops. */
+let sessionRun = 0;
+let opening = false;
+/** Slide → phone (its stable id) → its choice. */
 const votes = new Map<string, Map<string, number>>();
 /** Word cloud answers: slide → phone → the words it sent. */
 const words = new Map<string, Map<string, string[]>>();
@@ -123,8 +142,54 @@ function guestsChanged(id: string, patch: Partial<GuestInfo> | null) {
   const others = snap.guests.filter((g) => g.id !== id);
   if (!patch) { set({ guests: others }); return; }
   const prev = snap.guests.find((g) => g.id === id);
-  const next: GuestInfo = { id, role: 'audience', device: 'Device', ready: false, since: Date.now(), ...prev, ...patch };
+  const next: GuestInfo = { id, role: 'audience', device: 'Device', player: id, ready: false, since: Date.now(), ...prev, ...patch };
   set({ guests: [...others, next].sort((a, b) => a.since - b.since) });
+}
+
+// --- Keeping the session ----------------------------------------------------
+
+/** Writes the session down, so a reload can pick it up. */
+function keepNow() {
+  window.clearTimeout(keepTimer);
+  keepTimer = undefined;
+  if (snap.status !== 'live' || !snap.code || !snap.token || !snap.deckId) return;
+  saveSession({
+    code: snap.code, token: snap.token, deckId: snap.deckId, title: snap.title, at: Date.now(),
+    state: snap.state, stage: snap.stage, onScreen: snap.onScreen, quiz: quiz.dump(),
+    votes: [...votes].map(([slide, m]) => [slide, [...m]]),
+    words: [...words].map(([slide, m]) => [slide, [...m]]),
+    hidden: [...hiddenWords].map(([slide, s]) => [slide, [...s]]),
+  });
+}
+
+function keepSoon() {
+  if (keepTimer === undefined) keepTimer = window.setTimeout(keepNow, 500);
+}
+
+/** Sets up what a live session needs, for a new one or one being picked up again. */
+function restoreAnswers(saved: SavedSession) {
+  votes.clear();
+  words.clear();
+  hiddenWords.clear();
+  for (const [slide, list] of saved.votes ?? []) votes.set(slide, new Map(list));
+  for (const [slide, list] of saved.words ?? []) words.set(slide, new Map(list));
+  for (const [slide, list] of saved.hidden ?? []) hiddenWords.set(slide, new Set(list));
+}
+
+/** What the computer has from one phone. */
+function mineOf(player: string, refused?: string[]): { t: 'mine' } & MineView {
+  const myVotes: Record<string, number> = {};
+  for (const [slide, m] of votes) { const v = m.get(player); if (v !== undefined) myVotes[slide] = v; }
+  const myWords: Record<string, string[]> = {};
+  for (const [slide, m] of words) { const w = m.get(player); if (w?.length) myWords[slide] = w; }
+  return { t: 'mine', answers: quiz.answersOf(player), votes: myVotes, words: myWords, ...(refused?.length ? { refused } : {}) };
+}
+
+/** Tells every phone what the computer has from it, after answers were cleared here. */
+function pushMine() {
+  for (const [id, c] of conns) {
+    if (snap.guests.find((g) => g.id === id)?.ready) send(c.conn, mineOf(c.player));
+  }
 }
 
 function send(conn: DataConnection, msg: HostMessage) {
@@ -147,8 +212,8 @@ function blobToDataUrl(blob: Blob): Promise<string> {
   });
 }
 
-/** Largest video file sent to phones. */
-const PHONE_VIDEO_MAX = 8 * 1024 * 1024;
+/** Largest video or sound file sent to phones. */
+const PHONE_MEDIA_MAX = 8 * 1024 * 1024;
 
 async function packageFor(role: Role): Promise<string | null> {
   if (!deck) return null;
@@ -161,8 +226,8 @@ async function packageFor(role: Role): Promise<string | null> {
   const assets: SharePackage['assets'] = [];
   for (const id of assetIds({ shared, custom })) {
     const asset = await db.assets.get(id);
-    // Big video files stay on the main screen; phones show a still in their place.
-    if (asset && !(asset.mime.startsWith('video/') && asset.blob.size > PHONE_VIDEO_MAX)) assets.push(sharedAsset(asset, await blobToDataUrl(asset.blob)));
+    // Big video and sound files stay on the main screen. Phones show a still, or say the sound plays there.
+    if (asset && !(/^(video|audio)\//.test(asset.mime) && asset.blob.size > PHONE_MEDIA_MAX)) assets.push(sharedAsset(asset, await blobToDataUrl(asset.blob)));
   }
   const pkg: SharePackage = { format: 'lectern-share', version: 1, role, deck: shared, theme: custom, assets, options: snap.options };
   const json = JSON.stringify(pkg);
@@ -194,12 +259,12 @@ function drained(conn: DataConnection): Promise<void> {
 async function deliver(conn: DataConnection, role: Role, have?: number) {
   if (!deck) return;
   if (have && have === deck.updatedAt) {
-    send(conn, { t: 'welcome', role, title: deck.title, parts: 0, bytes: 0, same: true });
+    send(conn, { t: 'welcome', role, title: deck.title, parts: 0, bytes: 0, same: true, acks: true });
   } else {
     const json = await packageFor(role);
     if (!json) return;
     const parts = splitParts(json);
-    send(conn, { t: 'welcome', role, title: deck.title, parts: parts.length, bytes: json.length });
+    send(conn, { t: 'welcome', role, title: deck.title, parts: parts.length, bytes: json.length, acks: true });
     for (let i = 0; i < parts.length; i++) {
       // Queue only what the connection can carry: a room of phones joining at once
       // would otherwise stall it.
@@ -211,13 +276,18 @@ async function deliver(conn: DataConnection, role: Role, have?: number) {
   // The phone left while its slides were on the way.
   if (conns.get(conn.peer)?.conn !== conn) return;
   guestsChanged(conn.peer, { ready: true });
+  // A phone that reloaded has forgotten these.
+  send(conn, { t: 'options', options: snap.options });
   if (snap.state) send(conn, { t: 'state', state: snap.state });
   for (const [slideId, result] of Object.entries(snap.votes)) send(conn, { t: 'votes', slideId, result });
   for (const [slideId, result] of Object.entries(snap.clouds)) send(conn, { t: 'words', slideId, result });
   const c = conns.get(conn.peer);
   if (c) {
     send(conn, { t: 'quiz', quiz: quiz.view(role, Date.now(), role === 'presenter' ? 10 : 5), stage: snap.stage });
-    if (role === 'audience') send(conn, { t: 'you', you: quiz.playerView(c.player) });
+    if (role === 'audience') {
+      send(conn, { t: 'you', you: quiz.playerView(c.player) });
+      send(conn, mineOf(c.player));
+    }
   }
 }
 
@@ -298,20 +368,29 @@ function onConnection(conn: DataConnection) {
     const meta = (conn.metadata ?? {}) as Partial<JoinMetadata>;
     const role: Role = meta.token && meta.token === snap.token ? 'presenter' : 'audience';
     const player = typeof meta.player === 'string' && meta.player ? meta.player.slice(0, 40) : conn.peer;
-    // A phone that reconnects comes back with a new link: let go of its old one.
+    // A phone that reconnects comes back with a new link: let go of its old one. If that link is
+    // still alive, the phone has this deck open twice, and the older copy has to stop trying,
+    // or the two would push each other off for ever.
     for (const [id, c] of conns) {
-      if (id !== conn.peer && c.player === player && c.role === role) dropGuest(id);
+      if (id !== conn.peer && c.player === player && c.role === role) {
+        send(c.conn, { t: 'replaced' });
+        dropGuest(id);
+      }
     }
+    const back = snap.guests.filter((g) => g.awaySince !== undefined && g.player === player && g.role === role);
+    if (back.length) set({ guests: snap.guests.filter((g) => !back.includes(g)) });
     conns.set(conn.peer, { conn, role, player, heard: Date.now(), pongs: false });
-    if (role === 'audience') { quiz.join(player, typeof meta.name === 'string' ? meta.name : undefined); publishSoon(); }
-    guestsChanged(conn.peer, { role, device: typeof meta.device === 'string' ? meta.device.slice(0, 40) : 'Device', ready: false, since: Date.now() });
+    const name = typeof meta.name === 'string' && meta.name.trim() ? meta.name.trim().slice(0, 24) : undefined;
+    if (role === 'audience') { quiz.join(player, name); publishSoon(); }
+    guestsChanged(conn.peer, { role, player, name, device: typeof meta.device === 'string' ? meta.device.slice(0, 40) : 'Device', ready: false, since: Date.now(), awaySince: undefined });
     void deliver(conn, role, typeof meta.have === 'number' ? meta.have : undefined);
   });
   conn.on('data', (raw) => onGuestMessage(conn, raw as GuestMessage));
+  // Most phones that lose their link come back by themselves: the presenter sees them as reconnecting.
   const drop = () => {
     if (conns.get(conn.peer)?.conn !== conn) return;
     conns.delete(conn.peer);
-    guestsChanged(conn.peer, null);
+    guestsChanged(conn.peer, { ready: false, awaySince: Date.now() });
   };
   conn.on('close', drop);
   // One message that was too big to send doesn't mean the phone is gone.
@@ -357,18 +436,51 @@ function onVisible() {
   if (document.visibilityState === 'visible') reconnectNow();
 }
 
+/** Opens the link to the connection service under this session's code, and keeps trying until it works. */
+async function openSignal(code: string) {
+  if (opening) return;
+  opening = true;
+  const mine = sessionRun;
+  set({ signal: 'down' });
+  try {
+    for (let tries = 1; mine === sessionRun; tries++) {
+      try {
+        const opened = await openPeer(peerIdFor(code));
+        if (mine !== sessionRun) { opened.destroy(); return; }
+        attachPeer(opened);
+        return;
+      } catch {
+        // The service may still hold the code for a moment after a reload.
+        await new Promise((r) => { window.setTimeout(r, backoff(tries, 1500, 20_000)); });
+      }
+    }
+  } finally {
+    opening = false;
+  }
+}
+
 /** Every few seconds, also in a background tab: pings phones, lets go of silent ones, keeps the service link alive. */
 function tick() {
+  const now = Date.now();
+  // Timers in a background tab are slowed: quiz updates and the timer running out go out from here.
+  if (publishTimer !== undefined || quiz.tick(now)) publishQuiz();
+  const stale = snap.guests.filter((g) => g.awaySince !== undefined && now - g.awaySince > AWAY_FOR);
+  if (stale.length) set({ guests: snap.guests.filter((g) => !stale.includes(g)) });
+  if (snap.status === 'live') keepNow();
   const p = peer;
   if (!p) return;
   if (document.visibilityState === 'hidden') heartbeat(p);
-  const now = Date.now();
   for (const [id, c] of conns) {
     if (c.pongs && now - c.heard > GONE_AFTER) { dropGuest(id); continue; }
     if (snap.guests.find((g) => g.id === id)?.ready) send(c.conn, { t: 'ping', at: now });
   }
   // A link to the service that dropped without telling.
   if (p.disconnected && !p.destroyed) reconnectSignal();
+  // The service link is gone for good: open a new one under the same code.
+  if (p.destroyed && snap.code) {
+    peer = null;
+    void openSignal(snap.code);
+  }
 }
 
 function onGuestMessage(conn: DataConnection, msg: GuestMessage) {
@@ -384,30 +496,40 @@ function onGuestMessage(conn: DataConnection, msg: GuestMessage) {
     broadcast({ t: 'state', state: msg.state }, conn.peer);
     followShow(msg.state);
   } else if (msg.t === 'answer') {
-    if (role === 'audience' && quiz.answer(guest.player, msg.slideId, msg.choice, Date.now())) publishSoon();
+    if (role !== 'audience') return;
+    const counted = quiz.answer(guest.player, msg.slideId, msg.choice, Date.now(), typeof msg.ago === 'number' ? msg.ago : 0);
+    if (counted) publishSoon();
+    send(conn, mineOf(guest.player, !counted && quiz.answersOf(guest.player)[msg.slideId] === undefined ? [msg.slideId] : undefined));
   } else if (msg.t === 'name') {
-    if (role === 'audience' && typeof msg.name === 'string') { quiz.join(guest.player, msg.name); publishSoon(); }
+    if (role === 'audience' && typeof msg.name === 'string') {
+      quiz.join(guest.player, msg.name);
+      guestsChanged(conn.peer, { name: msg.name.trim().slice(0, 24) || undefined });
+      publishSoon();
+    }
   } else if (msg.t === 'stage') {
     if (role === 'presenter' && ['play', 'leaderboard', 'podium'].includes(msg.stage)) { set({ stage: msg.stage }); publishQuiz(); }
   } else if (msg.t === 'word') {
     if (role === 'audience' && !snap.options.polls) return;
     if (typeof msg.slideId === 'string' && typeof msg.text === 'string' && addWord(guest.player, msg.slideId, msg.text)) publishCloudSoon(msg.slideId);
+    send(conn, mineOf(guest.player));
   } else if (msg.t === 'vote') {
     if (role === 'audience' && !snap.options.polls) return;
     const slide = visibleSlides().find((s) => s.id === msg.slideId);
     const choices = pollChoices(slide);
     if (!choices || !Number.isInteger(msg.choice) || msg.choice < 0 || msg.choice >= choices.length) return;
+    // Counted per phone, not per link: a phone that reconnected still has one vote.
     const slideVotes = votes.get(msg.slideId) ?? new Map<string, number>();
-    slideVotes.set(conn.peer, msg.choice);
+    slideVotes.set(guest.player, msg.choice);
     votes.set(msg.slideId, slideVotes);
     const result = tally(slideVotes, choices.length);
     set({ votes: { ...snap.votes, [msg.slideId]: result } });
     broadcast({ t: 'votes', slideId: msg.slideId, result });
+    send(conn, mineOf(guest.player));
   }
 }
 
 function postScreen() {
-  const url = snap.code ? joinUrl(window.location.origin, snap.code) : null;
+  const url = snap.code ? joinUrl(window.location.origin, snap.code, undefined, siteAccess()) : null;
   const live = snap.status === 'live';
   const view = live && quiz.settings.on ? quiz.view('audience', Date.now(), 5) : null;
   const showQuiz = !!view && (!!view.question || snap.stage !== 'play');
@@ -452,19 +574,34 @@ async function start(deckId: string) {
   // Stopped or switched decks while connecting.
   if (snap.deckId !== deckId || snap.status !== 'starting' || !opened) { opened?.destroy(); return; }
 
+  attachPeer(opened);
+  openSession(stored, deckId);
+  set({ status: 'live', code, token: newToken() });
+  void holdSession(code);
+  publishQuiz();
+  keepNow();
+}
+
+/** Listens to a new link to the connection service. */
+function attachPeer(opened: Peer) {
   peer = opened;
   signalTries = 0;
-  peer.on('connection', onConnection);
+  set({ signal: 'up' });
+  opened.on('connection', onConnection);
   // Back on the service after a reconnect.
-  peer.on('open', () => { signalTries = 0; set({ signal: 'up' }); });
-  peer.on('disconnected', () => reconnectSignal());
-  peer.on('error', (err) => {
+  opened.on('open', () => { signalTries = 0; set({ signal: 'up' }); });
+  opened.on('disconnected', () => reconnectSignal());
+  opened.on('error', (err) => {
     const type = (err as { type?: string }).type;
     if (type === 'peer-unavailable') return;
     // Trouble with the service: the disconnected handler retries, and the panel says so.
     if (['network', 'server-error', 'socket-error', 'socket-closed', 'disconnected', 'unavailable-id'].includes(type ?? '')) return;
     set({ error: peerErrorMessage(err) });
   });
+}
+
+/** What a live session runs on, for a new one or one being picked up again. */
+function openSession(stored: Deck, deckId: string) {
   stopTicker = keepAwake(tick, PING_EVERY);
   window.addEventListener('online', reconnectNow);
   document.addEventListener('visibilitychange', onVisible);
@@ -498,13 +635,58 @@ async function start(deckId: string) {
       if (d.updatedAt !== lastUpdated) { lastUpdated = d.updatedAt; scheduleResend(); }
     },
   });
+}
 
-  set({ status: 'live', code, token: newToken() });
-  publishQuiz();
+let resuming: Promise<boolean> | null = null;
+
+function resume(): Promise<boolean> {
+  resuming ??= pickUpSession().finally(() => { resuming = null; });
+  return resuming;
+}
+
+/**
+ * Picks up the session this browser was running before the page reloaded, if there is one and
+ * no other tab has it. It comes back at once, and reaches the connection service when it can.
+ */
+async function pickUpSession(): Promise<boolean> {
+  if (snap.status !== 'idle') return false;
+  for (const saved of savedSessions()) {
+    if (!(await holdSession(saved.code))) continue;
+    const stored = await db.decks.get(saved.deckId);
+    if (snap.status !== 'idle') { letGoOfSession(); return false; }
+    if (!stored) { clearSession(saved.code); letGoOfSession(); continue; }
+    deck = stored;
+    quiz = new QuizEngine(snap.quizSettings);
+    quiz.setSlides(visibleSlides());
+    quiz.restore(saved.quiz);
+    restoreAnswers(saved);
+    const clouds: Record<string, CloudResult> = {};
+    for (const [slide, m] of words) clouds[slide] = tallyWords(m, hiddenWords.get(slide));
+    const counted: Record<string, PollResult> = {};
+    for (const [slide, m] of votes) {
+      const choices = pollChoices(visibleSlides().find((s) => s.id === slide));
+      if (choices) counted[slide] = tally(m, choices.length);
+    }
+    set({
+      status: 'live', error: null, signal: 'down', deckId: saved.deckId, title: stored.title, code: saved.code, token: saved.token,
+      guests: [], state: saved.state, votes: counted, clouds, onScreen: saved.onScreen, stage: saved.stage, resumed: true,
+    });
+    openSession(stored, saved.deckId);
+    publishQuiz();
+    void openSignal(saved.code);
+    return true;
+  }
+  return false;
 }
 
 function stop() {
+  sessionRun += 1;
+  const ending = snap.code;
   broadcast({ t: 'bye' });
+  if (ending) clearSession(ending);
+  letGoOfSession();
+  window.clearTimeout(keepTimer);
+  keepTimer = undefined;
   stopTicker?.();
   stopTicker = null;
   window.clearTimeout(signalTimer);
@@ -531,6 +713,7 @@ function stop() {
   const p = peer;
   peer = null;
   window.setTimeout(() => p?.destroy(), 400);
+  snap = { ...snap, status: 'idle' };
   set({ onScreen: false });
   postScreen();
   channel?.close();
@@ -560,6 +743,9 @@ function showOnScreen(show: boolean) {
 export const liveHost = {
   start,
   stop,
+  resume,
+  /** Writes the session down now, for a page that is closing or reloading. */
+  keepNow,
   setOptions,
   showOnScreen,
   openPanel(deckId: string) { set({ panel: { open: true, deckId } }); },
@@ -589,6 +775,7 @@ export const liveHost = {
     set({ stage: 'play' });
     if (snap.state) quiz.follow(visibleSlides()[snap.state.index], snap.state.step, Date.now());
     publishQuiz();
+    pushMine();
   },
   quizResults(): QuizResults {
     return quiz.results();
@@ -601,12 +788,14 @@ export const liveHost = {
     delete next[slideId];
     set({ votes: next });
     broadcast({ t: 'votes', slideId, result });
+    pushMine();
   },
   /** Empties a word cloud, hidden words included. */
   clearWords(slideId: string) {
     words.delete(slideId);
     hiddenWords.delete(slideId);
     publishCloud(slideId);
+    pushMine();
   },
   /** Takes a word off the cloud on every screen. Phones that sent it keep it in their own list. */
   hideWord(slideId: string, text: string) {

@@ -583,6 +583,45 @@
   backdrop-filter: blur(12px);
 }
 
+.phone-bar {
+  flex-wrap: wrap;
+}
+
+/* What's going on with the link, right under the bar so it stays in view. */
+.phone-banner {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 2px 0 2px 4px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--sunk);
+  color: var(--ink);
+  font-size: 13.5px;
+  line-height: 1.3;
+}
+
+.phone-banner.is-wait {
+  background: var(--warn-soft);
+}
+
+.phone-banner-text {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.phone-banner-text > span {
+  color: var(--ink-2);
+}
+
+.phone-banner .btn {
+  flex: none;
+  min-height: 40px;
+}
+
 .phone-icon {
   display: grid;
   place-items: center;
@@ -877,6 +916,7 @@
 
 .phone-body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
   padding: 10px 12px 16px;
 }
@@ -1459,6 +1499,32 @@
 .quiz-choice.c4 { --tile: #87479f; }
 .quiz-choice.c5 { --tile: #1b7f79; }
 
+/* On a short screen an open question comes first: all its answers fit, without scrolling. */
+@media (max-height: 760px) {
+  .phone-follow:has(.quiz-choices) .phone-strip,
+  .phone-follow:has(.quiz-choices) .phone-follow-bar {
+    display: none;
+  }
+
+  .quiz-choices {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .quiz-choice {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 52px;
+    padding: 8px 12px;
+    border-radius: 14px;
+  }
+
+  .quiz-choice b {
+    flex: none;
+  }
+}
+
 .quiz-wait .eyebrow {
   margin-bottom: 8px;
 }
@@ -1958,4 +2024,139 @@
 .phone-card .phone-word-note {
   margin: 8px 0 0;
   font-size: 14px;
+}
+
+/* A sound on a slide */
+
+.slide-audio {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 8px 12px 8px 8px;
+  border-radius: 14px;
+  background: var(--panel, var(--surface));
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+
+.slide-audio.is-missing {
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 10px 12px;
+  color: var(--ink-2);
+}
+
+.slide-audio-play {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--brand);
+  color: #fff;
+  cursor: pointer;
+}
+
+.slide-audio-play:disabled {
+  opacity: 0.5;
+}
+
+.slide-audio-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.slide-audio-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.slide-audio-title > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slide-audio-seek {
+  width: 100%;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--brand);
+}
+
+.slide-audio-time {
+  font-size: 12.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+}
+
+.slide-audio-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+
+.slide-audio.is-missing .slide-audio-note {
+  grid-column: auto;
+}
+
+.slide-audio.has-problem .slide-audio-note {
+  color: var(--danger, #c0362c);
+  font-weight: 600;
+}
+
+/* On the big screen: bottom left, out of the slide's way. */
+.present-audio {
+  position: fixed;
+  left: 16px;
+  bottom: 18px;
+  z-index: 6;
+  width: min(380px, calc(100vw - 32px));
+  background: rgb(20 20 18 / 0.86);
+  color: #fff;
+  box-shadow: none;
+  --ink: #fff;
+  --ink-2: rgb(255 255 255 / 0.72);
+}
+
+.present-signal {
+  position: fixed;
+  top: 12px;
+  left: 50%;
+  z-index: 6;
+  margin: 0;
+  padding: 5px 12px;
+  border-radius: 999px;
+  transform: translateX(-50%);
+  background: rgb(20 20 18 / 0.86);
+  color: #fff;
+  font-size: 13px;
+}
+
+.presenter-audio,
+.study-audio {
+  margin-top: 10px;
+}
+
+.phone-script .phone-audio {
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+.slide-audio-field {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.slide-audio-field-actions {
+  display: flex;
+  gap: 6px;
 }

@@ -9,12 +9,59 @@ import { MAX_SLIDES, MODELS, type NotesIn, notesMessage, readNotes, readNotesReq
 import { emptyNotes, type Slide } from '../src/core/deck/types';
 import { layoutSlide } from '../src/core/engine/layout';
 import { getTheme } from '../src/core/engine/themes';
-import { type PptxDeck, findQuestion, finishedDeck, pairPages, readPptx } from '../src/core/import/finished';
+import { type PptxDeck, findQuestion, finishedDeck, mediaRels, pairPages, readPptx } from '../src/core/import/finished';
 import { kindCatalogue } from '../src/features/studio/ai';
 import { DEFAULT_OPTIONS, deckForRole, pollChoices } from '../src/core/share/protocol';
 import { quizItem } from '../src/core/share/quiz';
 import { applyNotes, writeNotes } from '../src/features/finished/ai';
 import { fakeClaude, teleprompterReply } from './mock-claude';
+
+// ─── Sounds in a PowerPoint ───────────────────────────────────────────
+
+describe('a sound in a PowerPoint', () => {
+  const mp3 = 'SUQzBAAAAAAA';
+
+  it('goes out with the slide, and comes back when the file is read', async () => {
+    const slide: Slide = { id: 's1', kind: 'statement', content: { text: 'Listen' }, notes: emptyNotes(), audio: { src: 'asset:a_sound' } };
+    const plain: Slide = { id: 's2', kind: 'statement', content: { text: 'Quiet' }, notes: emptyNotes() };
+    const deck = { id: 'd', title: 'Sound', themeId: 'paper', audience: 'adult' as const, slides: [slide, plain], createdAt: 1, updatedAt: 1 };
+    const { exportDeckToPptx } = await import('../src/core/export/pptx');
+    const out = await exportDeckToPptx(deck, { steps: 'final', output: 'nodebuffer' as never, resolveMedia: async (src) => (src === 'asset:a_sound' ? `data:audio/mpeg;base64,${mp3}` : null) });
+    expect(out.warnings.join(' ')).not.toMatch(/sound/i);
+    const bytes = out.data as Uint8Array;
+    const read = await readPptx(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer);
+    expect(read.slides[0]!.audio).toMatchObject({ mime: 'audio/mpeg' });
+    expect(read.slides[0]!.audio!.data.length).toBeGreaterThan(0);
+    expect(read.slides[1]!.audio).toBeUndefined();
+    // PowerPoint only treats it as a sound when the slide says so.
+    const zip = await JSZip.loadAsync(bytes);
+    const xml = await zip.file('ppt/slides/slide1.xml')!.async('string');
+    expect(xml).toContain('<a:audioFile');
+    expect(xml).not.toContain('<a:videoFile');
+  });
+
+  it('warns instead of failing when the sound file is gone', async () => {
+    const slide: Slide = { id: 's1', kind: 'statement', content: { text: 'Listen' }, notes: emptyNotes(), audio: { src: 'asset:gone' } };
+    const deck = { id: 'd', title: 'Sound', themeId: 'paper', audience: 'adult' as const, slides: [slide], createdAt: 1, updatedAt: 1 };
+    const { exportDeckToPptx } = await import('../src/core/export/pptx');
+    const out = await exportDeckToPptx(deck, { steps: 'final', output: 'nodebuffer' as never, resolveMedia: async () => null });
+    expect(out.warnings.join(' ')).toMatch(/sound could not be put/);
+  });
+
+  it('finds only the sound placed on the slide, not a transition sound', () => {
+    expect(mediaRels('<p:pic><a:audioFile r:link="rId2"/></p:pic>')).toEqual(['rId2']);
+    expect(mediaRels('<p:transition><p:sndAc><p:stSnd><p:snd r:embed="rId9" name="x"/></p:stSnd></p:sndAc></p:transition>')).toEqual([]);
+  });
+
+  it('keeps it on the designed slide of a finished deck', () => {
+    const deck = finishedDeck(
+      [{ picture: 'asset:p', title: 'One', text: 'One', notes: '', hidden: false, audio: { src: 'asset:s' } }, { picture: 'asset:q', title: 'Two', text: 'Two', notes: '', hidden: false }],
+      { title: 'T', audience: 'adult', purpose: 'talk', themeId: 'paper' },
+    );
+    expect(deck.slides[0]!.audio).toEqual({ src: 'asset:s' });
+    expect(deck.slides[1]!.audio).toBeUndefined();
+  });
+});
 
 // ─── A finished PowerPoint ────────────────────────────────────────────
 

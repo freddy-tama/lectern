@@ -2,7 +2,7 @@
 // everyone else follows the slides, answers polls and can keep the deck.
 
 import {
-  AArrowDown, AArrowUp, ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Download, EyeOff, LoaderCircle, Maximize, Radio, ScrollText, WifiOff, X,
+  AArrowDown, AArrowUp, ArrowLeft, BookOpen, ChevronLeft, ChevronRight, Download, EyeOff, LoaderCircle, Maximize, Radio, RotateCcw, ScrollText, Signal, WifiOff, X,
 } from 'lucide-react';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { type PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
@@ -18,6 +18,7 @@ import {
 import { useKeys } from '../../ui/hooks';
 import { pictureCredits } from '../pictures/store';
 import { advance, retreat, useLiveDeck } from '../present/useLiveDeck';
+import { SlideAudioPlayer } from '../slides/SlideAudioPlayer';
 import { SlideView } from '../slides/SlideView';
 import { exportPptx } from '../studio/download';
 import { type LinkSnapshot, liveLink, useLiveLink } from './guest';
@@ -78,10 +79,66 @@ function useSwipe(onLeft: () => void, onRight: () => void) {
 }
 
 function LinkStatus({ link, live }: { link: LinkSnapshot; live: boolean }) {
-  if (link.status === 'ended') return <span className="phone-status is-off"><WifiOff size={13} /> Sharing ended · saved</span>;
+  if (link.status === 'ended') return <span className="phone-status is-off"><WifiOff size={13} /> Ended</span>;
+  if (link.status === 'replaced') return <span className="phone-status is-off"><WifiOff size={13} /> Paused</span>;
   if (!live) return <span className="phone-status is-off"><WifiOff size={13} /> Saved on this phone</span>;
   if (link.status === 'reconnecting') return <span className="phone-status is-wait"><LoaderCircle size={13} className="spin" /> Reconnecting</span>;
+  if (link.weak) return <span className="phone-status is-wait"><Signal size={13} /> Weak signal</span>;
   return <span className="phone-status is-live"><span className="live-dot" aria-hidden /> Live</span>;
+}
+
+/** What to say when reconnecting is taking a while. */
+function reconnectHint(link: LinkSnapshot): string {
+  switch (link.trouble) {
+    case 'missing': return 'The presenter’s computer isn’t sharing right now. This page reconnects by itself when it’s back.';
+    case 'service': return 'Can’t reach the connection service. Check the internet on this phone.';
+    case 'blocked': return 'This network may be blocking the link. Try the presenter’s Wi-Fi, or mobile data.';
+    default: return 'The presenter’s computer isn’t answering. Still trying…';
+  }
+}
+
+/** True once `on` has lasted for `ms`. */
+function useLasted(on: boolean, ms: number): boolean {
+  const [lasted, setLasted] = useState(false);
+  useEffect(() => {
+    if (!on) { setLasted(false); return; }
+    const timer = setTimeout(() => setLasted(true), ms);
+    return () => clearTimeout(timer);
+  }, [on, ms]);
+  return lasted;
+}
+
+/** Says what's going on with the link, and gives a way to do something about it. */
+function LinkBanner({ link }: { link: LinkSnapshot }) {
+  // A short drop stays in the status chip: the banner would move the answers under a finger.
+  const lasting = useLasted(link.status === 'reconnecting', 3000);
+  if (link.status === 'ended') {
+    return (
+      <div className="phone-banner is-off" role="status">
+        <span className="phone-banner-text"><strong>Sharing has ended</strong><span>These slides stay on this phone.</span></span>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => liveLink.retry()}><RotateCcw size={14} /> Check again</button>
+      </div>
+    );
+  }
+  if (link.status === 'replaced') {
+    return (
+      <div className="phone-banner is-off" role="status">
+        <span className="phone-banner-text"><strong>These slides are open in another tab</strong><span>Only one page stays connected, so this one paused.</span></span>
+        <button type="button" className="btn btn-brand btn-sm" onClick={() => liveLink.retry()}>Use this page</button>
+      </div>
+    );
+  }
+  if (link.status !== 'reconnecting' || !lasting) return null;
+  const held = link.outbox.length;
+  return (
+    <div className="phone-banner is-wait" role="status">
+      <span className="phone-banner-text">
+        <strong>Connection lost</strong>
+        <span>{navigator.onLine === false ? 'This phone is offline. Turn on Wi-Fi or mobile data.' : link.attempt >= 2 ? reconnectHint(link) : held ? `${held === 1 ? 'Your answer is' : 'Your answers are'} saved. Stay on this page.` : 'Stay on this page. It reconnects by itself.'}</span>
+      </span>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => liveLink.tryNow()}><RotateCcw size={14} /> Try now</button>
+    </div>
+  );
 }
 
 function PollBars({ choices, result, mine }: { choices: string[]; result?: PollResult; mine?: number }) {
@@ -192,6 +249,7 @@ function PhoneRemote({ deck, slides, steps, live, link, onLeave }: PhoneProps) {
         </button>
         <span className="phone-count tabular">{index + 1} / {count}</span>
         <LinkStatus link={link} live={live} />
+        <LinkBanner link={link} />
       </header>
 
       <div className="phone-stage" {...swipe}>
@@ -201,6 +259,7 @@ function PhoneRemote({ deck, slides, steps, live, link, onLeave }: PhoneProps) {
       </div>
 
       <div className="phone-script" ref={scriptRef} style={{ fontSize: size }}>
+        {slide.audio && <SlideAudioPlayer key={slide.audio.src} audio={slide.audio} className="phone-audio" />}
         {n.cues.length > 0 && <div className="cue-row">{n.cues.map((c) => <span key={c} className="cue">{c}</span>)}</div>}
         {n.script
           ? n.script.split(/\n\s*\n/).map((p, i) => <p key={i}>{p}</p>)
@@ -262,7 +321,10 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
   // The furthest slide the presenter has shown while this phone followed. Slides past it are
   // drawn without their clicks, so answers wait for their reveal on the big screen.
   const [reached, setReached] = useState(0);
-  const onAir = live && link.status !== 'ended';
+  // A page paused for another tab is still in the middle of the lesson: answers stay hidden there too.
+  const onAir = live || (link.status === 'replaced' && link.deckId === deck.id);
+  // A phone that locks itself in the middle of a question loses its link.
+  useWakeLock(live);
   useEffect(() => { if (onAir) setReached((r) => Math.max(r, liveIndex)); }, [onAir, liveIndex]);
   const place: LivePlace | null = onAir ? { index: liveIndex, step: (link.state ?? START).step, reached: Math.max(reached, liveIndex) } : null;
   const step = phoneStep(index, place);
@@ -290,7 +352,9 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
   const choices = live && (scored || (options.polls && !pastQuestion)) ? pollChoices(slide) : null;
   const wordLimit = live && options.polls && link.status !== 'ended' ? cloudLimit(slide) : null;
   const openElsewhere = !!question && question.phase === 'open' && question.slideId !== slide.id && link.myAnswers[question.slideId] === undefined;
-  const wantsName = live && !!link.quiz?.on && (link.quiz?.questions ?? 0) > 0 && !link.name && !askedName;
+  // An open question comes first: the name can wait until it is answered.
+  const answering = !!question && scored && question.phase === 'open' && link.myAnswers[question.slideId] === undefined;
+  const wantsName = live && !!link.quiz?.on && (link.quiz?.questions ?? 0) > 0 && !link.name && !askedName && !answering;
   const mine = link.myVotes[slide.id];
   const voted = mine !== undefined && changing !== slide.id;
   const n = slide.notes;
@@ -312,6 +376,7 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
         <strong className="phone-title">{deck.title}</strong>
         <ScoreChip link={link} />
         <LinkStatus link={link} live={live} />
+        <LinkBanner link={link} />
       </header>
 
       <div className={`phone-stage ${following ? 'is-following' : ''}`} ref={stageRef} {...swipe}>
@@ -333,8 +398,9 @@ function PhoneFollow({ deck, slides, live, link, options, onLeave }: PhoneProps)
           <button type="button" className="quiz-jump" onClick={() => setBrowse(null)}>A question is open · Answer now</button>
         )}
         <QuizStandings link={link} />
-        {wantsName && <NameCard onDone={() => setAskedName(true)} />}
+        {slide.audio && <SlideAudioPlayer key={slide.audio.src} audio={slide.audio} className="phone-audio" />}
         {scored && choices && <QuizCard link={link} choices={choices} />}
+        {wantsName && <NameCard onDone={() => setAskedName(true)} />}
         {!scored && choices && (
           <section className="phone-card phone-poll" aria-label="Answer the question">
             <p className="eyebrow">{voted ? 'Your answer is in' : 'Tap your answer'}</p>

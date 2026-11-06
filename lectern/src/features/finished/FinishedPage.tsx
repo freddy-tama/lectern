@@ -228,6 +228,7 @@ export default function FinishedPage() {
           text: p.slide?.text || picture?.text || '',
           notes: p.slide?.notes ?? '',
           hidden: p.hidden,
+          ...(p.slide?.audio ? { audio: { src: await saveAsset(new Blob([p.slide.audio.data as BlobPart], { type: p.slide.audio.mime }), p.slide.audio.name) } } : {}),
         });
       }
       deck = finishedDeck(slides, { title, audience, purpose, themeId: getProfile().deck.themeId, quizzes });

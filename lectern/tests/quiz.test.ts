@@ -71,6 +71,75 @@ describe('a live quiz', () => {
     expect(quiz.playerView('cy').last).toMatchObject({ choice: null, correct: false });
   });
 
+  it('counts an answer held by a phone that lost its link, from when it was tapped', () => {
+    const quiz = play();
+    const t0 = 1_000_000;
+    quiz.follow(slides[1], 0, t0);
+    // Tapped at 5 s, on the way for 10 s. Scored as if it arrived at once.
+    expect(quiz.answer('ana', 'q1', 1, t0 + 15_000, 10_000)).toBe(true);
+    // Time runs out. An answer tapped in time still counts; one tapped after doesn't.
+    quiz.tick(t0 + 21_000);
+    expect(quiz.answer('ben', 'q1', 1, t0 + 30_000, 12_000)).toBe(true);
+    expect(quiz.answer('cy', 'q1', 1, t0 + 30_000, 2_000)).toBe(false);
+    // Once the answer is on the screen, nothing counts.
+    quiz.follow(slides[1], 1, t0 + 31_000);
+    quiz.join('dee', 'Dee');
+    expect(quiz.answer('dee', 'q1', 1, t0 + 32_000, 25_000)).toBe(false);
+    const board = quiz.board();
+    expect(board.find((r) => r.name === 'Ana')!.score).toBe(points(5_000, 20_000));
+    expect(board.find((r) => r.name === 'Ben')!.score).toBe(points(18_000, 20_000));
+  });
+
+  it('doesn’t take a phone’s word beyond a limit, or from before the question opened', () => {
+    const quiz = play();
+    const t0 = 1_000_000;
+    quiz.follow(slides[1], 0, t0);
+    expect(quiz.answer('ana', 'q1', 1, t0 + 2_000, 9_999_999)).toBe(true);
+    quiz.follow(slides[1], 1, t0 + 3_000);
+    expect(quiz.board().find((r) => r.name === 'Ana')!.score).toBe(points(0, 20_000));
+  });
+
+  it('counts a late answer on a question that was locked by moving on', () => {
+    const quiz = play();
+    quiz.follow(slides[1], 0, 0);
+    quiz.follow(slides[2], 0, 5_000);
+    expect(quiz.answer('ana', 'q1', 1, 9_000, 6_000)).toBe(true);
+    expect(quiz.answer('ben', 'q1', 1, 9_000, 1_000)).toBe(false);
+  });
+
+  it('says what each player answered', () => {
+    const quiz = play();
+    quiz.follow(slides[1], 0, 0);
+    quiz.answer('ana', 'q1', 2, 1_000);
+    expect(quiz.answersOf('ana')).toEqual({ q1: 2 });
+    expect(quiz.answersOf('ben')).toEqual({});
+  });
+
+  it('comes back from a dump as it was', () => {
+    const quiz = play();
+    quiz.follow(slides[1], 0, 0);
+    quiz.answer('ana', 'q1', 1, 2_000);
+    const dump = JSON.parse(JSON.stringify(quiz.dump()));
+    const again = new QuizEngine({ on: true, seconds: 20 });
+    again.setSlides(slides);
+    again.restore(dump);
+    expect(again.answersOf('ana')).toEqual({ q1: 1 });
+    expect(again.playerName('ben')).toBe('Ben');
+    expect(again.view('audience', 3_000).question).toMatchObject({ slideId: 'q1', phase: 'open', answered: 1, closesIn: 17_000 });
+    // It stays one answer each after coming back.
+    expect(again.answer('ana', 'q1', 0, 4_000)).toBe(false);
+    again.follow(slides[1], 1, 5_000);
+    expect(again.board()[0]).toMatchObject({ name: 'Ana', score: points(2_000, 20_000) });
+  });
+
+  it('starts empty from a damaged dump', () => {
+    const quiz = new QuizEngine({ on: true, seconds: 20 });
+    quiz.setSlides(slides);
+    quiz.restore({ current: 'q1', players: 'nope', rounds: 5 } as never);
+    expect(quiz.view('audience', 0).players).toBe(0);
+    expect(quiz.view('audience', 0).question).toBeNull();
+  });
+
   it('locks a question when the presenter moves on, and keeps scores across questions', () => {
     const quiz = play();
     quiz.follow(slides[1], 0, 0);

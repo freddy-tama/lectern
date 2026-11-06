@@ -95,7 +95,7 @@ export default function JoinPage() {
     return <Frame><h1 className="display join-title">This browser can’t join</h1><p className="muted">Open this link in Chrome, Safari or Edge.</p></Frame>;
   }
 
-  if (link.code === code && link.deckId && link.role && ['ready', 'reconnecting', 'ended'].includes(link.status)) {
+  if (link.code === code && link.deckId && link.role && ['ready', 'reconnecting', 'ended', 'replaced'].includes(link.status)) {
     return <PhoneDeck deckId={link.deckId} role={link.role} onLeave={leave} />;
   }
 
@@ -104,8 +104,9 @@ export default function JoinPage() {
       <Frame>
         <h1 className="display join-title">Couldn’t join {formatCode(code)}</h1>
         <p className="muted">{link.error}</p>
+        {link.attempt > 0 && <p className="faint join-retry" role="status"><LoaderCircle className="spin" size={14} aria-hidden /> Still trying. This page joins by itself when it can.</p>}
         <div className="join-actions">
-          <button type="button" className="btn btn-primary" onClick={() => liveLink.retry()}><RotateCcw size={16} /> Try again</button>
+          <button type="button" className="btn btn-primary" onClick={() => liveLink.tryNow()}><RotateCcw size={16} /> Try again</button>
           <button type="button" className="btn btn-secondary" onClick={leave}>Enter another code</button>
         </div>
         <Saved />
@@ -132,6 +133,12 @@ export default function JoinPage() {
               ? 'Still trying. If this network blocks phones from reaching the computer, try the same Wi-Fi as the presenter, or mobile data.'
               : 'Still trying…'}
           </p>
+        )}
+        {link.status === 'connecting' && link.attempt > 0 && (
+          <div className="join-actions">
+            <button type="button" className="btn btn-secondary" onClick={() => liveLink.tryNow()}><RotateCcw size={16} /> Try now</button>
+            <button type="button" className="btn btn-ghost" onClick={leave}>Enter another code</button>
+          </div>
         )}
       </div>
     </Frame>

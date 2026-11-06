@@ -47,6 +47,7 @@ export function QuizPanel({ deckId }: { deckId: string }) {
   const slide = q && deck ? deck.slides.find((s) => s.id === q.slideId) : undefined;
   const item = quizItem(slide);
   const board = live.quizBoard;
+  const reconnecting = live.guests.filter((g) => g.role === 'audience' && g.awaySince !== undefined).length;
 
   const saveNote = async () => {
     if (!deck) return;
@@ -81,6 +82,7 @@ export function QuizPanel({ deckId }: { deckId: string }) {
         <>
           <p className="quiz-status muted">
             {quiz.done} of {quiz.questions} {quiz.questions === 1 ? 'question' : 'questions'} done · {quiz.players} {quiz.players === 1 ? 'player' : 'players'}
+            {reconnecting > 0 && ` · ${reconnecting} reconnecting`}
           </p>
 
           {q && item ? (

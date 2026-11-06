@@ -8,6 +8,7 @@ import { partPlaces } from '../../core/deck/auto-style';
 import { layoutSlide } from '../../core/engine/layout';
 import { getTheme } from '../../core/engine/themes';
 import { type LiteSlide, type QuizPack, type SlidesPack, encodePack, fitsQr, packUrl, quizPackFrom } from '../../core/share/pack';
+import { siteAccess } from './session-store';
 
 export interface OfflineCopy<P> {
   pack: P;
@@ -53,10 +54,11 @@ export function quizPackFor(deck: Deck): { pack: QuizPack; made: boolean } | nul
 export async function offlineCopies(deck: Deck, origin = window.location.origin): Promise<OfflineCopies> {
   const quiz = quizPackFor(deck);
   const slides = slidesPackFrom(deck);
-  const slidesUrl = packUrl(origin, await encodePack(slides));
+  const access = siteAccess();
+  const slidesUrl = packUrl(origin, await encodePack(slides), access);
   let quizCopy: OfflineCopies['quiz'] = null;
   if (quiz) {
-    const url = packUrl(origin, await encodePack(quiz.pack));
+    const url = packUrl(origin, await encodePack(quiz.pack), access);
     quizCopy = { pack: quiz.pack, url, fits: fitsQr(url), made: quiz.made };
   }
   return { quiz: quizCopy, slides: { pack: slides, url: slidesUrl, fits: fitsQr(slidesUrl) } };

@@ -326,6 +326,18 @@ function addVideo(slide: PptxGenJS.Slide, pptx: PptxGenJS, box: VideoBox, ctx: C
   addStill(slide, pptx, box, ctx, name, { mark: '▶', title: box.title || 'Video', detail: watch ? 'Watch the video:' : 'Plays when you present from Lectern.', link: watch });
 }
 
+/** The slide's sound, as PowerPoint's own sound icon in the corner. */
+function addSound(slide: PptxGenJS.Slide, src: string, ctx: Ctx) {
+  const data = ctx.media.get(src);
+  if (!data) {
+    ctx.warnings.push('A sound could not be put in the PowerPoint, so its slide has no sound.');
+    return;
+  }
+  const type = data.split(';')[0].split('/')[1] ?? 'mpeg';
+  const extn = type === 'mpeg' || type === 'mp3' ? 'mp3' : type === 'mp4' ? 'm4a' : type;
+  slide.addMedia({ type: 'audio', data, extn, x: 0.2, y: CANVAS_IN.h - 0.8, w: 0.6, h: 0.6, objectName: 'Sound' });
+}
+
 function addEmbed(slide: PptxGenJS.Slide, pptx: PptxGenJS, box: EmbedBox, ctx: Ctx, name: string) {
   const link = box.openUrl || box.url || '';
   addStill(slide, pptx, box, ctx, name, {
@@ -545,6 +557,13 @@ function splitNotesParagraphs(xml: string): string {
   );
 }
 
+/** The library writes every medium as a video. PowerPoint treats a sound as a sound only when it says so. */
+export function soundsAsSounds(xml: string, rels = ''): string {
+  if (!xml.includes('<a:videoFile')) return xml;
+  const sounds = new Set([...rels.matchAll(/<Relationship\b[^>]*>/g)].filter((m) => /\/relationships\/audio"/.test(m[0])).map((m) => /\bId="([^"]+)"/.exec(m[0])?.[1]));
+  return xml.replace(/<a:videoFile r:link="([^"]+)"\/>/g, (whole, id: string) => (sounds.has(id) ? `<a:audioFile r:link="${id}"/>` : whole));
+}
+
 async function postProcess(buffer: ArrayBuffer, pages: PageMeta[], animate: boolean[]): Promise<Uint8Array> {
   const zip = await JSZip.loadAsync(buffer);
   for (let i = 0; i < pages.length; i++) {
@@ -552,6 +571,7 @@ async function postProcess(buffer: ArrayBuffer, pages: PageMeta[], animate: bool
     const file = zip.file(path);
     if (!file) continue;
     let xml = await file.async('string');
+    xml = soundsAsSounds(xml, await zip.file(`ppt/slides/_rels/slide${i + 1}.xml.rels`)?.async('string'));
     xml = tagCjkRuns(uniqueFrameIds(roundPictures(xml, pages[i].rounded)));
     if (animate[i] && !/<p:timing[ >]/.test(xml)) {
       const clicks = clicksOf(xml);
@@ -583,7 +603,7 @@ async function loadMedia(sources: string[], options: PptxOptions): Promise<Map<s
   for (const src of sources) {
     if (out.has(src)) continue;
     const url = options.resolveMedia ? await options.resolveMedia(src).catch(() => null) : (src.startsWith('data:') ? src : null);
-    const m = url ? /^data:(video\/[\w.+-]+)(?:;[^,;]*)*;base64,([\s\S]+)$/i.exec(url) : null;
+    const m = url ? /^data:((?:video|audio)\/[\w.+-]+)(?:;[^,;]*)*;base64,([\s\S]+)$/i.exec(url) : null;
     out.set(src, m ? `${m[1].toLowerCase()};base64,${m[2]}` : null);
   }
   return out;
@@ -633,7 +653,8 @@ export async function exportDeckToPptx(input: Deck, options: PptxOptions = {}): 
   const covers = laid.flatMap(({ layout }) => layout.boxes.flatMap((b) => (b.type === 'video' ? [videoThumbnail(parseVideo(b.src))].filter(Boolean) : [])));
   for (const [src, data] of await loadImages(covers.filter((src) => !images.has(src)), options, [])) images.set(src, data);
   const files = laid.flatMap(({ layout }) => layout.boxes.filter((b): b is VideoBox => b.type === 'video' && parseVideo(b.src)?.provider === 'file').map((b) => b.src));
-  const media = await loadMedia(files, options);
+  const sounds = laid.flatMap(({ slide }) => (slide.audio ? [slide.audio.src] : []));
+  const media = await loadMedia([...files, ...sounds], options);
   const ctx: Ctx = { theme, warnings, images, media };
 
   const pptx = new PptxGenJS();
@@ -674,6 +695,7 @@ export async function exportDeckToPptx(input: Deck, options: PptxOptions = {}): 
           warnings.push(`${label}: a ${box.type} could not be exported (${error instanceof Error ? error.message : String(error)}).`);
         }
       }
+      if (slide.audio) addSound(page, slide.audio.src, ctx);
       // A photo still to add is marked on the slide; the speaker notes say what it is, so it can be found again.
       const notes = [photoNoteLine(slide), includeNotes && slide.notes ? keyNotesText(slide.notes) : '', pictureCreditsText(layout.boxes, options.credits)].filter(Boolean).join('\n\n');
       if (notes) page.addNotes(notes);
