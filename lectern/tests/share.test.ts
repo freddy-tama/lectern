@@ -1,9 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_OPTIONS, PartCollector, assetIds, deckForRole, deviceLabel, formatCode, joinUrl, newCode, normalizeCode, phoneStep, pollChoices,
+  DEFAULT_OPTIONS, PartCollector, accessQuery, assetIds, deckForRole, deviceLabel, formatCode, joinUrl, newCode, normalizeCode, phoneStep, pollChoices,
   splitParts, tally, tokenFromHash,
 } from '../src/core/share/protocol';
+import { cleanAudio } from '../src/core/deck/types';
+import { audioClock, audioMime, audioProblem, isAudioName } from '../src/core/media/audio';
+import { normalizeDeck } from '../src/data/deck-file';
 import { buildSeed } from '../src/data/seed';
 
 const seed = buildSeed(new Date('2026-10-19T10:00:00'));
@@ -39,6 +42,44 @@ describe('what each role receives', () => {
   });
 });
 
+describe('a sound on a slide', () => {
+  const slide = { ...lessonDeck.slides[0]!, audio: { src: 'asset:a_sound', title: 'Paragraph 1' } };
+  const deck = { ...lessonDeck, slides: [slide] };
+
+  it('reaches viewers with the slide, and its file travels with the deck', () => {
+    const shared = deckForRole(deck, 'audience', DEFAULT_OPTIONS);
+    expect(shared.slides[0]!.audio).toEqual(slide.audio);
+    expect(assetIds(shared).has('a_sound')).toBe(true);
+    expect(deckForRole(deck, 'presenter', DEFAULT_OPTIONS).slides[0]!.audio).toEqual(slide.audio);
+  });
+
+  it('stays out of slides that have none', () => {
+    expect('audio' in deckForRole(lessonDeck, 'audience', DEFAULT_OPTIONS).slides[0]!).toBe(false);
+  });
+
+  it('survives saving and opening a deck file, and bad values are dropped', () => {
+    expect(cleanAudio({ src: 'asset:x', title: '  Listen  ' })).toEqual({ src: 'asset:x', title: 'Listen' });
+    expect(cleanAudio({ src: 'https://a.example/x.mp3' })).toEqual({ src: 'https://a.example/x.mp3' });
+    expect(cleanAudio({ src: 'javascript:alert(1)' })).toBeUndefined();
+    expect(cleanAudio({ src: 5 })).toBeUndefined();
+    expect(cleanAudio(null)).toBeUndefined();
+    const norm = normalizeDeck(JSON.parse(JSON.stringify(deck)))!;
+    expect(norm.slides[0]!.audio).toEqual(slide.audio);
+  });
+
+  it('says plainly why a sound won’t play', () => {
+    expect(audioProblem({ name: 'NotAllowedError' })).toMatch(/Tap play again/);
+    expect(audioProblem({ name: 'AbortError' })).toBe('');
+    expect(audioProblem({ code: 4 })).toMatch(/can’t play this sound file/);
+    expect(audioProblem({ code: 2 })).toMatch(/connection/);
+    expect(audioClock(65)).toBe('1:05');
+    expect(audioClock(Number.NaN)).toBe('0:00');
+    expect(isAudioName('ppt/media/media1.mp3')).toBe(true);
+    expect(isAudioName('ppt/media/clip.mp4')).toBe(false);
+    expect(audioMime('a.MP3')).toBe('audio/mpeg');
+  });
+});
+
 describe('codes and links', () => {
   it('makes readable six-character codes and normalises typing', () => {
     const code = newCode();
@@ -55,6 +96,15 @@ describe('codes and links', () => {
     expect(url).toBe('https://lectern.app/join/ABC234#p=tok3n');
     expect(tokenFromHash(new URL(url).hash)).toBe('tok3n');
     expect(tokenFromHash('')).toBeUndefined();
+  });
+
+  it('keeps what the site needs in the address, so phones in mainland China can open the link', () => {
+    expect(accessQuery('?eo_token=abc&eo_time=123&other=1')).toBe('?eo_token=abc&eo_time=123');
+    expect(accessQuery('?eo_token=abc')).toBe('');
+    expect(accessQuery('')).toBe('');
+    const url = joinUrl('https://site.dev', 'ABC234', 'tok3n', '?eo_token=abc&eo_time=123');
+    expect(url).toBe('https://site.dev/join/ABC234?eo_token=abc&eo_time=123#p=tok3n');
+    expect(tokenFromHash(new URL(url).hash)).toBe('tok3n');
   });
 });
 

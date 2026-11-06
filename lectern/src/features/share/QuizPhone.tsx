@@ -62,6 +62,10 @@ export function QuizCard({ link, choices }: { link: LinkSnapshot; choices: strin
   const mine = link.myAnswers[q.slideId];
   const you = link.you;
   const last = you?.last?.slideId === q.slideId ? you.last : undefined;
+  // Tapped, but the computer hasn't said it has it yet.
+  const sending = link.outbox.some((o) => o.t === 'answer' && o.slideId === q.slideId);
+  const tooLate = !!link.late[q.slideId];
+  const offline = link.status !== 'ready';
 
   if (q.phase === 'revealed') {
     const right = mine !== undefined && mine === q.correct;
@@ -70,7 +74,7 @@ export function QuizCard({ link, choices }: { link: LinkSnapshot; choices: strin
         <div className="quiz-result-head">
           <span className="quiz-result-icon">{right ? <Check size={22} /> : <X size={22} />}</span>
           <div>
-            <strong>{right ? 'Correct!' : mine === undefined ? 'No answer this time' : 'Not this time'}</strong>
+            <strong>{right ? 'Correct!' : tooLate ? 'Your answer arrived too late' : mine === undefined ? 'No answer this time' : 'Not this time'}</strong>
             <span>{right ? `+${(last?.points ?? 0).toLocaleString()} points` : `The answer was ${LETTER(q.correct ?? 0)}: ${choices[q.correct ?? 0] ?? ''}`}</span>
           </div>
         </div>
@@ -81,14 +85,19 @@ export function QuizCard({ link, choices }: { link: LinkSnapshot; choices: strin
     );
   }
 
-  if (mine !== undefined || q.phase === 'closed') {
+  // On a phone without a link, the local countdown decides when time is up.
+  if (mine !== undefined || q.phase === 'closed' || left === 0 || tooLate) {
     return (
       <section className="phone-card quiz-card quiz-wait" aria-live="polite">
         <p className="eyebrow">Question {q.number} of {q.of}</p>
-        {mine !== undefined
-          ? <p className="quiz-locked"><span className="quiz-letter">{LETTER(mine)}</span> Locked in. Waiting for the answer…</p>
+        {tooLate
+          ? <p className="quiz-locked">Your answer arrived too late to count. Waiting for the answer…</p>
+          : mine !== undefined
+          ? <p className="quiz-locked"><span className="quiz-letter">{LETTER(mine)}</span> {sending ? 'Saved. Sending it…' : 'Locked in. Waiting for the answer…'}</p>
           : <p className="quiz-locked">Time’s up. Waiting for the answer…</p>}
-        <p className="faint">{q.answered} of {q.players} answered</p>
+        {sending && offline
+          ? <p className="faint">It goes out by itself when you’re back online.</p>
+          : <p className="faint">{q.answered} of {q.players} answered</p>}
       </section>
     );
   }

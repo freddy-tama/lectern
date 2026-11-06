@@ -52,6 +52,7 @@ import { openShare, useLiveHost } from '../share/host';
 import { KindPicker } from './KindPicker';
 import { LookMenu } from './LookMenu';
 import { NotesPanel } from './NotesPanel';
+import { SlideAudioField } from './SlideAudioField';
 import { SessionMenu } from './SessionMenu';
 import { SlideRail } from './SlideRail';
 import { AiMenu, ProposalBar, ProposalNotes, ProposalStage, useSlideRevision } from './SlideAi';
@@ -960,6 +961,7 @@ export default function Studio() {
             ) : (
               <p className="muted">This slide comes from a mod that isn’t installed. Its content is kept and shows again when the mod is on.</p>
             )}
+            <SlideAudioField audio={slide.audio} onChange={(audio) => updateSlide(slide.id, (s) => { const { audio: _old, ...rest } = s; return audio ? { ...rest, audio } : rest; }, `${slide.id}:audio`)} />
             <div className="inspector-foot">
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => duplicate(slide.id)}><Copy size={14} /> Duplicate</button>
               <button type="button" className="btn btn-ghost btn-sm" onClick={() => updateSlide(slide.id, (s) => ({ ...s, hidden: !s.hidden }))}><EyeOff size={14} /> {slide.hidden ? 'Unhide' : 'Hide'}</button>
@@ -1108,7 +1110,7 @@ function ShareButton({ deckId }: { deckId: string }) {
   const on = live.status === 'live' && live.deckId === deckId;
   return (
     <button type="button" className="btn btn-ghost btn-sm" onClick={() => openShare(deckId)} title="Share to phones: your phone as a remote, slides on theirs">
-      {on ? <span className="live-dot" aria-hidden /> : <QrIcon size={15} />} {on ? `Live · ${live.guests.length}` : 'Share'}
+      {on ? <span className="live-dot" aria-hidden /> : <QrIcon size={15} />} {on ? `Live · ${live.guests.filter((g) => g.awaySince === undefined).length}` : 'Share'}
     </button>
   );
 }

@@ -11,6 +11,7 @@ import { formatClock, useKeys, useNow } from '../../ui/hooks';
 import { LOCALE } from '../../ui/format';
 import { PresenterJot } from '../notes/PresenterJot';
 import { useLiveSlide } from '../share/LiveScreen';
+import { SlideAudioPlayer } from '../slides/SlideAudioPlayer';
 import { SlideView } from '../slides/SlideView';
 import { HelpOverlay } from './HelpOverlay';
 import { useShow } from './sync';
@@ -119,6 +120,7 @@ export default function PresenterView() {
             {state.blank && <span className="chip chip-warn">Screen blanked · B</span>}
             <button type="button" className="pbtn" onClick={next} aria-label="Next"><ChevronRight size={20} /></button>
           </div>
+          {slide.audio && <SlideAudioPlayer key={slide.audio.src} audio={slide.audio} className="presenter-audio" />}
         </section>
 
         <section className="presenter-side has-jot">

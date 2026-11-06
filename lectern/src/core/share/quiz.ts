@@ -23,6 +23,8 @@ export const QUIZ_SECONDS = [0, 10, 20, 30, 60];
 const SPEED_WINDOW = 30_000;
 /** Answers that arrive just after the timer, sent before it ran out, still count. */
 const GRACE = 800;
+/** How long a phone can hold an answer while its link is down and still have it count from when it was tapped. */
+const MAX_HELD = 120_000;
 
 export interface QuizItem {
   slideId: string;
@@ -81,7 +83,14 @@ export interface PlayerView {
 }
 
 interface Answer { choice: number; at: number }
-interface Round { slideId: string; openedAt: number; closesAt: number | null; phase: Phase; answers: Map<string, Answer> }
+interface Round { slideId: string; openedAt: number; closesAt: number | null; closedAt?: number; phase: Phase; answers: Map<string, Answer> }
+
+/** A quiz in progress as plain data, so it can be kept and picked up again after a page reload. */
+export interface QuizDump {
+  current: string | null;
+  players: [string, string][];
+  rounds: { slideId: string; openedAt: number; closesAt: number | null; closedAt?: number; phase: Phase; answers: [string, Answer][] }[];
+}
 
 /** A question slide that can be scored, or null. */
 export function quizItem(slide: Pick<Slide, 'id' | 'kind' | 'content'> | undefined): QuizItem | null {
@@ -155,7 +164,7 @@ export class QuizEngine {
     // Leaving a question locks it.
     if (this.current && this.current !== id) {
       const left = this.rounds.get(this.current);
-      if (left?.phase === 'open') { left.phase = 'closed'; changed = true; }
+      if (left?.phase === 'open') { left.phase = 'closed'; left.closedAt = now; changed = true; }
     }
     if (this.current !== id) { this.current = id; changed = true; }
     if (!item) return changed;
@@ -173,7 +182,7 @@ export class QuizEngine {
   tick(now: number): boolean {
     let changed = false;
     for (const r of this.rounds.values()) {
-      if (r.phase === 'open' && r.closesAt !== null && now > r.closesAt + GRACE) { r.phase = 'closed'; changed = true; }
+      if (r.phase === 'open' && r.closesAt !== null && now > r.closesAt + GRACE) { r.phase = 'closed'; r.closedAt = now; changed = true; }
     }
     return changed;
   }
@@ -187,16 +196,55 @@ export class QuizEngine {
     return next === null ? null : next + GRACE + 50;
   }
 
-  /** One answer per player per question, while it is open. */
-  answer(playerId: string, slideId: string, choice: number, now: number): boolean {
+  /**
+   * One answer per player per question, while it is open. `ago` says how long ago it was tapped,
+   * for a phone that held it while its link was down: it counts from then, and it still counts
+   * after the question locked if it was tapped in time. Once the answer has been shown, nothing counts.
+   */
+  answer(playerId: string, slideId: string, choice: number, now: number, ago = 0): boolean {
     const round = this.rounds.get(slideId);
     const item = this.items.find((q) => q.slideId === slideId);
-    if (!round || !item || round.phase !== 'open' || round.answers.has(playerId)) return false;
-    if (round.closesAt !== null && now > round.closesAt + GRACE) return false;
+    if (!round || !item || round.phase === 'revealed' || round.answers.has(playerId)) return false;
+    const held = Number.isFinite(ago) ? Math.max(0, Math.min(MAX_HELD, ago)) : 0;
+    const at = Math.max(round.openedAt, now - held);
+    if (round.closesAt !== null && at > round.closesAt + GRACE) return false;
+    if (round.phase === 'closed' && (!held || round.closedAt === undefined || at >= round.closedAt)) return false;
     if (!Number.isInteger(choice) || choice < 0 || choice >= item.choices.length) return false;
     if (!this.players.has(playerId)) this.join(playerId);
-    round.answers.set(playerId, { choice, at: now });
+    round.answers.set(playerId, { choice, at });
     return true;
+  }
+
+  /** This player's answers so far, by slide. */
+  answersOf(playerId: string): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [slideId, round] of this.rounds) {
+      const a = round.answers.get(playerId);
+      if (a) out[slideId] = a.choice;
+    }
+    return out;
+  }
+
+  /** Everything needed to pick the quiz up again after a page reload. */
+  dump(): QuizDump {
+    return {
+      current: this.current,
+      players: [...this.players],
+      rounds: [...this.rounds.values()].map((r) => ({ ...r, answers: [...r.answers] })),
+    };
+  }
+
+  /** Picks a quiz up from a dump. A damaged dump leaves the quiz empty rather than half-filled. */
+  restore(dump: QuizDump) {
+    try {
+      this.players = new Map(dump.players);
+      this.rounds = new Map(dump.rounds.map((r) => [r.slideId, { ...r, answers: new Map(r.answers) }]));
+      this.current = dump.current;
+    } catch {
+      this.players = new Map();
+      this.rounds = new Map();
+      this.current = null;
+    }
   }
 
   /** Clears one question so it can be asked again. */

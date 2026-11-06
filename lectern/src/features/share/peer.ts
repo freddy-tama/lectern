@@ -105,10 +105,12 @@ export async function openPeer(id?: string, timeout = 15_000): Promise<Peer> {
   const [{ Peer: PeerClass }, opts] = await Promise.all([import('peerjs'), options()]);
   return new Promise((resolve, reject) => {
     const peer = id ? new PeerClass(id, opts) : new PeerClass(opts);
-    const fail = (err: unknown) => { peer.destroy(); reject(err); };
+    const fail = (err: unknown) => { window.clearTimeout(timer); peer.destroy(); reject(err); };
     const timer = window.setTimeout(() => fail(Object.assign(new Error('timeout'), { type: 'network' })), timeout);
+    // Failing is only for getting started. Once open, an error may be about one phone that left
+    // halfway through connecting: it must not take down the link to everyone else.
     peer.once('open', () => { window.clearTimeout(timer); peer.off('error', fail); resolve(peer); });
-    peer.once('error', (err) => { window.clearTimeout(timer); fail(err); });
+    peer.once('error', fail);
   });
 }
 

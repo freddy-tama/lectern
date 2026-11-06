@@ -16,6 +16,7 @@ import { db } from '../../data/db';
 import { Dialog } from '../../ui/Dialog';
 import { useToast } from '../../ui/Toast';
 import { isSupported } from './peer';
+import { siteAccess } from './session-store';
 
 function isLocalOrigin() {
   return /^(localhost|127\.|\[::1\]|0\.0\.0\.0)/.test(window.location.hostname);
@@ -29,17 +30,21 @@ function DeviceIcon({ device }: { device: string }) {
 
 function DeviceList({ guests }: { guests: GuestInfo[] }) {
   if (!guests.length) return <p className="share-empty muted">No one has joined yet. Devices show up here as they connect.</p>;
-  const viewers = guests.filter((g) => g.role === 'audience').length;
+  const away = guests.filter((g) => g.awaySince !== undefined).length;
+  const viewers = guests.filter((g) => g.role === 'audience' && g.awaySince === undefined).length;
+  const here = guests.length - away;
   return (
     <div className="share-devices">
-      <p className="eyebrow">{guests.length === 1 ? '1 device' : `${guests.length} devices`}{viewers ? ` · ${viewers} watching` : ''}</p>
+      <p className="eyebrow">{here === 1 ? '1 device' : `${here} devices`}{viewers ? ` · ${viewers} watching` : ''}{away ? ` · ${away} reconnecting` : ''}</p>
       <ul>
         {guests.slice(0, 8).map((g) => (
           <li key={g.id}>
             <DeviceIcon device={g.device} />
-            <span>{g.device}</span>
-            {g.role === 'presenter' ? <span className="chip chip-brand">Your phone</span> : <span className="chip">Watching</span>}
-            {!g.ready && <span className="faint share-arriving">getting slides…</span>}
+            <span>{g.name || g.device}</span>
+            {g.awaySince !== undefined
+              ? <span className="chip chip-warn">Reconnecting…</span>
+              : g.role === 'presenter' ? <span className="chip chip-brand">Your phone</span> : <span className="chip">Watching</span>}
+            {!g.ready && g.awaySince === undefined && <span className="faint share-arriving">getting slides…</span>}
           </li>
         ))}
       </ul>
@@ -170,8 +175,9 @@ function LiveView({ onOffline }: { onOffline(): void }) {
   const [tab, setTab] = useState<'audience' | 'presenter' | 'quiz'>('audience');
   const origin = window.location.origin;
   const code = live.code ?? '';
-  const audienceUrl = joinUrl(origin, code);
-  const presenterUrl = joinUrl(origin, code, live.token ?? undefined);
+  const access = siteAccess();
+  const audienceUrl = joinUrl(origin, code, undefined, access);
+  const presenterUrl = joinUrl(origin, code, live.token ?? undefined, access);
   return (
     <div className="share-live">
       <div className="segmented share-tabs" role="tablist" aria-label="Who is joining">
@@ -205,6 +211,7 @@ function LiveView({ onOffline }: { onOffline(): void }) {
         </div>
       )}
       {live.error && <p className="share-note share-error" role="status">{live.error}</p>}
+      {live.resumed && <p className="share-note" role="status">Your session came back after the page reloaded: same code, same scores. Phones reconnect by themselves.</p>}
       {live.signal === 'down' && (
         <p className="share-note" role="status">Reconnecting to the connection service… Phones already joined keep working; new ones can join once it’s back.</p>
       )}
@@ -230,16 +237,21 @@ export function SharePanel() {
   const [offline, setOffline] = useState(false);
   useEffect(() => { if (!open) setOffline(false); }, [open]);
 
-  // Stop sharing when this tab closes, so phones hear about it right away.
+  // A reload or a closed tab doesn't end the session: it is written down now and picked up when
+  // this page opens again, with the same code. Phones wait and find their way back. Only "Stop sharing" ends it.
   useEffect(() => {
-    const onHide = () => { if (liveHost.snapshot.status === 'live') liveHost.stop(); };
+    const onHide = () => liveHost.keepNow();
     window.addEventListener('pagehide', onHide);
     return () => window.removeEventListener('pagehide', onHide);
   }, []);
+  useEffect(() => {
+    // Not on pages for phones and viewers, and not in the extra window that only shows the slides.
+    if (!/^\/(join|pack|phone|welcome|try)(\/|$)/.test(window.location.pathname) && !window.location.search.includes('audience=1')) void liveHost.resume();
+  }, []);
 
   const hidePill = /^\/(present|join|welcome)/.test(pathname) || open || live.status !== 'live';
-  const viewers = live.guests.filter((g) => g.role === 'audience').length;
-  const phone = live.guests.some((g) => g.role === 'presenter');
+  const viewers = live.guests.filter((g) => g.role === 'audience' && g.awaySince === undefined).length;
+  const phone = live.guests.some((g) => g.role === 'presenter' && g.awaySince === undefined);
 
   return (
     <>

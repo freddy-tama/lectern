@@ -72,6 +72,24 @@ export interface Slide<C = Record<string, unknown>> {
    * the slide type's first picture field and shows while that field is empty (see deck/photo-notes.ts).
    */
   photoNote?: string;
+  /** A sound that goes with the slide, played by tapping it: a recording of the text, for example. */
+  audio?: SlideAudio;
+}
+
+/** A sound on a slide. It travels with the deck, so it plays without a connection. */
+export interface SlideAudio {
+  /** "asset:<id>" of the stored file, or an http(s) link. */
+  src: string;
+  /** What the listener hears, for the play button: "Paragraph 1". */
+  title?: string;
+}
+
+/** A slide's sound as it was saved, or undefined when there is nothing usable. */
+export function cleanAudio(raw: unknown): SlideAudio | undefined {
+  const a = raw as { src?: unknown; title?: unknown } | null;
+  if (!a || typeof a !== 'object' || typeof a.src !== 'string' || !/^(asset:|https?:\/\/)./.test(a.src)) return undefined;
+  const title = typeof a.title === 'string' ? a.title.trim().slice(0, 80) : '';
+  return { src: a.src, ...(title ? { title } : {}) };
 }
 
 /** Where a box goes instead of where its layout put it. */

@@ -46,8 +46,8 @@ export function fitsQr(url: string): boolean {
   return url.length <= QR_MAX;
 }
 
-export function packUrl(origin: string, encoded: string): string {
-  return `${origin.replace(/\/$/, '')}/pack#${encoded}`;
+export function packUrl(origin: string, encoded: string, access = ''): string {
+  return `${origin.replace(/\/$/, '')}/pack${access}#${encoded}`;
 }
 
 function clean(s: unknown): string {

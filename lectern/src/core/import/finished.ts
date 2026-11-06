@@ -5,7 +5,8 @@
 // src/features/finished; everything here is plain parsing, so it can be tested.
 
 import { estimateMinutes } from '../deck/draft';
-import { type Audience, type Deck, type DeckPurpose, type Slide, emptyNotes, normalizeNotes, uid } from '../deck/types';
+import { type Audience, type Deck, type DeckPurpose, type Slide, type SlideAudio, emptyNotes, normalizeNotes, uid } from '../deck/types';
+import { audioMime, isAudioName } from '../media/audio';
 
 const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
@@ -26,6 +27,15 @@ export interface PptxSlide {
   body?: string[];
   /** Each table's rows of cells. */
   tables?: string[][][];
+  /** The sound placed on the slide, if any. */
+  audio?: PptxSound;
+}
+
+/** A sound file from inside a PowerPoint. */
+export interface PptxSound {
+  name: string;
+  mime: string;
+  data: Uint8Array;
 }
 
 export interface PptxDeck {
@@ -278,7 +288,15 @@ function resolvePath(folder: string, target: string): string {
   return parts.join('/');
 }
 
-/** Reads a .pptx: slides in the presentation's own order (not file names), with words and notes. */
+/**
+ * The relationships of the media placed on a slide. Some tools write a sound as a "video file",
+ * so the file's own name decides. Transition sounds are written differently, and don't count.
+ */
+export function mediaRels(xml: string): string[] {
+  return [...xml.matchAll(/<a:(?:audioFile|videoFile)\b[^>]*\br:link="([^"]+)"/g)].map((m) => m[1]!);
+}
+
+/** Reads a .pptx: slides in the presentation's own order (not file names), with words, notes and sounds. */
 export async function readPptx(buffer: ArrayBuffer): Promise<PptxDeck> {
   const { default: JSZip } = await import('jszip');
   const zip = await JSZip.loadAsync(buffer);
@@ -311,15 +329,20 @@ export async function readPptx(buffer: ArrayBuffer): Promise<PptxDeck> {
       const chart = rel.type.endsWith('/chart') ? await read(rel.target) : undefined;
       if (chart) charts.set(id, chartWords(chart));
     }
-    return { xml: (await read(file)) ?? '', slideRels, charts };
+    const soundPart = mediaRels(await read(file) ?? '').map((id) => slideRels.get(id)?.target).find((t) => t && isAudioName(t));
+    const soundFile = soundPart ? zip.file(soundPart) : null;
+    const audio: PptxSound | undefined = soundFile && soundPart
+      ? { name: soundPart.split('/').pop() ?? 'sound', mime: audioMime(soundPart), data: await soundFile.async('uint8array') }
+      : undefined;
+    return { xml: (await read(file)) ?? '', slideRels, charts, audio };
   }));
   const repeated = repeatedLabels(parts.map((p) => slideShapes(p.xml, p.charts).shapes));
   const slides: PptxSlide[] = [];
-  for (const [i, { xml, slideRels, charts }] of parts.entries()) {
+  for (const [i, { xml, slideRels, charts, audio }] of parts.entries()) {
     const words = slideWords(xml, repeated, charts);
     const notesPart = [...slideRels.values()].find((r) => r.type.endsWith('/notesSlide'))?.target;
     const notesXml = notesPart ? await read(notesPart) : undefined;
-    slides.push({ number: i + 1, ...words, notes: notesXml ? notesWords(notesXml) : '' });
+    slides.push({ number: i + 1, ...words, notes: notesXml ? notesWords(notesXml) : '', ...(audio ? { audio } : {}) });
   }
   const core = await read('docProps/core.xml');
   const docTitle = core ? tidy(parse(core).getElementsByTagNameNS(DC, 'title')[0]?.textContent ?? '') : '';
@@ -411,6 +434,8 @@ export interface FinishedSlide {
   text: string;
   notes: string;
   hidden: boolean;
+  /** The sound that was on the slide. */
+  audio?: SlideAudio;
 }
 
 /** The first line that could name a slide. */
@@ -445,6 +470,7 @@ export function finishedDeck(slides: FinishedSlide[], o: { title: string; audien
       },
       notes,
       ...(s.hidden ? { hidden: true } : {}),
+      ...(s.audio ? { audio: s.audio } : {}),
     };
   });
   return {

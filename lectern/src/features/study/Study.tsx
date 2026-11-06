@@ -10,6 +10,7 @@ import { type StudyMark, db } from '../../data/db';
 import { useKeys } from '../../ui/hooks';
 import { saveMark } from '../account/study-sync';
 import { useLiveDeck } from '../present/useLiveDeck';
+import { SlideAudioPlayer } from '../slides/SlideAudioPlayer';
 import { SlideView } from '../slides/SlideView';
 import { type StudyCard, deckCards } from './cards';
 
@@ -83,6 +84,7 @@ function ReadMode({ deckId, deck, slides, steps, markOf }: {
     <div className="study-body study-read">
       <div className="study-slide-col">
         <SlideView slide={slide} deck={deck} number={index + 1} count={slides.length} step={step} framed label={`Slide ${index + 1}`} live />
+        {slide.audio && <SlideAudioPlayer key={slide.audio.src} audio={slide.audio} className="study-audio" />}
         <div className="study-nav">
           <button type="button" className="btn btn-secondary" onClick={() => go(index - 1)} disabled={index === 0}><ChevronLeft size={16} /> Back</button>
           {max > 0 && (

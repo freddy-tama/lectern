@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { NavigateFunction } from 'react-router-dom';
+import { savedShow } from '../share/session-store';
 
 export interface ShowState {
   index: number;
@@ -21,7 +22,8 @@ const initial: ShowState = { index: 0, step: 0, blank: false, flags: {}, started
 
 export function useShow(deckId: string, start?: Partial<ShowState>) {
   const id = useRef(Math.random().toString(36).slice(2));
-  const [state, setState] = useState<ShowState>({ ...initial, ...start });
+  // A share that survived a page reload brings the show back to the slide it was on.
+  const [state, setState] = useState<ShowState>(() => ({ ...initial, ...start, ...savedShow(deckId) }));
   const stateRef = useRef(state);
   stateRef.current = state;
   const channel = useRef<BroadcastChannel | null>(null);

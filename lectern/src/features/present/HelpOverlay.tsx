@@ -7,6 +7,7 @@ const KEYS: [string[], string][] = [
   [['Home', 'End'], 'First or last slide'],
   [['3', 'Enter'], 'Go to slide 3'],
   [['B'], 'Blank the screen'],
+  [['A'], 'Play or pause the slide’s sound'],
   [['N'], 'Key notes'],
   [['F'], 'Full screen'],
   [['Esc'], 'Leave'],

@@ -68,7 +68,8 @@ export interface CloudResult {
 
 /** Host to phone. */
 export type HostMessage =
-  | { t: 'welcome'; role: Role; title: string; parts: number; bytes: number; same?: boolean }
+  /** `acks`: this computer confirms answers with 'mine' messages. */
+  | { t: 'welcome'; role: Role; title: string; parts: number; bytes: number; same?: boolean; acks?: boolean }
   | { t: 'part'; i: number; data: string }
   | { t: 'state'; state: LiveState }
   | { t: 'votes'; slideId: string; result: PollResult }
@@ -76,16 +77,31 @@ export type HostMessage =
   | { t: 'options'; options: ShareOptions }
   | { t: 'quiz'; quiz: QuizView; stage: QuizStage }
   | { t: 'you'; you: PlayerView }
+  /** What the computer has from this phone, so the phone can stop holding it and show the truth. */
+  | ({ t: 'mine' } & MineView)
+  /** The same phone opened this deck again in another tab or window: this copy should stop trying. */
+  | { t: 'replaced' }
   /** Every few seconds, so a phone notices a link that died without closing. */
   | { t: 'ping'; at: number }
   | { t: 'bye' };
+
+/** One phone's answers, as the computer holds them. */
+export interface MineView {
+  /** Quiz answers by slide. */
+  answers: Record<string, number>;
+  votes: Record<string, number>;
+  words: Record<string, string[]>;
+  /** Quiz questions whose answer arrived too late to count. */
+  refused?: string[];
+}
 
 /** Phone to host. */
 export type GuestMessage =
   | { t: 'state'; state: LiveState }
   | { t: 'vote'; slideId: string; choice: number }
   | { t: 'word'; slideId: string; text: string }
-  | { t: 'answer'; slideId: string; choice: number }
+  /** `ago`: how many ms before sending it was tapped, for an answer held while the link was down. */
+  | { t: 'answer'; slideId: string; choice: number; ago?: number }
   | { t: 'name'; name: string }
   | { t: 'stage'; stage: QuizStage }
   /** The answer to a ping, so the computer can let go of phones that left without saying so. */
@@ -93,10 +109,17 @@ export type GuestMessage =
 
 /** How often the computer pings each phone. */
 export const PING_EVERY = 4000;
-/** A phone that hears nothing for this long (while it is on screen) reconnects. */
-export const SILENT_AFTER = 13_000;
+/** A phone that hears nothing for this long tells its owner the signal is weak. */
+export const WEAK_AFTER = 9000;
+/**
+ * A phone that hears nothing for this long (while it is on screen) reconnects. Long enough for a
+ * link to get over a change of Wi-Fi by itself, since making a new one needs the connection service.
+ */
+export const SILENT_AFTER = 18_000;
 /** The computer forgets a phone that answered pings before and then stopped for this long. */
 export const GONE_AFTER = 45_000;
+/** How long the presenter sees a phone that lost its link as "reconnecting" before it is taken off the list. */
+export const AWAY_FOR = 60_000;
 
 /** Sent when a phone connects. */
 export interface JoinMetadata {
@@ -166,9 +189,23 @@ export function phoneStep(i: number, live: LivePlace | null): number | undefined
   return i > live.reached ? 0 : undefined;
 }
 
-/** The link a QR code opens. The presenter token rides in the fragment, which never reaches a server. */
-export function joinUrl(origin: string, code: string, token?: string): string {
-  return `${origin}/join/${code}${token ? `#p=${token}` : ''}`;
+/**
+ * The link a QR code opens. The presenter token rides in the fragment, which never reaches a server.
+ * `access` is what this site needs in the address to open at all (see accessQuery).
+ */
+export function joinUrl(origin: string, code: string, token?: string, access = ''): string {
+  return `${origin}/join/${code}${access}${token ? `#p=${token}` : ''}`;
+}
+
+/**
+ * The part of an address a host requires for the page to open at all. On EdgeOne's default domain,
+ * visitors in mainland China only get in through a link carrying these, so a QR code has to keep them.
+ */
+export function accessQuery(search: string): string {
+  const params = new URLSearchParams(search);
+  const token = params.get('eo_token');
+  const time = params.get('eo_time');
+  return token && time ? `?eo_token=${encodeURIComponent(token)}&eo_time=${encodeURIComponent(time)}` : '';
 }
 
 export function tokenFromHash(hash: string): string | undefined {
@@ -195,6 +232,7 @@ export function deckForRole(deck: Deck, role: Role, options: ShareOptions): Deck
       kind: s.kind,
       content: s.content,
       ...(s.variant ? { variant: s.variant } : {}),
+      ...(s.audio ? { audio: s.audio } : {}),
       notes: options.shareTakeaways
         ? emptyNotes({ keyPoints: s.notes.keyPoints, check: s.notes.check, links: s.notes.links, minutes: s.notes.minutes })
         : emptyNotes({ minutes: s.notes.minutes }),

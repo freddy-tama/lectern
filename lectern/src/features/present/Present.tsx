@@ -4,8 +4,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { NotFound } from '../../app/App';
 import { toggles } from '../../core/plugins/registry';
 import { useKeys } from '../../ui/hooks';
-import { openShare } from '../share/host';
+import { openShare, useLiveHost } from '../share/host';
 import { LiveScreen, useLiveSlide } from '../share/LiveScreen';
+import { SlideAudioPlayer } from '../slides/SlideAudioPlayer';
 import { SlideView } from '../slides/SlideView';
 import { HelpOverlay } from './HelpOverlay';
 import { leaveShow, openPresenter, useShow } from './sync';
@@ -27,6 +28,8 @@ export default function Present() {
   const index = Math.min(state.index, Math.max(0, count - 1));
   const slide = slides[index];
   const shown = useLiveSlide(deckId, slide);
+  const live = useLiveHost();
+  const lostService = live.status === 'live' && live.deckId === deckId && live.signal === 'down';
 
   const poke = useCallback(() => {
     setChrome(true);
@@ -65,6 +68,7 @@ export default function Present() {
     else if (k === 'f' || k === 'F') fullscreen();
     else if (k === 'n' || k === 'N') setNotes((x) => !x);
     else if (k === '?') setHelp((x) => !x);
+    else if ((k === 'a' || k === 'A') && !audienceOnly) document.querySelector<HTMLButtonElement>('.present-audio .slide-audio-play')?.click();
     else if (k === 'Escape') { if (notes) setNotes(false); else if (!document.fullscreenElement) exit(); }
     else {
       const t = toggles().find((x) => x.key.toLowerCase() === k.toLowerCase());
@@ -84,6 +88,10 @@ export default function Present() {
         {state.blank && <div className="present-blank" aria-label="Screen blanked" />}
         <LiveScreen deckId={deckId} />
       </div>
+
+      {/* Keyed by the sound, so it keeps playing across the clicks of one slide. */}
+      {!audienceOnly && slide.audio && <SlideAudioPlayer key={slide.audio.src} audio={slide.audio} className="present-audio" />}
+      {!audienceOnly && lostService && <p className="present-signal" role="status">Reconnecting to phones…</p>}
 
       <div className="present-progress" aria-hidden><span style={{ width: `${((index + 1) / count) * 100}%` }} /></div>
 
